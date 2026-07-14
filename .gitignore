@@ -1,0 +1,66 @@
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ===== Java / Spring (Backend) =====
+target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+*.class
+*.log
+*.jar
+*.war
+.gradle/
+out/
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+### local env ###
+application-local.yml
+application-local.properties
+*.env
+.env
+
+# ===== Node / Frontend =====
+node_modules/
+dist/
+dist-ssr/
+.next/
+coverage/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Python / AI =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+wandb/
+
+# ===== Secrets / Data =====
+*.pem
+*.key
+secrets/
