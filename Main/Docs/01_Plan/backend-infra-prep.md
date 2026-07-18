@@ -15,15 +15,15 @@
 
 | 항목 | 선택 | 비고 |
 | --- | --- | --- |
-| Java 버전 | **보류** | 미디어팀 Kurento 확정 후 호환 버전 결정 |
-| Spring Boot 버전 | **보류** | Java 버전에 종속 |
+| Java 버전 | Java 17+ (유력) | 미디어팀 Kurento **미채택** → **LiveKit 유력**(미확정). LiveKit은 토큰 발급·서버 API 호출로 연동돼 Java 버전 제약이 거의 없음. LiveKit 확정 시 고정 |
+| Spring Boot 버전 | 3.x (유력) | Java 17+ 전제. LiveKit 확정 후 고정 |
 | 빌드 도구 | Gradle | |
 
 <details>
 <summary>후보 분석 (결정 후 삭제)</summary>
 
-**Java / Spring Boot 버전 — 보류 사유**
-Kurento 클라이언트 라이브러리가 지원하는 Java 버전이 Spring Boot 버전을 결정한다. Spring Boot 3.x는 Java 17 이상을 요구하고, Java 11을 써야 한다면 Spring Boot 2.7.x로 내려가야 한다. 미디어팀이 Kurento를 확정하기 전에 먼저 정하면 뒤집힐 수 있으므로 보류한다.
+**Java / Spring Boot 버전 — 갱신**
+당초 Kurento 클라이언트 라이브러리가 지원하는 Java 버전이 Spring Boot 버전을 좌우했으나, 미디어팀이 **Kurento를 채택하지 않기로** 결정했고 **LiveKit이 유력**하다(아직 미확정). LiveKit은 별도 미디어 서버(Go 기반)로 동작하고 백엔드는 **액세스 토큰(JWT) 발급 + LiveKit 서버 API 호출**로 연동되므로, Kurento처럼 Java 버전을 강하게 구속하지 않는다. 따라서 **Spring Boot 3.x / Java 17+** 를 자유롭게 선택할 수 있다. 다만 LiveKit이 최종 확정되기 전이므로 버전 고정은 확정 시점에 마무리한다.
 
 **빌드 도구**
 
@@ -265,7 +265,7 @@ Kurento 클라이언트 라이브러리가 지원하는 Java 버전이 Spring Bo
 
 | # | 안건 | 대상 | 왜 중요한가 |
 | --- | --- | --- | --- |
-| 1 | Java / Spring Boot 버전 | 미디어팀 | Kurento 호환성에 종속. 이게 정해져야 우리가 착수 가능 |
+| 1 | Java / Spring Boot 버전 | 미디어팀 | Kurento 미채택·LiveKit 유력으로 미디어 라이브러리 종속성 해소. LiveKit 확정 시 Java 17+/Spring Boot 3.x 고정 |
 | 2 | API 공통 규약 — REST 네이밍, 응답 포맷(래퍼 여부), 에러 코드 체계, 페이징 | 전체 | 나중에 통일하려면 전부 고쳐야 함 |
 | 3 | **인증 토큰 전달 방식 + WebSocket 인증 방법** | FE, 채팅·문서·시그널링 담당 | **우리가 토큰을 발급하므로 규약을 우리가 제시해야 함.** 3개 실시간 채널이 모두 종속 |
 | 4 | 권한 검사 공통 모듈 — 우리가 만들어 제공할지, 각자 구현할지 | 전체 | DOC-07·MEET 담당도 사용. 중복/누락 방지 |
@@ -288,7 +288,7 @@ Kurento 클라이언트 라이브러리가 지원하는 Java 버전이 Spring Bo
 ## 3. 컨설턴트 상담 질문지
 
 ### A. 프로젝트 최대 리스크
-1. **Kurento 선택이 타당한가?** 유지보수 정체·셋업 난도가 우려됨. mediasoup / LiveKit / Janus 대비 권고는? **참여자별 오디오 트랙 분리가 실제로 가능한가** — 이것이 AI 회의록 전체의 전제(§7)라, 불가능하면 아키텍처가 뒤집힘
+1. **미디어 서버로 LiveKit이 타당한가?** (Kurento는 유지보수 정체·셋업 난도로 **미채택**) mediasoup / Janus 대비 LiveKit 권고 여부. **참여자별 오디오 트랙 분리가 실제로 가능한가** — 이것이 AI 회의록 전체의 전제(§7)라, 불가능하면 아키텍처가 뒤집힘
 2. **6주 / 7인에 이 범위가 현실적인가?** MVP를 줄인다면 어디부터 잘라야 하는가
 3. **AI 1인 배치가 병목 아닌가?** 핵심 차별점인데 인력 재배치가 필요한가
 

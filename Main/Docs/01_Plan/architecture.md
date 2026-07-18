@@ -41,7 +41,7 @@
 | --- | --- | --- | --- |
 | API 서버 | Spring Boot | 확정 | AUTH·SPACE·MEET·DOC 등 핵심 도메인 |
 | API Gateway | Nginx (리버스 프록시) | 확정 | TLS 종료·경로 라우팅. 인증은 Spring(JWT 필터)에서 처리 |
-| SFU 미디어 서버 | Kurento | 확정 | 실시간 영상·음성 중계, 참여자별 트랙 분리 (RTC) |
+| SFU 미디어 서버 | LiveKit | 후보 | 실시간 영상·음성 중계, 참여자별 트랙 분리 (RTC). Kurento 미채택, LiveKit 유력(미확정) — 아래 비고 참조 |
 | 관계형 DB | MySQL | 확정 | 핵심 도메인 저장. 대규모 데이터 처리 시 PostgreSQL로 마이그레이션 예정 |
 | 캐시 / 세션 | Redis | 확정 | 토큰·세션, 실시간 상태, WebSocket pub/sub |
 | 오브젝트 스토리지 | AWS S3 | 확정 | 오디오·이미지·녹화·첨부 (DB엔 메타/URL만) |
@@ -110,4 +110,5 @@
 3. STT 서비스 선정 및 GMS-key 이중화 구조 확정
 4. 임베딩 모델 버전 (ada-002 → text-embedding-3 검토)
 5. 로그 저장소 (Loki 등) 추가 여부
-6. Kurento 기술 검증(PoC) — 참여자별 오디오 트랙 분리 실증 (§7 AI 회의록 전제)
+6. **SFU 미디어 서버 최종 확정** — Kurento 미채택, LiveKit 유력. mediasoup/Janus 대비 검토 후 확정
+7. LiveKit 기술 검증(PoC) — 참여자별 오디오 트랙 분리 실증 (AI 회의록 전제, 기능명세 §7)
