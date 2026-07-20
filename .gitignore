@@ -64,3 +64,6 @@ wandb/
 *.pem
 *.key
 secrets/
+
+# ===== Claude Code (개인 하네스 설정) =====
+CLAUDE.md
