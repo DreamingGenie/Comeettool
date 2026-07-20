@@ -48,17 +48,24 @@ OpenAPI 계약을 **먼저 합의**하고, 구현할 때 springdoc 어노테이�
 
 ## 2. 산출물 구조
 
+3개 층으로 나눈다 — **중앙(색인·형식)** + **도메인별(상세)** + **기계 계약(YAML)**.
+
 ```
 Main/Docs/01_Plan/
   api-specification-plan.md      # 본 문서
-  api-conventions.md             # 공통 규약 합의안 (§4) — 03_api-convention.md 보강/링크
 Main/Docs/03_API/                # 신규
   rest/
-    openapi.yaml                 # 통합 진입점 (또는 도메인별 분할 + $ref)
-    auth.md / space.md / ...     # 도메인별 엔드포인트 목록·설명 (사람 합의층)
+    README.md                    # [중앙] 작성 형식 + 공통 규약(제안)  ← api-conventions 역할 흡수
+    inventory.md                 # [중앙] 전체 엔드포인트 색인·커버리지 (기능 ID ↔ method/path)
+    auth.md / space.md / ...     # [도메인별] 요청/응답 상세 계약 (병렬 작성용)
+    openapi.yaml                 # [기계 계약] AUTH 파일럿 후 작성 (단일 또는 도메인별 분할 + $ref)
   websocket/
     realtime-protocol.md         # 시그널링·채팅·문서 WebSocket 메시지 규약 (추후)
 ```
+
+- **중앙 층**(README·inventory)은 형식·규약·색인을 DRY하게 모으고, **도메인별 파일**은 담당자가
+  병렬로 상세를 작성해 머지 충돌을 줄인다. 기능 ID가 세 층을 잇는 교차참조 키다.
+- 공통 규약(§4)은 별도 `api-conventions.md`를 만들지 않고 **`rest/README.md` §0**에 통합한다.
 
 > 폴더명·분할 방식(도메인별 YAML vs 단일 openapi.yaml)은 파일럿 후 팀과 최종 확정.
 
@@ -69,7 +76,7 @@ Main/Docs/03_API/                # 신규
 | 단계 | 내용 | 산출물 | 선행 조건 |
 | --- | --- | --- | --- |
 | 1 | 계획 문서화 | `api-specification-plan.md` | - |
-| 2 | 공통 규약 합의안 초안 ★ | `api-conventions.md` | 팀 회의 안건 |
+| 2 | 공통 규약 확정 ✅ | `rest/README.md §0` | 완료 (세부는 필요 시 보완) |
 | 3 | REST 엔드포인트 인벤토리 | 도메인별 md | 기능명세 |
 | 4 | 상세 스키마 작성 (AUTH 파일럿) | `openapi.yaml` | **2단계 확정** |
 | 5 | 구현 + springdoc 연계 | 각 파트 코드 | 계약 v1 동결 |
@@ -79,10 +86,11 @@ Main/Docs/03_API/                # 신규
 
 ---
 
-## 4. 공통 규약 합의 항목 (§2단계 상세) — 팀 합의 필요
+## 4. 공통 규약 합의 항목 (§2단계 상세)
 
-backend-infra-prep §2-1을 반영한 선결 항목. 각 항목은 **결정할 내용 + 고려사항**을 정리했으며,
-`api-conventions.md`에 **제안안 + 결정 대기** 형태로 옮겨 팀 회의 안건으로 상정한다.
+backend-infra-prep §2-1을 반영한 선결 항목. **기본안은 `rest/README.md §0`로 확정**됐다
+(응답 래퍼·에러 포맷·인증 방식·날짜 포맷·DTO 네이밍). 아래는 각 항목의 결정할 내용·고려사항 기록으로,
+README §0에 포함되지 않은 세부(페이징 방식, 식별자 타입 등)는 도메인 명세 작성 중 필요 시 보완한다.
 
 ### 4-1. 응답 포맷
 
@@ -187,7 +195,7 @@ backend-infra-prep §2-1을 반영한 선결 항목. 각 항목은 **결정할 �
 
 ## 7. 리스크 / 선행 의존성
 
-- **공통 규약 미확정 시 상세 스키마 진행 불가** → 팀 회의로 §4를 우선 확정.
+- **공통 규약 확정 완료**(README §0) → 도메인 상세 스키마 착수 가능. 잔여 세부(페이징·ID 타입)만 필요 시 보완.
 - 인증 토큰 방식은 WebSocket 3채널에 영향 → FE·실시간 담당 합의 필요.
 - WebSocket 규약은 OpenAPI로 담기지 않음 → 별도 문서, 이번 범위에서 분리.
 
