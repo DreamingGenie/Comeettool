@@ -42,12 +42,12 @@
 | API 서버 | Spring Boot | 확정 | AUTH·SPACE·MEET·DOC 등 핵심 도메인 |
 | API Gateway | Nginx (리버스 프록시) | 확정 | TLS 종료·경로 라우팅. 인증은 Spring(JWT 필터)에서 처리 |
 | SFU 미디어 서버 | LiveKit | 후보 | 실시간 영상·음성 중계, 참여자별 트랙 분리 (RTC). Kurento 미채택, LiveKit 유력(미확정) — 아래 비고 참조 |
-| 관계형 DB | MySQL | 확정 | 핵심 도메인 저장. 대규모 데이터 처리 시 PostgreSQL로 마이그레이션 예정 |
+| 관계형 DB | PostgreSQL | 확정 | 핵심 도메인 저장. JSONB·배열·UUID 등 활용 (DDL은 [database-schema.md](database-schema.md)) |
 | 캐시 / 세션 | Redis | 확정 | 토큰·세션, 실시간 상태, WebSocket pub/sub |
 | 오브젝트 스토리지 | AWS S3 | 확정 | 오디오·이미지·녹화·첨부 (DB엔 메타/URL만) |
 | 메시지 큐 | AWS SQS | 확정 | 회의록 생성 등 비동기 작업 처리 (AI-10 상태 연동) |
 
-> **DB 마이그레이션 전략.** 초기에는 MySQL을 사용하고, 향후 대규모 데이터 처리가 필요해지면 PostgreSQL로 마이그레이션한다.
+> **DB 선택.** 핵심 도메인 DB로 **PostgreSQL**을 사용한다(초기 MySQL 후 마이그레이션하려던 계획은 폐기, 처음부터 PostgreSQL). ERD·DDL은 [database-schema.md](database-schema.md) 참조.
 
 ---
 
