@@ -39,7 +39,8 @@
 
 | 구분 | 기술 | 상태 | 비고 |
 | --- | --- | --- | --- |
-| API 서버 | Spring Boot | 확정 | AUTH·SPACE·MEET·DOC 등 핵심 도메인 |
+| API 서버 | Spring Boot 4.1.0 | 확정 | AUTH·SPACE·MEET·DOC 등 핵심 도메인 |
+| 언어 / 런타임 | Java 21 | 확정 | Gradle 빌드. (Spring Initializr가 Boot 3.x 미지원(>=4.0.0)이라 4.x 채택) |
 | API Gateway | Nginx (리버스 프록시) | 확정 | TLS 종료·경로 라우팅. 인증은 Spring(JWT 필터)에서 처리 |
 | SFU 미디어 서버 | LiveKit | 후보 | 실시간 영상·음성 중계, 참여자별 트랙 분리 (RTC). Kurento 미채택, LiveKit 유력(미확정) — 아래 비고 참조 |
 | 관계형 DB | PostgreSQL | 확정 | 핵심 도메인 저장. JSONB·배열·UUID 등 활용 (DDL은 [database-schema.md](database-schema.md)) |
