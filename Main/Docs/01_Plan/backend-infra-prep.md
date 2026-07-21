@@ -1,5 +1,11 @@
 # 백엔드·인프라 파트 개발 착수 준비
 
+> 🗄️ **아카이브 (동결).** 이 문서는 기획 준비 단계의 결정용 워크시트다. 확정 사항은
+> [architecture.md](architecture.md)·[database-schema.md](database-schema.md)·개인 계획 문서로 이관됐으며,
+> **이후 갱신하지 않는다.** 아래 "후보 분석"은 결정 근거(왜 그 선택인지) 기록용으로 보존한다.
+> 아직 열린 §2-1 교차팀 합의 항목은 GitLab 이슈로 이관해 추적한다.
+> 문서 내 낡은 서술(예: DB를 MySQL로 기재)은 **동결 시점의 기록**이며 별도로 정정하지 않는다.
+
 담당 범위(2인 공동): **AUTH-01~07 / SPACE-01~18 / MEMBER-01~06 / MEET-01~07 / 인프라 전반**
 근거 문서: [기능 명세서](functional-specification.md), [서비스 아키텍처](architecture.md)
 
