@@ -4,6 +4,16 @@ spring:
   profiles:
     active: local
 
+# actuator: 헬스체크만 노출 (스캐폴딩 동작 확인용)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
 ---
 # ===== local (개인 로컬 개발) =====
 spring:
@@ -26,6 +36,11 @@ spring:
     redis:
       host: localhost
       port: 6379
+  # 로컬에서 Redis 미실행 시 /actuator/health 가 DOWN 되지 않도록 헬스체크 제외 (F1 확인용)
+management:
+  health:
+    redis:
+      enabled: false
 
 ---
 # ===== prod (배포, 공용 서버 DB) — 값은 환경변수/CI에서 주입 =====
