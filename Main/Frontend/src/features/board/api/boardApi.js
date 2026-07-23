@@ -1,6 +1,19 @@
 import { request } from '../../../shared/api'
 
 export const boardApi = {
+  getDashboard: () => request('/api/dashboard'),
+  getMembers: () => request('/api/members'),
+  getArchive: section => request(`/api/archive/${section}`),
+  createWorkspace: data =>
+    request('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  createMeeting: data =>
+    request('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
   listRooms: () => request('/api/rooms'),
   createRoom: data =>
     request('/api/rooms', {

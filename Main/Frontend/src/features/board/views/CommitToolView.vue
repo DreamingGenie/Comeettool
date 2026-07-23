@@ -7,12 +7,18 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { mountCommitTool } from './committool'
 
+const props = defineProps({
+  initialView: { type: String, default: 'intro' }
+})
+
 const legacyRoot = ref(null)
 const toastRoot = ref(null)
 let cleanup
 
 onMounted(() => {
-  cleanup = mountCommitTool(legacyRoot.value, toastRoot.value)
+  cleanup = mountCommitTool(legacyRoot.value, toastRoot.value, {
+    initialView: props.initialView
+  })
 })
 
 onBeforeUnmount(() => cleanup?.())

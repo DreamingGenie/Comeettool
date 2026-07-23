@@ -24,3 +24,13 @@ API 함수는 `src/services/api.js`에 모여 있습니다. 별도 서버 주소
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:5000
 ```
+# 데이터 소스 전환
+
+화면은 기본적으로 `features/*/mock` 데이터를 사용합니다. 백엔드 API가
+준비되면 `.env`에 아래 값을 설정하면 같은 화면 코드가 실제 API 모듈을
+사용합니다.
+
+```env
+VITE_USE_MOCK_API=false
+VITE_API_BASE_URL=http://localhost:8080
+```
