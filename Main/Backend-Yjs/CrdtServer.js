@@ -183,10 +183,10 @@ app.get('/health', (_request, response) => {
 })
 
 app.get('/api/documents', async (_request, response) => {
-    const documents = await getDocument()
+    const documents = await getDocuments()
 
     const sortedDocuments = [...documents].sort((left, right) => {
-        right.updateAt.localeCompare(left.updatedAt)
+        return right.updatedAt.localeCompare(left.updatedAt)
     })
 
     response.json(sortedDocuments)
