@@ -253,7 +253,15 @@ const server = http.createServer(app)
 const webSocketServer = new WebSocketServer({noServer: true})
 
 webSocketServer.on('connection', (socket, request) => {
-    hocuspocus.handleConnection(socket, request)
+    const connection = hocuspocus.handleConnection(socket, request)
+
+    socket.on('message', data => {
+        connection.handleMessage(data)
+    })
+
+    socket.on('close', () => {
+        connection.handleClose()
+    })
 })
 
 server.on('upgrade', (request, socket, head) => {
