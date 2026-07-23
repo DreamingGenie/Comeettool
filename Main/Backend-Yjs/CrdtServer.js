@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import {fileURLToPath} from 'node:url'
+import * as Y from 'yjs'
 
 const port = Number(process.env.PORT || 3000)
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
@@ -58,10 +59,10 @@ async function initializeStorage() {
 
 }
 
-async function getDocument() {
+async function getDocuments() {
     const documents = await readJson(documentMetadataFile, [])
 
-    if (Array.isArray(documents)) {
+    if (!Array.isArray(documents)) {
         throw new Error('documents.json의 최상위 값은 배열이어야만 합니다')
     }
     return documents
@@ -69,6 +70,46 @@ async function getDocument() {
 
 async function saveDocuments(documents) {
     await writeJsonAtomic(documentMetadataFile, documents)
+}
+
+function createEmptyYjsState() {
+    const ydoc = new Y.Doc()
+
+    try {
+        const update = Y.encodeStateAsUpdate(ydoc)
+
+        return Buffer.from(update)
+    } finally {
+        ydoc.destroy()
+    }
+}
+
+function getDocumentStateFile(documentId) {
+    return path.join(stateDir, `${documentId}.bin`)
+}
+
+async function writeBinaryAtomic(file, state) {
+    const tempFile = `${file}.tmp`
+
+    const binary = Buffer.from(state)
+
+    try {
+        await fs.writeFile(tempFile, binary)
+
+        await fs.rename(tempFile, file)
+    } catch (error) {
+        await fs.rm(tempFile, {force: true}).catch(() => {
+        })
+        throw error
+    }
+}
+
+async function readDocumentState(documentId) {
+    return fs.readFile(getDocumentStateFile(documentId))
+}
+
+async function writeDocumentState(documentId, state) {
+    await writeBinaryAtomic(getDocumentStateFile(documentId), state)
 }
 
 await initializeStorage()
@@ -129,6 +170,8 @@ app.post('/api/documents', async (request, response) => {
         updatedAt: now,
     }
 
+    await writeDocumentState(document.id, createEmptyYjsState())
+
     documents.push(document)
     await saveDocuments(documents)
 
@@ -151,7 +194,7 @@ app.delete('/api/documents/:id', async (request, response) => {
 const server = http.createServer(app)
 
 server.listen(port, '0.0.0.0', () => {
-    console.log(`파일 기반 CRDT 서버 4단계가 ${port}번 포트에서 실행 중입니다.`)
+    console.log(`파일 기반 CRDT 서버 6단계가 ${port}번 포트에서 실행 중입니다.`)
 })
 
 async function shutdown() {
