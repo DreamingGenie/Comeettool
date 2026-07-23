@@ -11,20 +11,50 @@ const stateDir = path.join(dataDir, 'states')
 const versionDir = path.join(dataDir, 'versions')
 const documentMetadataFile = path.join(dataDir, 'documents.json')
 
-async function initionalizeStorage() {
+async function readJson(file, fallback) {
+    try {
+        const text = await fs.readFile(file, 'utf8')
+
+        return JSON.parse(text)
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return fallback
+        }
+
+        throw error
+    }
+}
+
+async function writeJsonAtomic(file, val) {
+    const tempFile = `${file}.tmp`
+    const text = `${JSON.stringify(val, null, 2)}\n`
+
+    try {
+        await fs.writeFile(tempFile, text, 'utf8')
+
+        await fs.rename(tempFile, file)
+    } catch (error) {
+        await fs.rm(tempFile, {force: true}).catch(() => {
+        })
+
+        throw error
+    }
+
+}
+
+async function initializeStorage() {
     await fs.mkdir(dataDir, {recursive: true})
     await fs.mkdir(stateDir, {recursive: true})
     await fs.mkdir(versionDir, {recursive: true})
 
-    try {
-        await fs.access(documentMetadataFile)
-    } catch (error) {
-        if (error.code !== 'ENOENT') {
-            throw error
-        }
+    const documents = await readJson(documentMetadataFile, null);
 
-        await fs.writeFile(documentMetadataFile, '[]\n', 'utf8')
+    if (documents === null) {
+        await writeJsonAtomic(documentMetadataFile, [])
+    } else if (!Array.isArray(documents)) {
+        throw new Error('documents.json의 최상위 값은 배열이어야 합니다')
     }
+
 }
 
 await initializeStorage()
