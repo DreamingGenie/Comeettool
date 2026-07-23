@@ -46,6 +46,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ===== Yjs / Backend =====
+data/states/
+data/versions/
+data/documents.json
+
 # ===== Python / AI =====
 __pycache__/
 *.py[cod]

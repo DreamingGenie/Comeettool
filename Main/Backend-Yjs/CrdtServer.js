@@ -5,6 +5,9 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import {fileURLToPath} from 'node:url'
 import * as Y from 'yjs'
+import {Hocuspocus} from '@hocuspocus/server'
+import {Database} from '@hocuspocus/extension-database'
+import {WebSocketServer} from "ws";
 
 const port = Number(process.env.PORT || 3000)
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
@@ -112,6 +115,60 @@ async function writeDocumentState(documentId, state) {
     await writeBinaryAtomic(getDocumentStateFile(documentId), state)
 }
 
+function parseDocumentName(documentName) {
+    const match = /^document:([0-9a-f-]{36}):epoch:(\d+)$/i.exec(documentName)
+
+    if (!match) {
+        throw new Error(`잘못된 문서 연결 이름입니다: ${documentName}`)
+    }
+
+    return {
+        documentId: match[1],
+        epoch: Number(match[2]),
+    }
+}
+
+const hocuspocus = new Hocuspocus({
+    debounce: 500,
+    maxDebounce: 2000,
+
+    extensions: [
+        new Database({
+            fetch: async ({documentName}) => {
+                const {documentId, epoch} = parseDocumentName(documentName)
+                const documents = await getDocuments()
+                const document = documents.find(item => item.id === documentId)
+
+                if (!document) {
+                    throw new Error('존재하지 않는 문서입니다.')
+                }
+
+                if (document.stateEpoch !== epoch) {
+                    throw new Error('오래된 문서 세대입니다. 새로고침이 필요합니다.')
+                }
+
+                return readDocumentState(documentId)
+            },
+
+            store: async ({documentName, state}) => {
+                const {documentId, epoch} = parseDocumentName(documentName)
+                const documents = await getDocuments()
+                const document = documents.find(item => item.id === documentId)
+
+                if (!document) {
+                    throw new Error('존재하지 않는 문서입니다.')
+                }
+
+                if (document.stateEpoch !== epoch) {
+                    throw new Error('오래된 문서 세대의 저장 요청입니다.')
+                }
+
+                await writeDocumentState(documentId, state)
+            },
+        }),
+    ],
+})
+
 await initializeStorage()
 
 const app = express()
@@ -193,12 +250,31 @@ app.delete('/api/documents/:id', async (request, response) => {
 
 const server = http.createServer(app)
 
+const webSocketServer = new WebSocketServer({noServer: true})
+
+webSocketServer.on('connection', (socket, request) => {
+    hocuspocus.handleConnection(socket, request)
+})
+
+server.on('upgrade', (request, socket, head) => {
+    if (!request.url?.startsWith('/collaboration')) {
+        socket.destroy()
+        return
+    }
+
+    webSocketServer.handleUpgrade(request, socket, head, webSocket => {
+        webSocketServer.emit('connection', webSocket, request)
+    })
+})
+
 server.listen(port, '0.0.0.0', () => {
-    console.log(`파일 기반 CRDT 서버 6단계가 ${port}번 포트에서 실행 중입니다.`)
+    console.log(`파일 기반 CRDT 서버 8단계가 ${port}번 포트에서 실행 중입니다.`)
 })
 
 async function shutdown() {
-    server.close(() => {
+    server.close(async () => {
+        await hocuspocus.destroy()
+
         process.exit(0)
     })
 }
