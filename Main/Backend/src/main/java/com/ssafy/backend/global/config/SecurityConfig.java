@@ -33,6 +33,8 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/actuator/health",
+            "/.well-known/jwks.json",   // 공개키 배포 (외부 검증자용)
+            "/api/v1/dev/**",           // 개발용 토큰 발급 (local 프로파일에서만 컨트롤러 등록됨)
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
             "/api/v1/auth/token/refresh"

@@ -5,7 +5,7 @@ import io.jsonwebtoken.Jwts;
 import org.springframework.stereotype.Component;
 
 import java.security.PrivateKey;
-import java.security.PublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.UUID;
 
@@ -15,14 +15,17 @@ import java.util.UUID;
 @Component
 public class JwtProvider {
 
+    /** JWKS·토큰 헤더 매칭용 키 식별자. 키 교체 시 함께 변경한다. */
+    public static final String KEY_ID = "commonpjt-rsa";
+
     private final PrivateKey privateKey;
-    private final PublicKey publicKey;
+    private final RSAPublicKey publicKey;
     private final long accessExpMs;
     private final long refreshExpMs;
 
     public JwtProvider(JwtProperties props) {
         this.privateKey = RsaKeyUtil.loadPrivateKey(props.privateKeyPath());
-        this.publicKey = RsaKeyUtil.loadPublicKey(props.publicKeyPath());
+        this.publicKey = (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath());
         this.accessExpMs = props.accessExpirationSeconds() * 1000;
         this.refreshExpMs = props.refreshExpirationSeconds() * 1000;
     }
@@ -30,6 +33,7 @@ public class JwtProvider {
     public String createAccessToken(String userId) {
         Date now = new Date();
         return Jwts.builder()
+                .header().keyId(KEY_ID).and()
                 .subject(userId)
                 .claim("type", "access")
                 .issuedAt(now)
@@ -41,6 +45,7 @@ public class JwtProvider {
     public String createRefreshToken(String userId) {
         Date now = new Date();
         return Jwts.builder()
+                .header().keyId(KEY_ID).and()
                 .subject(userId)
                 .claim("type", "refresh")
                 .id(UUID.randomUUID().toString())
@@ -58,6 +63,14 @@ public class JwtProvider {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    public RSAPublicKey getPublicKey() {
+        return publicKey;
+    }
+
+    public String getKeyId() {
+        return KEY_ID;
     }
 
     public long getRefreshExpirationSeconds() {
