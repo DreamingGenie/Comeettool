@@ -4,8 +4,8 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
-import { mountCommitTool } from './legacy/committool'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { mountCommitTool } from './committool'
 
 const legacyRoot = ref(null)
 const toastRoot = ref(null)
