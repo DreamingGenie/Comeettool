@@ -1,6 +1,7 @@
 package com.ssafy.backend.global.jwt;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * (@AutoConfigureMockMvc 대신 MockMvcBuilders로 직접 구성 — Boot 4 패키지 이동 회피)
  */
 @SpringBootTest
+@DisplayName("인증 필터 통합 (JwtAuthenticationFilter)")
 class JwtAuthenticationFilterTest {
 
     // 핸들러가 없는 보호 경로 → 인증 통과 시 404(NOT_FOUND)
@@ -41,27 +43,31 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void 공개_엔드포인트는_토큰없이_접근가능() throws Exception {
+    @DisplayName("공개 엔드포인트는 토큰 없이 접근 가능")
+    void publicEndpointAccessibleWithoutToken() throws Exception {
         mockMvc.perform(get("/.well-known/jwks.json"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void 보호경로_토큰없음_401_UNAUTHORIZED() throws Exception {
+    @DisplayName("보호 경로 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
+    void protectedNoTokenReturns401Unauthorized() throws Exception {
         mockMvc.perform(get(PROTECTED))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
     }
 
     @Test
-    void 보호경로_무효토큰_401_INVALID() throws Exception {
+    @DisplayName("보호 경로 - 무효 토큰 → 401 AUTH_TOKEN_INVALID")
+    void protectedInvalidTokenReturns401Invalid() throws Exception {
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer not.a.jwt"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().string(containsString("AUTH_TOKEN_INVALID")));
     }
 
     @Test
-    void 보호경로_만료토큰_401_EXPIRED() throws Exception {
+    @DisplayName("보호 경로 - 만료 토큰 → 401 AUTH_TOKEN_EXPIRED")
+    void protectedExpiredTokenReturns401Expired() throws Exception {
         JwtProvider expired = new JwtProvider(
                 new JwtProperties("keys/jwt_private.pem", "keys/jwt_public.pem", -120, -120));
         String token = expired.createAccessToken("42");
@@ -71,7 +77,8 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void 보호경로_유효토큰_인증통과_404() throws Exception {
+    @DisplayName("보호 경로 - 유효 토큰 → 인증 통과(404)")
+    void protectedValidTokenPassesAuth() throws Exception {
         String token = jwtProvider.createAccessToken("42");
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
