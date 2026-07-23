@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class JwtProviderTest {
 
     private final JwtProvider provider = new JwtProvider(
-            new JwtProperties("keys/jwt_private.pem", "keys/jwt_public.pem", 1800, 1209600));
+            new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", 1800, 1209600));
 
     @Test
     @DisplayName("access 토큰 발급·검증 라운드트립")
@@ -39,7 +39,7 @@ class JwtProviderTest {
     void expiredTokenThrowsException() {
         // 만료폭을 clock skew(60s)보다 크게 두어 확실히 만료 처리되게 함
         JwtProvider expired = new JwtProvider(
-                new JwtProperties("keys/jwt_private.pem", "keys/jwt_public.pem", -120, -120));
+                new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", -120, -120));
         String token = expired.createAccessToken("42");
         assertThrows(ExpiredJwtException.class, () -> expired.parse(token));
     }

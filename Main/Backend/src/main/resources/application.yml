@@ -16,8 +16,9 @@ management:
 
 # JWT (RS256) — 키는 gitignore된 keys/ 에서 로드, 배포는 환경변수 경로 주입
 jwt:
-  private-key-path: ${JWT_PRIVATE_KEY_PATH:keys/jwt_private.pem}
-  public-key-path: ${JWT_PUBLIC_KEY_PATH:keys/jwt_public.pem}
+  # classpath 로드(실행 디렉터리 무관). prod는 외부 파일 주입: file:/secure/path
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt_private.pem}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt_public.pem}
   access-expiration-seconds: 1800      # 30분
   refresh-expiration-seconds: 1209600  # 14일
 

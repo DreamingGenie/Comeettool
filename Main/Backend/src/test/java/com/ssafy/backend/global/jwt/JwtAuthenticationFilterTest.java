@@ -69,7 +69,7 @@ class JwtAuthenticationFilterTest {
     @DisplayName("보호 경로 - 만료 토큰 → 401 AUTH_TOKEN_EXPIRED")
     void protectedExpiredTokenReturns401Expired() throws Exception {
         JwtProvider expired = new JwtProvider(
-                new JwtProperties("keys/jwt_private.pem", "keys/jwt_public.pem", -120, -120));
+                new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", -120, -120));
         String token = expired.createAccessToken("42");
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized())
