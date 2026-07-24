@@ -18,6 +18,9 @@
 .app-shell .calendar-head{height:45.44px}
 .app-shell .calendar-grid>b{height:21.76px;padding:6.4px}
 .app-shell .calendar-grid .day{height:64px;padding:6.4px}
+.app-shell .topbar .logo-mark::before,
+.auth-page .auth-logo .logo-mark::before,
+.onboarding-page .auth-logo .logo-mark::before{content:none!important;display:none!important}
 .app-shell .calendar-grid .day{overflow:hidden}
 .app-shell .calendar-grid .event{margin-top:2.4px;padding:2px 3.2px;font-size:8.8px;line-height:1.15}
 .app-shell .main-area{padding-top:19.2px;padding-bottom:19.2px}
