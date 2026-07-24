@@ -28,7 +28,6 @@ import java.time.OffsetDateTime;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -148,24 +147,47 @@ class AuthServiceImplTest {
     }
 
     @Nested
-    @DisplayName("이메일 대소문자 처리 (현재 동작 문서화)")
-    class EmailCaseSensitivity {
+    @DisplayName("이메일 대소문자 정규화")
+    class EmailCaseNormalization {
 
         @Test
-        @DisplayName("이메일_대소문자만_다르면_서비스는_별개_이메일로_취급해_중복_검사를_그대로_통과시킨다")
-        void 이메일_대소문자만_다르면_서비스는_별개_이메일로_취급해_중복_검사를_그대로_통과시킨다() {
-            // given: 대소문자가 다른 이메일 — 서비스는 정규화 없이 받은 문자열 그대로 조회한다
+        @DisplayName("이메일이_대문자를_포함해도_소문자로_정규화해_저장한다")
+        void 이메일이_대문자를_포함해도_소문자로_정규화해_저장한다() {
+            // given
             String mixedCaseEmail = "User@Example.com";
+            String normalizedEmail = "user@example.com";
             RequestSignupDto request = new RequestSignupDto(mixedCaseEmail, RAW_PASSWORD);
-            given(userRepository.existsByEmail(mixedCaseEmail)).willReturn(false);
+            given(userRepository.existsByEmail(normalizedEmail)).willReturn(false);
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class)))
-                    .willReturn(new ResponseSignupDto(1, mixedCaseEmail, OffsetDateTime.now()));
+                    .willReturn(new ResponseSignupDto(1, normalizedEmail, OffsetDateTime.now()));
 
-            // when & then: 예외 없이 통과 — "user@example.com"이 이미 가입돼 있어도 서비스 계층에서는 걸러내지 못함
-            assertThatCode(() -> authService.signup(request)).doesNotThrowAnyException();
-            verify(userRepository).existsByEmail(mixedCaseEmail);
+            // when
+            authService.signup(request);
+
+            // then: 중복검사·저장 둘 다 소문자로 정규화된 이메일로 수행돼야 한다
+            verify(userRepository).existsByEmail(normalizedEmail);
+            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(userCaptor.capture());
+            assertThat(userCaptor.getValue().getEmail()).isEqualTo(normalizedEmail);
+        }
+
+        @Test
+        @DisplayName("대소문자만_다른_이메일도_중복으로_판단해_AUTH_EMAIL_DUPLICATED_예외가_발생한다")
+        void 대소문자만_다른_이메일도_중복으로_판단해_AUTH_EMAIL_DUPLICATED_예외가_발생한다() {
+            // given: "user@example.com"이 이미 가입돼 있고, "User@Example.com"으로 재가입을 시도
+            String mixedCaseEmail = "User@Example.com";
+            String normalizedEmail = "user@example.com";
+            RequestSignupDto request = new RequestSignupDto(mixedCaseEmail, RAW_PASSWORD);
+            given(userRepository.existsByEmail(normalizedEmail)).willReturn(true);
+
+            // when & then
+            assertThatThrownBy(() -> authService.signup(request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_EMAIL_DUPLICATED);
+            verify(userRepository, never()).save(any(User.class));
         }
     }
 
