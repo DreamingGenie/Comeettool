@@ -1,0 +1,32 @@
+package com.ssafy.backend.auth.controller;
+
+import com.ssafy.backend.auth.dto.RequestSignupDto;
+import com.ssafy.backend.auth.dto.ResponseSignupDto;
+import com.ssafy.backend.auth.service.AuthService;
+import com.ssafy.backend.global.response.ApiResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * AUTH 도메인 REST 컨트롤러 (inventory.md §1). SecurityConfig에서 /signup은 permitAll 처리됨.
+ */
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthService authService;
+
+    @PostMapping("/signup")
+    public ResponseEntity<ApiResponse<ResponseSignupDto>> signup(@Valid @RequestBody RequestSignupDto request) {
+        ResponseSignupDto response = authService.signup(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("회원가입이 완료되었습니다.", response));
+    }
+}
