@@ -91,7 +91,7 @@
 | 이슈 | 범위 | 매핑 |
 | --- | --- | --- |
 | **F1** 프로젝트 스캐폴딩 & 로컬 환경 | Spring Boot/Gradle, 패키지 구조, `application.yml`(local/prod), Docker Compose(PostgreSQL·Redis) | - |
-| **F2** DB 마이그레이션 + DDL 적용 | Flyway 도입, DDL 마이그레이션화, `ddl-auto: validate` | database-schema |
+| **F2** DB 스키마 구성(로컬) | DDL 직접 적용, `ddl-auto: validate`, PK IDENTITY 보완 (Flyway 미사용) | database-schema |
 | **F3** 공통 응답·예외 처리 | `ApiResponse` 래퍼, 에러 포맷, `@RestControllerAdvice`, 에러코드 enum | README §0 |
 | **F4** 인증 기반(Security/JWT) | SecurityConfig, JWT 발급·검증 필터, BCrypt, Redis Refresh 저장 | README §0 |
 
