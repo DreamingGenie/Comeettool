@@ -75,7 +75,7 @@ class AuthServiceImplTest {
         @DisplayName("이메일이_중복되지_않으면_회원가입에_성공하고_응답DTO를_반환한다")
         void 이메일이_중복되지_않으면_회원가입에_성공하고_응답DTO를_반환한다() {
             // given
-            ResponseSignupDto expected = new ResponseSignupDto(1, EMAIL, OffsetDateTime.now());
+            ResponseSignupDto expected = new ResponseSignupDto(1L, EMAIL, OffsetDateTime.now());
             given(userRepository.existsByEmail(EMAIL)).willReturn(false);
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -98,7 +98,7 @@ class AuthServiceImplTest {
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class)))
-                    .willReturn(new ResponseSignupDto(1, EMAIL, OffsetDateTime.now()));
+                    .willReturn(new ResponseSignupDto(1L, EMAIL, OffsetDateTime.now()));
 
             // when
             authService.signup(requestSignupDto);
@@ -161,7 +161,7 @@ class AuthServiceImplTest {
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class)))
-                    .willReturn(new ResponseSignupDto(1, normalizedEmail, OffsetDateTime.now()));
+                    .willReturn(new ResponseSignupDto(1L, normalizedEmail, OffsetDateTime.now()));
 
             // when
             authService.signup(request);

@@ -28,9 +28,9 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
-    private Integer id;
+    private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "password_hash", nullable = false)
     private String password;
 
     private String nickname;
@@ -56,7 +56,9 @@ public class User {
 
     private Integer age;
 
-    @Column(name = "user_color")
+    // user_color는 DB DEFAULT('#000000')로 채운다 — INSERT에서 제외(insertable=false)하지 않으면
+    // 가입 시 Hibernate가 NULL을 명시적으로 넣어 NOT NULL 제약을 위반한다. 색상 변경은 온보딩 UPDATE로 처리.
+    @Column(name = "user_color", insertable = false)
     private String displayColor;
 
     @CreationTimestamp
