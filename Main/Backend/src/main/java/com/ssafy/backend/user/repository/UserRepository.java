@@ -6,8 +6,6 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-public interface UserRepository extends JpaRepository<User, Integer> {
-
     // 회원가입 시 이메일 중복 검사(AUTH_EMAIL_DUPLICATED)에 사용.
     boolean existsByEmail(String email);
 
