@@ -286,7 +286,7 @@ class AuthServiceImplTest {
         @BeforeEach
         void setUp() {
             userWithId = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
-            ReflectionTestUtils.setField(userWithId, "id", 1);
+            ReflectionTestUtils.setField(userWithId, "id", 1L);
         }
 
         private void givenLoginStubs() {
@@ -432,7 +432,7 @@ class AuthServiceImplTest {
             String mixedCaseEmail = "User@Example.com";
             String normalizedEmail = "user@example.com";
             User user = User.builder().email(normalizedEmail).password(ENCODED_PASSWORD).build();
-            ReflectionTestUtils.setField(user, "id", 1);
+            ReflectionTestUtils.setField(user, "id", 1L);
 
             given(userRepository.findByEmail(normalizedEmail)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
