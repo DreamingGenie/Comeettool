@@ -3,8 +3,10 @@ package com.ssafy.backend.global.jwt;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -42,5 +44,55 @@ class JwtProviderTest {
                 new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", -120, -120));
         String token = expired.createAccessToken("42");
         assertThrows(ExpiredJwtException.class, () -> expired.parse(token));
+    }
+
+    // =====================================================================
+    // 클레임 상세 검증
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Access Token 클레임 검증")
+    class AccessTokenClaims {
+
+        @Test
+        @DisplayName("exp는_iat로부터_정확히_30분(1800초)_뒤다")
+        void exp는_iat로부터_정확히_30분_뒤다() {
+            Claims claims = provider.parse(provider.createAccessToken("99"));
+            long diffSeconds = (claims.getExpiration().getTime() - claims.getIssuedAt().getTime()) / 1000;
+            assertThat(diffSeconds).isEqualTo(1800L);
+        }
+    }
+
+    @Nested
+    @DisplayName("Refresh Token 클레임 검증")
+    class RefreshTokenClaims {
+
+        @Test
+        @DisplayName("sub는_발급_시_전달한_userId와_일치한다")
+        void sub는_발급_시_전달한_userId와_일치한다() {
+            Claims claims = provider.parse(provider.createRefreshToken("99"));
+            assertThat(claims.getSubject()).isEqualTo("99");
+        }
+
+        @Test
+        @DisplayName("exp는_iat로부터_정확히_14일(1209600초)_뒤다")
+        void exp는_iat로부터_정확히_14일_뒤다() {
+            Claims claims = provider.parse(provider.createRefreshToken("99"));
+            long diffSeconds = (claims.getExpiration().getTime() - claims.getIssuedAt().getTime()) / 1000;
+            assertThat(diffSeconds).isEqualTo(1_209_600L);
+        }
+    }
+
+    @Nested
+    @DisplayName("Access Token과 Refresh Token 구분")
+    class TokenDistinction {
+
+        @Test
+        @DisplayName("동일_userId로_발급한_accessToken과_refreshToken은_서로_다른_값이다")
+        void 동일_userId로_발급한_accessToken과_refreshToken은_서로_다른_값이다() {
+            String accessToken = provider.createAccessToken("42");
+            String refreshToken = provider.createRefreshToken("42");
+            assertThat(accessToken).isNotEqualTo(refreshToken);
+        }
     }
 }

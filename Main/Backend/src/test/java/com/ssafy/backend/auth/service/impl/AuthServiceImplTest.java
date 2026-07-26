@@ -1,10 +1,14 @@
 package com.ssafy.backend.auth.service.impl;
 
+import com.ssafy.backend.auth.dto.RequestLoginDto;
 import com.ssafy.backend.auth.dto.RequestSignupDto;
+import com.ssafy.backend.auth.dto.ResponseLoginDto;
 import com.ssafy.backend.auth.dto.ResponseSignupDto;
 import com.ssafy.backend.auth.mapper.UserMapper;
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import jakarta.validation.ConstraintViolation;
@@ -23,14 +27,18 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -56,6 +64,12 @@ class AuthServiceImplTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtProvider jwtProvider;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -250,6 +264,237 @@ class AuthServiceImplTest {
         void 유효한_이메일과_비밀번호는_검증을_통과한다() {
             RequestSignupDto valid = new RequestSignupDto(EMAIL, RAW_PASSWORD);
             Set<ConstraintViolation<RequestSignupDto>> violations = validator.validate(valid);
+            assertThat(violations).isEmpty();
+        }
+    }
+
+    // =====================================================================
+    // AUTH-02: login() 테스트
+    // =====================================================================
+
+    @Nested
+    @DisplayName("로그인 성공")
+    class LoginSuccess {
+
+        private static final String ACCESS_TOKEN = "access.token.value";
+        private static final String REFRESH_TOKEN = "refresh.token.value";
+        /** 14일(초) — JwtProperties.refreshExpirationSeconds 와 일치해야 한다. */
+        private static final long REFRESH_TTL_SECONDS = 14 * 24 * 60 * 60L; // 1_209_600
+
+        private User userWithId;
+
+        @BeforeEach
+        void setUp() {
+            userWithId = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
+            ReflectionTestUtils.setField(userWithId, "id", 1L);
+        }
+
+        private void givenLoginStubs() {
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(userWithId));
+            given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
+            given(jwtProvider.createAccessToken("1")).willReturn(ACCESS_TOKEN);
+            given(jwtProvider.createRefreshToken("1")).willReturn(REFRESH_TOKEN);
+            given(jwtProvider.getRefreshExpirationSeconds()).willReturn(REFRESH_TTL_SECONDS);
+        }
+
+        @Test
+        @DisplayName("이메일과_비밀번호가_일치하면_로그인에_성공하고_토큰DTO를_반환한다")
+        void 이메일과_비밀번호가_일치하면_로그인에_성공하고_토큰DTO를_반환한다() {
+            givenLoginStubs();
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
+            assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
+            assertThat(result.userId()).isEqualTo("1");
+        }
+
+        @Test
+        @DisplayName("로그인_성공_시_tokenType은_Bearer다")
+        void 로그인_성공_시_tokenType은_Bearer다() {
+            givenLoginStubs();
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.tokenType()).isEqualTo("Bearer");
+        }
+
+        @Test
+        @DisplayName("accessToken과_refreshToken은_서로_다른_값이다")
+        void accessToken과_refreshToken은_서로_다른_값이다() {
+            givenLoginStubs();
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.accessToken()).isNotEqualTo(result.refreshToken());
+        }
+
+        @Test
+        @DisplayName("로그인_성공_시_refreshToken이_Redis에_저장된다")
+        void 로그인_성공_시_refreshToken이_Redis에_저장된다() {
+            givenLoginStubs();
+
+            authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            verify(refreshTokenService, times(1)).save(eq("1"), eq(REFRESH_TOKEN), eq(REFRESH_TTL_SECONDS));
+        }
+
+        @Test
+        @DisplayName("Redis_저장_TTL은_정확히_14일_초_단위다")
+        void Redis_저장_TTL은_정확히_14일_초_단위다() {
+            givenLoginStubs();
+
+            authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            ArgumentCaptor<Long> ttlCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(refreshTokenService).save(anyString(), anyString(), ttlCaptor.capture());
+            assertThat(ttlCaptor.getValue())
+                    .as("TTL은 14일(1,209,600초)이어야 한다")
+                    .isEqualTo(1_209_600L);
+        }
+    }
+
+    @Nested
+    @DisplayName("로그인 실패")
+    class LoginFailure {
+
+        @Test
+        @DisplayName("존재하지_않는_이메일로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다")
+        void 존재하지_않는_이메일로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다() {
+            // given
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_LOGIN_FAILED);
+        }
+
+        @Test
+        @DisplayName("비밀번호가_일치하지_않으면_AUTH_LOGIN_FAILED_예외가_발생한다")
+        void 비밀번호가_일치하지_않으면_AUTH_LOGIN_FAILED_예외가_발생한다() {
+            // given
+            User user = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("wrongPassword!", ENCODED_PASSWORD)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, "wrongPassword!")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_LOGIN_FAILED);
+        }
+
+        @Test
+        @DisplayName("이메일이_없으면_토큰_발급과_Redis_저장은_수행되지_않는다")
+        void 이메일이_없으면_토큰_발급과_Redis_저장은_수행되지_않는다() {
+            // given
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+            // when
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(jwtProvider, never()).createAccessToken(anyString());
+            verify(jwtProvider, never()).createRefreshToken(anyString());
+            verify(refreshTokenService, never()).save(anyString(), anyString(), anyLong());
+        }
+
+        @Test
+        @DisplayName("비밀번호가_틀리면_토큰_발급과_Redis_저장은_수행되지_않는다")
+        void 비밀번호가_틀리면_토큰_발급과_Redis_저장은_수행되지_않는다() {
+            // given
+            User user = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches(anyString(), eq(ENCODED_PASSWORD))).willReturn(false);
+
+            // when
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(jwtProvider, never()).createAccessToken(anyString());
+            verify(jwtProvider, never()).createRefreshToken(anyString());
+            verify(refreshTokenService, never()).save(anyString(), anyString(), anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("로그인 이메일 대소문자 정규화")
+    class LoginEmailNormalization {
+
+        @Test
+        @DisplayName("대문자_이메일로_로그인해도_소문자로_정규화하여_유저를_조회한다")
+        void 대문자_이메일로_로그인해도_소문자로_정규화하여_유저를_조회한다() {
+            // given
+            String mixedCaseEmail = "User@Example.com";
+            String normalizedEmail = "user@example.com";
+            User user = User.builder().email(normalizedEmail).password(ENCODED_PASSWORD).build();
+            ReflectionTestUtils.setField(user, "id", 1L);
+
+            given(userRepository.findByEmail(normalizedEmail)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
+            given(jwtProvider.createAccessToken("1")).willReturn("access.token");
+            given(jwtProvider.createRefreshToken("1")).willReturn("refresh.token");
+            given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1209600L);
+
+            // when
+            authService.login(new RequestLoginDto(mixedCaseEmail, RAW_PASSWORD));
+
+            // then
+            verify(userRepository, times(1)).findByEmail(normalizedEmail);
+        }
+    }
+
+    @Nested
+    @DisplayName("RequestLoginDto Bean Validation (컨트롤러 진입 전 방어선)")
+    class RequestLoginDtoValidation {
+
+        private static ValidatorFactory validatorFactory;
+        private static Validator validator;
+
+        @BeforeAll
+        static void setUpValidator() {
+            validatorFactory = Validation.buildDefaultValidatorFactory();
+            validator = validatorFactory.getValidator();
+        }
+
+        @AfterAll
+        static void closeValidator() {
+            validatorFactory.close();
+        }
+
+        @Test
+        @DisplayName("이메일이_null이면_검증에_실패한다")
+        void 이메일이_null이면_검증에_실패한다() {
+            Set<ConstraintViolation<RequestLoginDto>> violations =
+                    validator.validate(new RequestLoginDto(null, RAW_PASSWORD));
+            assertThat(violations).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("이메일_형식이_아니면_검증에_실패한다")
+        void 이메일_형식이_아니면_검증에_실패한다() {
+            Set<ConstraintViolation<RequestLoginDto>> violations =
+                    validator.validate(new RequestLoginDto("not-an-email", RAW_PASSWORD));
+            assertThat(violations).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("비밀번호가_빈문자열이면_검증에_실패한다")
+        void 비밀번호가_빈문자열이면_검증에_실패한다() {
+            Set<ConstraintViolation<RequestLoginDto>> violations =
+                    validator.validate(new RequestLoginDto(EMAIL, ""));
+            assertThat(violations).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("유효한_이메일과_비밀번호는_검증을_통과한다")
+        void 유효한_이메일과_비밀번호는_검증을_통과한다() {
+            Set<ConstraintViolation<RequestLoginDto>> violations =
+                    validator.validate(new RequestLoginDto(EMAIL, RAW_PASSWORD));
             assertThat(violations).isEmpty();
         }
     }

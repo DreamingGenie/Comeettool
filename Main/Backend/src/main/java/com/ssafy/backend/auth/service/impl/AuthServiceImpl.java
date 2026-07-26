@@ -1,11 +1,15 @@
 package com.ssafy.backend.auth.service.impl;
 
+import com.ssafy.backend.auth.dto.RequestLoginDto;
 import com.ssafy.backend.auth.dto.RequestSignupDto;
+import com.ssafy.backend.auth.dto.ResponseLoginDto;
 import com.ssafy.backend.auth.dto.ResponseSignupDto;
 import com.ssafy.backend.auth.mapper.UserMapper;
 import com.ssafy.backend.auth.service.AuthService;
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 
 /**
- * AUTH-01 회원가입 로직. 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder 빈)로 해싱해 저장한다.
+ * AUTH-01 회원가입, AUTH-02 로그인 로직.
+ * 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder 빈)로 해싱해 저장·비교한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -25,6 +30,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional
@@ -40,6 +47,28 @@ public class AuthServiceImpl implements AuthService {
         User saved = userRepository.save(user);
 
         return userMapper.toSignupResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ResponseLoginDto login(RequestLoginDto request) {
+        String normalizedEmail = normalizeEmail(request.email());
+
+        // 이메일·비밀번호 불일치 모두 AUTH_LOGIN_FAILED로 통일 (보안상 구분하지 않음)
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new CustomException(ErrorCode.AUTH_LOGIN_FAILED));
+
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw new CustomException(ErrorCode.AUTH_LOGIN_FAILED);
+        }
+
+        String userId = String.valueOf(user.getId());
+        String accessToken = jwtProvider.createAccessToken(userId);
+        String refreshToken = jwtProvider.createRefreshToken(userId);
+
+        refreshTokenService.save(userId, refreshToken, jwtProvider.getRefreshExpirationSeconds());
+
+        return new ResponseLoginDto("Bearer", accessToken, refreshToken, userId);
     }
 
     private String normalizeEmail(String email) {
