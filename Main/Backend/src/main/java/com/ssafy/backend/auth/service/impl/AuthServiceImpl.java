@@ -24,8 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 
 /**
- * AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 Access Token 재발급, AUTH-04 로그아웃 로직.
- * 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder 빈)로 해싱해 저장·비교한다.
+ * AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 Access Token 재발급, AUTH-04 로그아웃 로직. 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder
+ * 빈)로 해싱해 저장·비교한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -72,7 +72,7 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenService.save(userId, refreshToken, jwtProvider.getRefreshExpirationSeconds());
 
-        return new ResponseLoginDto("Bearer", accessToken, refreshToken, userId);
+        return new ResponseLoginDto("Bearer", accessToken, refreshToken, userId, user.isOnboarded());
     }
 
     @Override
