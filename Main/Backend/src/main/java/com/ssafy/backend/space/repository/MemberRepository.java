@@ -16,24 +16,21 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // SPACE-05: 스페이스 참여자(멤버) 목록 조회.
     List<Member> findByTeamId(Long teamId);
 
-    // SPACE-02: 로그인 사용자의 스페이스별 멤버십(내 역할·닉네임 확인용).
-    List<Member> findByUserId(Long userId);
-
     // SPACE-02: 여러 스페이스의 참여자 수를 한 번에 집계([teamId, count]).
     @Query("select m.teamId, count(m) from Member m where m.teamId in :teamIds group by m.teamId")
     List<Object[]> countMembersByTeamIds(@Param("teamIds") List<Long> teamIds);
 
     /**
-     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스 목록.
-     * Team↔Member 간 연관 매핑이 없어 teamId로 조인한다.
+     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 역할.
+     * Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team, MemberRole] 배열이다.
      */
     @Query("""
-            select t
+            select t, m.role
             from Team t, Member m
             where m.teamId = t.id
               and m.userId = :userId
               and t.isDeleted = false
             order by t.createdAt desc
             """)
-    List<Team> findActiveTeamsByUserId(@Param("userId") Long userId);
+    List<Object[]> findActiveTeamsWithMyRole(@Param("userId") Long userId);
 }
