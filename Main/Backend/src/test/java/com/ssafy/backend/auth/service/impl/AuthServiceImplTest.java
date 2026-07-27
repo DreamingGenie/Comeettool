@@ -612,26 +612,10 @@ class AuthServiceImplTest {
         }
 
         @Test
-        @DisplayName("Redis에_저장된_값이_없으면_AUTH_REFRESH_FAILED_예외가_발생한다")
-        void Redis에_저장된_값이_없으면_AUTH_REFRESH_FAILED_예외가_발생한다() {
-            // given: 로그아웃했거나 TTL 만료로 Redis 키 자체가 없는 경우 — isValid는 false를 반환한다
-            Claims claims = mock(Claims.class);
-            given(claims.getSubject()).willReturn(USER_ID);
-            given(claims.get("type", String.class)).willReturn("refresh");
-            given(jwtProvider.parse(REFRESH_TOKEN)).willReturn(claims);
-            given(refreshTokenService.isValid(USER_ID, REFRESH_TOKEN)).willReturn(false);
-
-            // when & then
-            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
-                    .isInstanceOf(CustomException.class)
-                    .extracting(ex -> ((CustomException) ex).getErrorCode())
-                    .isEqualTo(ErrorCode.AUTH_REFRESH_FAILED);
-        }
-
-        @Test
-        @DisplayName("Redis_저장값과_불일치하면_AUTH_REFRESH_FAILED_예외가_발생한다")
-        void Redis_저장값과_불일치하면_AUTH_REFRESH_FAILED_예외가_발생한다() {
-            // given: 이미 새 refreshToken으로 교체돼 있어(다른 세션 로그인 등) 지금 보낸 토큰과 값이 다른 경우
+        @DisplayName("Redis_검증에_실패하면_AUTH_REFRESH_FAILED_예외가_발생한다")
+        void Redis_검증에_실패하면_AUTH_REFRESH_FAILED_예외가_발생한다() {
+            // given: isValid()가 false를 반환하는 모든 경우(키 없음·값 불일치)를 대표하는 케이스.
+            // AuthServiceImpl 입장에서는 두 상황이 isValid() == false로 동일하게 관찰되어 구분할 수 없다.
             Claims claims = mock(Claims.class);
             given(claims.getSubject()).willReturn(USER_ID);
             given(claims.get("type", String.class)).willReturn("refresh");
