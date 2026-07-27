@@ -76,4 +76,9 @@ public class User {
         this.password = password;
         this.isDeleted = false;
     }
+
+    // 별도 컬럼 없이 sex·age 존재 여부로 판단 (온보딩 3단계에서 두 값을 함께 입력받는 화면 기준).
+    public boolean isOnboarded() {
+        return sex != null && age != null;
+    }
 }
