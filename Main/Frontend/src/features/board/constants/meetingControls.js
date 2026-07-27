@@ -4,6 +4,6 @@ export const meetingControls = [
   { id: 'share', label: '공유' },
   { id: 'people', label: '참가자' },
   { id: 'document', label: '문서' },
-  { id: 'chat', label: '채팅', active: true },
+  { id: 'chat', label: '채팅' },
   { id: 'more', label: '더보기' }
 ]
