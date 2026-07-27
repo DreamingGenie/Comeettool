@@ -34,24 +34,24 @@ class RequestCreateSpaceDtoTest {
     }
 
     @Test
-    @DisplayName("이름이_null이면_검증에_실패한다")
-    void 이름이_null이면_검증에_실패한다() {
+    @DisplayName("이름이 null이면 검증에 실패한다")
+    void validation_failsWhenNameNull() {
         Set<ConstraintViolation<RequestCreateSpaceDto>> violations =
                 validator.validate(new RequestCreateSpaceDto(null, null, null, null));
         assertThat(violations).isNotEmpty();
     }
 
     @Test
-    @DisplayName("이름이_공백만_있으면_검증에_실패한다")
-    void 이름이_공백만_있으면_검증에_실패한다() {
+    @DisplayName("이름이 공백만 있으면 검증에 실패한다")
+    void validation_failsWhenNameBlank() {
         Set<ConstraintViolation<RequestCreateSpaceDto>> violations =
                 validator.validate(new RequestCreateSpaceDto("   ", null, null, null));
         assertThat(violations).isNotEmpty();
     }
 
     @Test
-    @DisplayName("이름이_100자를_초과하면_검증에_실패한다")
-    void 이름이_100자를_초과하면_검증에_실패한다() {
+    @DisplayName("이름이 100자를 초과하면 검증에 실패한다")
+    void validation_failsWhenNameTooLong() {
         String tooLong = "가".repeat(101);
         Set<ConstraintViolation<RequestCreateSpaceDto>> violations =
                 validator.validate(new RequestCreateSpaceDto(tooLong, null, null, null));
@@ -59,16 +59,16 @@ class RequestCreateSpaceDtoTest {
     }
 
     @Test
-    @DisplayName("이름만_있고_나머지가_null이면_검증을_통과한다")
-    void 이름만_있고_나머지가_null이면_검증을_통과한다() {
+    @DisplayName("이름만 있고 나머지가 null이면 검증을 통과한다")
+    void validation_passesWithNameOnly() {
         Set<ConstraintViolation<RequestCreateSpaceDto>> violations =
                 validator.validate(new RequestCreateSpaceDto("팀A", null, null, null));
         assertThat(violations).isEmpty();
     }
 
     @Test
-    @DisplayName("이름_설명_색상_이미지가_모두_유효하면_검증을_통과한다")
-    void 모든_필드가_유효하면_검증을_통과한다() {
+    @DisplayName("이름·설명·색상·이미지가 모두 유효하면 검증을 통과한다")
+    void validation_passesWhenAllFieldsValid() {
         Set<ConstraintViolation<RequestCreateSpaceDto>> violations =
                 validator.validate(new RequestCreateSpaceDto("팀A", "설명", "#123456", "https://img/x.png"));
         assertThat(violations).isEmpty();

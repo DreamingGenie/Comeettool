@@ -77,11 +77,11 @@ class SpaceServiceImplTest {
 
     @Nested
     @DisplayName("SPACE-01 스페이스 생성")
-    class CreateSpace {
+    class AddSpace {
 
         @Test
-        @DisplayName("스페이스를_생성하면_teams가_저장되고_생성자가_Owner_멤버로_등록된다")
-        void 스페이스를_생성하면_teams가_저장되고_생성자가_Owner_멤버로_등록된다() {
+        @DisplayName("스페이스를 생성하면 teams가 저장되고 생성자가 Owner 멤버로 등록된다")
+        void addSpace_registersCreatorAsOwnerMember() {
             // given
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("팀A", "설명", "#123456", null);
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(userWithNickname("진", "u@e.com")));
@@ -92,7 +92,7 @@ class SpaceServiceImplTest {
             });
 
             // when
-            ResponseCreateSpaceDto response = spaceService.createSpace(USER_ID, request);
+            ResponseCreateSpaceDto response = spaceService.addSpace(USER_ID, request);
 
             // then
             assertThat(response.spaceId()).isEqualTo(TEAM_ID);
@@ -110,30 +110,30 @@ class SpaceServiceImplTest {
         }
 
         @Test
-        @DisplayName("색상_미지정_시_기본색_000000이_적용된다")
-        void 색상_미지정_시_기본색_000000이_적용된다() {
+        @DisplayName("색상 미지정 시 기본색 #000000이 적용된다")
+        void addSpace_appliesDefaultColorWhenBlank() {
             // given
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("팀A", null, null, null);
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(userWithNickname("진", "u@e.com")));
             given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
 
             // when
-            ResponseCreateSpaceDto response = spaceService.createSpace(USER_ID, request);
+            ResponseCreateSpaceDto response = spaceService.addSpace(USER_ID, request);
 
             // then
             assertThat(response.teamColor()).isEqualTo("#000000");
         }
 
         @Test
-        @DisplayName("닉네임이_없으면_이메일_로컬파트를_멤버_닉네임으로_사용한다")
-        void 닉네임이_없으면_이메일_로컬파트를_멤버_닉네임으로_사용한다() {
+        @DisplayName("닉네임이 없으면 이메일 로컬파트를 멤버 닉네임으로 사용한다")
+        void addSpace_fallsBackToEmailLocalPartForNickname() {
             // given
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("팀A", null, null, null);
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(userWithNickname(null, "hong@example.com")));
             given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
 
             // when
-            spaceService.createSpace(USER_ID, request);
+            spaceService.addSpace(USER_ID, request);
 
             // then
             ArgumentCaptor<Member> memberCaptor = ArgumentCaptor.forClass(Member.class);
@@ -142,14 +142,14 @@ class SpaceServiceImplTest {
         }
 
         @Test
-        @DisplayName("존재하지_않는_사용자면_AUTH_UNAUTHORIZED_예외가_발생하고_저장하지_않는다")
-        void 존재하지_않는_사용자면_예외가_발생하고_저장하지_않는다() {
+        @DisplayName("존재하지 않는 사용자면 AUTH_UNAUTHORIZED 예외가 발생하고 저장하지 않는다")
+        void addSpace_throwsWhenUserNotFound() {
             // given
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("팀A", null, null, null);
             given(userRepository.findById(USER_ID)).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> spaceService.createSpace(USER_ID, request))
+            assertThatThrownBy(() -> spaceService.addSpace(USER_ID, request))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.AUTH_UNAUTHORIZED);
@@ -160,22 +160,22 @@ class SpaceServiceImplTest {
 
     @Nested
     @DisplayName("SPACE-02 참여 스페이스 목록")
-    class FindMySpaces {
+    class FindSpaceList {
 
         @Test
-        @DisplayName("참여_중인_스페이스가_없으면_빈_목록을_반환한다")
-        void 참여_중인_스페이스가_없으면_빈_목록을_반환한다() {
+        @DisplayName("참여 중인 스페이스가 없으면 빈 목록을 반환한다")
+        void findSpaceList_returnsEmptyWhenNoneJoined() {
             given(memberRepository.findActiveTeamsByUserId(USER_ID)).willReturn(List.of());
 
-            List<ResponseSpaceListDto> result = spaceService.findMySpaces(USER_ID);
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
 
             assertThat(result).isEmpty();
             verify(memberRepository, never()).countMembersByTeamIds(anyList());
         }
 
         @Test
-        @DisplayName("참여_스페이스마다_내_역할과_참여자_수를_채워_반환한다")
-        void 참여_스페이스마다_내_역할과_참여자_수를_채워_반환한다() {
+        @DisplayName("참여 스페이스마다 내 역할과 참여자 수를 채워 반환한다")
+        void findSpaceList_fillsMyRoleAndMemberCount() {
             // given
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member myMembership = Member.owner(USER_ID, TEAM_ID, "진");
@@ -185,7 +185,7 @@ class SpaceServiceImplTest {
                     .willReturn(List.<Object[]>of(new Object[]{TEAM_ID, 3L}));
 
             // when
-            List<ResponseSpaceListDto> result = spaceService.findMySpaces(USER_ID);
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
 
             // then
             assertThat(result).hasSize(1);
@@ -197,11 +197,11 @@ class SpaceServiceImplTest {
 
     @Nested
     @DisplayName("SPACE-05 스페이스 상세")
-    class FindSpaceDetail {
+    class FindSpaceDetails {
 
         @Test
-        @DisplayName("멤버면_스페이스_정보와_참여자_목록을_반환한다")
-        void 멤버면_스페이스_정보와_참여자_목록을_반환한다() {
+        @DisplayName("멤버면 스페이스 정보와 참여자 목록을 반환한다")
+        void findSpaceDetails_returnsInfoAndMembersForMember() {
             // given
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member owner = Member.owner(USER_ID, TEAM_ID, "진");
@@ -210,7 +210,7 @@ class SpaceServiceImplTest {
             given(memberRepository.findByTeamId(TEAM_ID)).willReturn(List.of(owner));
 
             // when
-            ResponseSpaceDetailDto result = spaceService.findSpaceDetail(USER_ID, TEAM_ID);
+            ResponseSpaceDetailDto result = spaceService.findSpaceDetails(USER_ID, TEAM_ID);
 
             // then
             assertThat(result.spaceId()).isEqualTo(TEAM_ID);
@@ -219,24 +219,24 @@ class SpaceServiceImplTest {
         }
 
         @Test
-        @DisplayName("존재하지_않거나_삭제된_스페이스면_SPACE_NOT_FOUND_예외가_발생한다")
-        void 존재하지_않거나_삭제된_스페이스면_SPACE_NOT_FOUND_예외가_발생한다() {
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
+        void findSpaceDetails_throwsNotFoundWhenAbsent() {
             given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> spaceService.findSpaceDetail(USER_ID, TEAM_ID))
+            assertThatThrownBy(() -> spaceService.findSpaceDetails(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
         }
 
         @Test
-        @DisplayName("멤버가_아니면_SPACE_ACCESS_DENIED_예외가_발생하고_참여자를_조회하지_않는다")
-        void 멤버가_아니면_SPACE_ACCESS_DENIED_예외가_발생한다() {
+        @DisplayName("멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 참여자를 조회하지 않는다")
+        void findSpaceDetails_throwsAccessDeniedForNonMember() {
             Team team = teamWithId(TEAM_ID, 99L);
             given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(false);
 
-            assertThatThrownBy(() -> spaceService.findSpaceDetail(USER_ID, TEAM_ID))
+            assertThatThrownBy(() -> spaceService.findSpaceDetails(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);

@@ -70,15 +70,15 @@ class SpaceControllerTest {
 
     @Nested
     @DisplayName("SPACE-01 POST /api/v1/spaces")
-    class CreateSpace {
+    class AddSpace {
 
         @Test
-        @DisplayName("유효한_요청이면_201과_생성된_스페이스를_반환한다")
-        void 유효한_요청이면_201과_생성된_스페이스를_반환한다() throws Exception {
+        @DisplayName("유효한 요청이면 201과 생성된 스페이스를 반환한다")
+        void addSpace_returns201WithCreatedSpace() throws Exception {
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("팀A", "설명", "#123456", null);
             ResponseCreateSpaceDto response =
                     new ResponseCreateSpaceDto(10L, "팀A", "설명", "#123456", null, 7L, null);
-            given(spaceService.createSpace(eq(7L), any(RequestCreateSpaceDto.class))).willReturn(response);
+            given(spaceService.addSpace(eq(7L), any(RequestCreateSpaceDto.class))).willReturn(response);
 
             mockMvc.perform(post("/api/v1/spaces")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -88,12 +88,12 @@ class SpaceControllerTest {
                     .andExpect(jsonPath("$.data.spaceId").value(10))
                     .andExpect(jsonPath("$.data.ownerId").value(7));
 
-            verify(spaceService).createSpace(eq(7L), any(RequestCreateSpaceDto.class));
+            verify(spaceService).addSpace(eq(7L), any(RequestCreateSpaceDto.class));
         }
 
         @Test
-        @DisplayName("이름이_비어있으면_400_VALIDATION_FAILED를_반환한다")
-        void 이름이_비어있으면_400을_반환한다() throws Exception {
+        @DisplayName("이름이 비어있으면 400 VALIDATION_FAILED를 반환한다")
+        void addSpace_returns400WhenNameBlank() throws Exception {
             RequestCreateSpaceDto request = new RequestCreateSpaceDto("  ", null, null, null);
 
             mockMvc.perform(post("/api/v1/spaces")
@@ -106,14 +106,14 @@ class SpaceControllerTest {
 
     @Nested
     @DisplayName("SPACE-02 GET /api/v1/spaces")
-    class FindMySpaces {
+    class FindSpaceList {
 
         @Test
-        @DisplayName("참여_스페이스_목록을_200으로_반환한다")
-        void 참여_스페이스_목록을_200으로_반환한다() throws Exception {
+        @DisplayName("참여 스페이스 목록을 200으로 반환한다")
+        void findSpaceList_returns200WithSpaces() throws Exception {
             ResponseSpaceListDto item =
                     new ResponseSpaceListDto(10L, "팀A", "설명", "#123456", null, 7L, "OWNER", 3L);
-            given(spaceService.findMySpaces(7L)).willReturn(List.of(item));
+            given(spaceService.findSpaceList(7L)).willReturn(List.of(item));
 
             mockMvc.perform(get("/api/v1/spaces"))
                     .andExpect(status().isOk())
@@ -126,16 +126,16 @@ class SpaceControllerTest {
 
     @Nested
     @DisplayName("SPACE-05 GET /api/v1/spaces/{spaceId}")
-    class FindSpaceDetail {
+    class FindSpaceDetails {
 
         @Test
-        @DisplayName("멤버면_상세_정보와_참여자를_200으로_반환한다")
-        void 멤버면_상세_정보와_참여자를_200으로_반환한다() throws Exception {
+        @DisplayName("멤버면 상세 정보와 참여자를 200으로 반환한다")
+        void findSpaceDetails_returns200WithInfoAndMembers() throws Exception {
             ResponseSpaceMemberDto member =
                     new ResponseSpaceMemberDto(1L, 7L, "진", "OWNER", "OWNER");
             ResponseSpaceDetailDto detail =
                     new ResponseSpaceDetailDto(10L, "팀A", "설명", "#123456", null, 7L, null, List.of(member));
-            given(spaceService.findSpaceDetail(7L, 10L)).willReturn(detail);
+            given(spaceService.findSpaceDetails(7L, 10L)).willReturn(detail);
 
             mockMvc.perform(get("/api/v1/spaces/{spaceId}", 10L))
                     .andExpect(status().isOk())
@@ -144,9 +144,9 @@ class SpaceControllerTest {
         }
 
         @Test
-        @DisplayName("멤버가_아니면_403_SPACE_ACCESS_DENIED를_반환한다")
-        void 멤버가_아니면_403을_반환한다() throws Exception {
-            given(spaceService.findSpaceDetail(7L, 10L))
+        @DisplayName("멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void findSpaceDetails_returns403ForNonMember() throws Exception {
+            given(spaceService.findSpaceDetails(7L, 10L))
                     .willThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
 
             mockMvc.perform(get("/api/v1/spaces/{spaceId}", 10L))
@@ -155,9 +155,9 @@ class SpaceControllerTest {
         }
 
         @Test
-        @DisplayName("존재하지_않는_스페이스면_404_SPACE_NOT_FOUND를_반환한다")
-        void 존재하지_않는_스페이스면_404를_반환한다() throws Exception {
-            given(spaceService.findSpaceDetail(7L, 99L))
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void findSpaceDetails_returns404WhenAbsent() throws Exception {
+            given(spaceService.findSpaceDetails(7L, 99L))
                     .willThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND));
 
             mockMvc.perform(get("/api/v1/spaces/{spaceId}", 99L))
