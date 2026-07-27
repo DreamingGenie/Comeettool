@@ -34,28 +34,28 @@ public class SpaceController {
 
     // SPACE-01: 스페이스 생성
     @PostMapping
-    public ResponseEntity<ApiResponse<ResponseCreateSpaceDto>> createSpace(
+    public ResponseEntity<ApiResponse<ResponseCreateSpaceDto>> addSpace(
             @AuthenticationPrincipal String userId,
             @Valid @RequestBody RequestCreateSpaceDto request) {
-        ResponseCreateSpaceDto response = spaceService.createSpace(Long.parseLong(userId), request);
+        ResponseCreateSpaceDto response = spaceService.addSpace(Long.parseLong(userId), request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("스페이스가 생성되었습니다.", response));
     }
 
     // SPACE-02: 참여 중인 스페이스 목록
     @GetMapping
-    public ResponseEntity<ApiResponse<List<ResponseSpaceListDto>>> findMySpaces(
+    public ResponseEntity<ApiResponse<List<ResponseSpaceListDto>>> findSpaceList(
             @AuthenticationPrincipal String userId) {
-        List<ResponseSpaceListDto> response = spaceService.findMySpaces(Long.parseLong(userId));
+        List<ResponseSpaceListDto> response = spaceService.findSpaceList(Long.parseLong(userId));
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     // SPACE-05: 스페이스 상세(정보 + 참여자)
     @GetMapping("/{spaceId}")
-    public ResponseEntity<ApiResponse<ResponseSpaceDetailDto>> findSpaceDetail(
+    public ResponseEntity<ApiResponse<ResponseSpaceDetailDto>> findSpaceDetails(
             @AuthenticationPrincipal String userId,
             @PathVariable Long spaceId) {
-        ResponseSpaceDetailDto response = spaceService.findSpaceDetail(Long.parseLong(userId), spaceId);
+        ResponseSpaceDetailDto response = spaceService.findSpaceDetails(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
