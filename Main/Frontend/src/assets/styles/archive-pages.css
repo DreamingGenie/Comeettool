@@ -81,3 +81,4 @@
 .vue-app-root[aria-busy="true"]{pointer-events:none}
 .vue-app-root[aria-busy="true"]::after{content:'불러오는 중...';position:fixed;left:50%;top:20px;z-index:100;transform:translateX(-50%);padding:10px 18px;border-radius:20px;background:#172d52;color:#fff;box-shadow:0 8px 24px #172d5240}
 .archive-list:empty::after{content:'표시할 데이터가 없습니다.';display:grid;place-items:center;min-height:160px;color:#7b8392}
+.async-state{display:grid;place-items:center;min-height:160px;padding:24px;border:.8px solid var(--line);border-radius:12px;background:#fff;color:#697287;text-align:center}.async-state.error{color:#b4232f}.async-state button{margin-top:12px;border:0;border-radius:6px;padding:8px 14px;background:var(--blue);color:#fff}

@@ -1,6 +1,3 @@
-const wait = (value, delay = 180) =>
-  new Promise(resolve => setTimeout(() => resolve(structuredClone(value)), delay))
-
 export const workspaces = [
   { id: 'a707', badge: 'A7', name: 'A707', role: 'Owner', members: 7 },
   { id: 'frontend', badge: 'FE', name: 'Frontend', role: 'Member', members: 6 },
@@ -36,7 +33,7 @@ export const archiveData = {
   ]
 }
 
-export const boardUiMock = {
+export const boardSeedData = {
   team: {
     id: 'a707',
     badge: 'A7',
@@ -46,7 +43,17 @@ export const boardUiMock = {
     memberCount: 8,
     description: '화상회의 협업 플랫폼을 함께 만드는 프로젝트 팀입니다.',
     colorOptions: ['Commit Blue', 'Emerald', 'Orange'],
-    defaultMemberRoles: ['Member', 'Guest', 'Admin']
+    defaultMemberRoles: ['Member', 'Guest', 'Admin'],
+    color: 'Commit Blue',
+    defaultMemberRole: 'Member',
+    inviteLinkEnabled: true,
+    ownerApprovalRequired: false,
+    notifications: {
+      meetingReminder: true,
+      documentUpdates: true,
+      aiSummary: true,
+      weeklyReport: false
+    }
   },
   activeMeeting: {
     id: 'be-team-meeting',
@@ -129,30 +136,72 @@ export const boardUiMock = {
     { id: 2, name: '박민호', email: 'minho.park@committool.com', avatarText: '박', role: 'MEMBER' },
     { id: 3, name: '이지은', email: 'jieun.lee@committool.com', avatarText: '이', role: 'MEMBER' },
     { id: 4, name: 'Robert Ford', email: 'robert.ford@committool.com', avatarText: 'R', role: 'MEMBER' }
-  ],
-  teamCreateColors: [
-    { value: 'red', bordered: false },
-    { value: '#20c266', bordered: false },
-    { value: '#ff6811', bordered: false },
-    { value: '#5888e8', bordered: false },
-    { value: 'white', bordered: true }
-  ],
-  meetingControls: [
-    { id: 'mic', label: '마이크' },
-    { id: 'camera', label: '카메라' },
-    { id: 'share', label: '공유' },
-    { id: 'people', label: '참가자' },
-    { id: 'document', label: '문서' },
-    { id: 'chat', label: '채팅', active: true },
-    { id: 'more', label: '더보기' }
   ]
 }
 
-export const boardMockApi = {
-  getDashboard: () => wait({ workspaces }),
-  getMembers: () => wait(members),
-  getArchive: section => wait(archiveData[section] || []),
-  createWorkspace: data => wait({ id: crypto.randomUUID(), ...data }),
-  createMeeting: data => wait({ id: crypto.randomUUID(), status: 'LIVE', ...data }),
-  createEvent: data => wait({ id: crypto.randomUUID(), ...data })
+export const archiveStats = {
+  documents: {
+    total: 4,
+    weeklyChange: 3,
+    secondaryLabel: '최근 업데이트',
+    secondaryValue: '오늘',
+    secondaryDetail: '6개 변경됨',
+    tertiaryLabel: '팀 공유',
+    tertiaryValue: '8명',
+    tertiaryDetail: '모든 멤버에게 공개'
+  },
+  minutes: {
+    total: 3,
+    weeklyChange: 2,
+    secondaryLabel: '최근 업데이트',
+    secondaryValue: '오늘',
+    secondaryDetail: '3개 변경됨',
+    tertiaryLabel: '팀 공유',
+    tertiaryValue: '8명',
+    tertiaryDetail: '모든 멤버에게 공개'
+  },
+  summary: {
+    total: 2,
+    weeklyChange: 2,
+    secondaryLabel: '최근 업데이트',
+    secondaryValue: '오늘',
+    secondaryDetail: '2개 변경됨',
+    tertiaryLabel: '완료된 액션',
+    tertiaryValue: '14',
+    tertiaryDetail: '진행 중 7개'
+  },
+  feedback: {
+    total: 2,
+    weeklyChange: 2,
+    secondaryLabel: '평균 참여도',
+    secondaryValue: '87%',
+    secondaryDetail: '지난주 대비 +4%',
+    tertiaryLabel: '팀 공유',
+    tertiaryValue: '8명',
+    tertiaryDetail: '모든 멤버에게 공개'
+  }
+}
+
+export const boardMockDatabase = {
+  workspaces,
+  members,
+  archives: archiveData,
+  archiveStats,
+  teams: workspaces.map((workspace, index) =>
+    index === 0
+      ? boardSeedData.team
+      : {
+          ...boardSeedData.team,
+          id: workspace.id,
+          badge: workspace.badge,
+          eyebrow: `${workspace.name.toUpperCase()} TEAM`,
+          name: workspace.name,
+          role: workspace.role,
+          memberCount: workspace.members
+        }
+  ),
+  activeMeetings: [boardSeedData.activeMeeting],
+  calendars: { [boardSeedData.team.id]: boardSeedData.calendar },
+  meetingRooms: { [boardSeedData.activeMeeting.id]: boardSeedData.meetingRoom },
+  inviteMembers: { [boardSeedData.team.id]: boardSeedData.inviteMembers }
 }

@@ -1,9 +1,9 @@
 import { authApi } from '../../features/auth/api'
-import { authMockApi } from '../../features/auth/mock/authMock'
+import { authMockApi } from '../../features/auth/mock/authMockApi'
 import { boardApi } from '../../features/board/api'
-import { boardMockApi } from '../../features/board/mock/boardMock'
+import { boardMockApi } from '../../features/board/mock/boardMockApi'
 import { userApi } from '../../features/user/api'
-import { userMockApi } from '../../features/user/mock/userMock'
+import { userMockApi } from '../../features/user/mock/userMockApi'
 
 export const useMockApi = import.meta.env.VITE_USE_MOCK_API !== 'false'
 

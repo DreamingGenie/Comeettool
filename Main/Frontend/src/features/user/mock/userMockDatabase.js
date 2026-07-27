@@ -44,11 +44,9 @@ export const onboardingMock = {
   ]
 }
 
-const profile = structuredClone(mockUserProfile)
-const wait = value => new Promise(resolve => setTimeout(() => resolve(structuredClone(value)), 180))
-
-export const userMockApi = {
-  getMe: () => wait(profile),
-  updateProfile: data => wait(Object.assign(profile, data)),
-  changePassword: () => wait({ success: true })
+export const userMockDatabase = {
+  profile: structuredClone(mockUserProfile),
+  profileOptions,
+  onboarding: onboardingMock,
+  onboardingAnswers: {}
 }
