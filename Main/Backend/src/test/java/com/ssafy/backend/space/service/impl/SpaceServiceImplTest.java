@@ -165,7 +165,7 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("참여 중인 스페이스가 없으면 빈 목록을 반환한다")
         void findSpaceList_returnsEmptyWhenNoneJoined() {
-            given(memberRepository.findActiveTeamsByUserId(USER_ID)).willReturn(List.of());
+            given(memberRepository.findActiveTeamsWithMyRole(USER_ID)).willReturn(List.of());
 
             List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
 
@@ -178,9 +178,8 @@ class SpaceServiceImplTest {
         void findSpaceList_fillsMyRoleAndMemberCount() {
             // given
             Team team = teamWithId(TEAM_ID, USER_ID);
-            Member myMembership = Member.owner(USER_ID, TEAM_ID, "진");
-            given(memberRepository.findActiveTeamsByUserId(USER_ID)).willReturn(List.of(team));
-            given(memberRepository.findByUserId(USER_ID)).willReturn(List.of(myMembership));
+            given(memberRepository.findActiveTeamsWithMyRole(USER_ID))
+                    .willReturn(List.<Object[]>of(new Object[]{team, MemberRole.OWNER}));
             given(memberRepository.countMembersByTeamIds(List.of(TEAM_ID)))
                     .willReturn(List.<Object[]>of(new Object[]{TEAM_ID, 3L}));
 

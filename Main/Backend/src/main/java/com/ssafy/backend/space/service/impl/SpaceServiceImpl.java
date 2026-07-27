@@ -61,29 +61,25 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional(readOnly = true)
     public List<ResponseSpaceListDto> findSpaceList(Long userId) {
-        List<Team> teams = memberRepository.findActiveTeamsByUserId(userId);
-        if (teams.isEmpty()) {
+        // [Team, 내 역할] 을 한 번의 조인 쿼리로 가져온다.
+        List<Object[]> rows = memberRepository.findActiveTeamsWithMyRole(userId);
+        if (rows.isEmpty()) {
             return List.of();
         }
 
-        // 내 역할(스페이스별) 조회 — teamId → role.
-        Map<Long, MemberRole> myRoleByTeam = new HashMap<>();
-        for (Member membership : memberRepository.findByUserId(userId)) {
-            myRoleByTeam.put(membership.getTeamId(), membership.getRole());
-        }
-
-        // 참여자 수 일괄 집계 — teamId → count.
-        List<Long> teamIds = teams.stream().map(Team::getId).toList();
+        // 참여자 수 일괄 집계 — teamId → count (N+1 방지).
+        List<Long> teamIds = rows.stream().map(row -> ((Team) row[0]).getId()).toList();
         Map<Long, Long> memberCountByTeam = new HashMap<>();
         for (Object[] row : memberRepository.countMembersByTeamIds(teamIds)) {
             memberCountByTeam.put((Long) row[0], (Long) row[1]);
         }
 
-        return teams.stream()
-                .map(team -> {
-                    MemberRole role = myRoleByTeam.get(team.getId());
+        return rows.stream()
+                .map(row -> {
+                    Team team = (Team) row[0];
+                    MemberRole role = (MemberRole) row[1];
                     long count = memberCountByTeam.getOrDefault(team.getId(), 0L);
-                    return spaceMapper.toListItem(team, role != null ? role.name() : null, count);
+                    return spaceMapper.toListItem(team, role.name(), count);
                 })
                 .toList();
     }
