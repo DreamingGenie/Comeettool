@@ -6,13 +6,18 @@ import {fileURLToPath} from 'node:url'
 import * as Y from 'yjs'
 import {WebSocket} from 'ws'
 import {HocuspocusProvider} from '@hocuspocus/provider'
+import pg from 'pg'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.TEST_PORT || 3210)
 const httpUrl = `http://127.0.0.1:${port}`
 const webSocketUrl = `ws://127.0.0.1:${port}/collaboration`
+const databaseUrl = process.env.TEST_DATABASE_URL
+    || process.env.DATABASE_URL
+    || 'postgresql://committool:committool@localhost:5432/committool'
 const timeout = 8_000
 const createdProviders = new Set()
+const {Pool} = pg
 
 let serverProcess
 let serverOutput = ''
@@ -49,7 +54,11 @@ async function startServer() {
     serverOutput = ''
     serverProcess = spawn(process.execPath, ['CrdtServer.js'], {
         cwd: rootDir,
-        env: {...process.env, PORT: String(port)},
+        env: {
+            ...process.env,
+            PORT: String(port),
+            DATABASE_URL: databaseUrl,
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
     })
@@ -161,19 +170,38 @@ async function main() {
     console.log(`Backend-Yjs E2E 테스트 시작 (port: ${port})`)
     await startServer()
 
-    await check('1. GET /health가 200 OK를 반환', async () => {
+    await check('1. PostgreSQL에서 SELECT 1 실행', async () => {
+        const testPool = new Pool({
+            connectionString: databaseUrl,
+            max: 1,
+            application_name: 'committool-crdt-e2e',
+        })
+
+        try {
+            const result = await testPool.query('SELECT 1 AS connected')
+            assert.equal(result.rows[0].connected, 1)
+        } finally {
+            await testPool.end()
+        }
+    })
+
+    await check('2. GET /health가 PostgreSQL 연결 상태와 200 OK를 반환', async () => {
         const response = await fetch(`${httpUrl}/health`)
         assert.equal(response.status, 200)
         assert.deepEqual(
             await response.json(),
-            {status: 'ok', server: 'file-crdt'},
+            {
+                status: 'ok',
+                server: 'file-crdt',
+                database: 'postgresql',
+            },
         )
     })
 
     let stateFile
     let documentName
 
-    await check('2. 문서 메타데이터와 초기 .bin 파일 생성', async () => {
+    await check('3. 문서 메타데이터와 초기 .bin 파일 생성', async () => {
         const response = await fetch(`${httpUrl}/api/documents`, {
             method: 'POST',
             headers: {'content-type': 'application/json'},
@@ -204,7 +232,7 @@ async function main() {
     let secondProvider
     const expectedText = `공동 편집 ${Date.now()}`
 
-    await check('3. 두 사용자 사이의 변경 내용 실시간 전달', async () => {
+    await check('4. 두 사용자 사이의 변경 내용 실시간 전달', async () => {
         firstProvider = createProvider(documentName)
         secondProvider = createProvider(documentName)
         await Promise.all([
@@ -221,14 +249,14 @@ async function main() {
         )
     })
 
-    await check('4. 편집 내용이 .bin 상태 파일에 저장', async () => {
+    await check('5. 편집 내용이 .bin 상태 파일에 저장', async () => {
         await waitFor(
             async () => await readSavedText(stateFile) === expectedText,
             'Yjs 상태 파일 저장',
         )
     })
 
-    await check('5. 서버 재시작 후 기존 문서 내용 복구', async () => {
+    await check('6. 서버 재시작 후 기존 문서 내용 복구', async () => {
         destroyProvider(firstProvider)
         destroyProvider(secondProvider)
         firstProvider = undefined
@@ -246,7 +274,7 @@ async function main() {
         destroyProvider(restoredProvider)
     })
 
-    await check('6. 늦게 접속한 사용자가 기존 내용을 수신', async () => {
+    await check('7. 늦게 접속한 사용자가 기존 내용을 수신', async () => {
         const lateProvider = createProvider(documentName)
         await waitForSync(lateProvider)
         assert.equal(
@@ -256,7 +284,7 @@ async function main() {
         destroyProvider(lateProvider)
     })
 
-    await check('7. 잘못된 Epoch 연결 거부', async () => {
+    await check('8. 잘못된 Epoch 연결 거부', async () => {
         const invalidName =
             `document:${createdDocument.id}:epoch:${createdDocument.stateEpoch + 1}`
         const invalidProvider = createProvider(invalidName)
@@ -275,7 +303,7 @@ async function main() {
         destroyProvider(invalidProvider)
     })
 
-    await check('8. 잘못된 Epoch 변경이 정상 문서와 상태 파일에 반영되지 않음', async () => {
+    await check('9. 잘못된 Epoch 변경이 정상 문서와 상태 파일에 반영되지 않음', async () => {
         const invalidName =
             `document:${createdDocument.id}:epoch:${createdDocument.stateEpoch + 1}`
         const invalidProvider = createProvider(invalidName)
@@ -288,7 +316,7 @@ async function main() {
         destroyProvider(invalidProvider)
     })
 
-    console.log('\n결과: 8개 테스트를 모두 통과했습니다.')
+    console.log('\n결과: 9개 테스트를 모두 통과했습니다.')
 }
 
 try {
