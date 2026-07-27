@@ -12,13 +12,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * AUTH 도메인 REST 컨트롤러 (inventory.md §1). SecurityConfig에서 /signup, /login, /token/refresh는 permitAll 처리됨.
+ * AUTH 도메인 REST 컨트롤러 (inventory.md §1).
+ * SecurityConfig에서 /signup, /login, /token/refresh는 permitAll이고, 그 외(/logout 포함)는 인증 필요.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -45,5 +47,11 @@ public class AuthController {
             @Valid @RequestBody RequestTokenRefreshDto request) {
         ResponseTokenRefreshDto response = authService.refreshAccessToken(request);
         return ResponseEntity.ok(ApiResponse.success("토큰 재발급 성공", response));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(@AuthenticationPrincipal String userId) {
+        authService.logout(userId);
+        return ResponseEntity.ok(ApiResponse.<Void>success("로그아웃 성공", null));
     }
 }
