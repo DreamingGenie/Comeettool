@@ -1,84 +1,198 @@
 import { authStore } from '../../auth/stores/authStore'
+import { createAuthTemplates } from '../../auth/views/authTemplates'
+import { registerAuthEvents } from '../../auth/controllers/registerAuthEvents'
 import { userStore } from '../../user/stores/userStore'
-import { mockUserProfile, onboardingMock, profileOptions } from '../../user/mock/userMock'
+import {
+  mockUserProfile,
+  onboardingMock,
+  profileOptions
+} from '../../user/mock/userMock'
+import { createUserTemplates } from '../../user/views/userTemplates'
+import { registerUserEvents } from '../../user/controllers/registerUserEvents'
+import {
+  createAppShellTemplates,
+  renderLogo,
+  renderSideIcon
+} from '../../../shared/components/appShellTemplates'
+import { registerNavigationEvents } from '../../../shared/composables/registerNavigationEvents'
 import { boardStore } from '../stores/boardStore'
 import { boardUiMock } from '../mock/boardMock'
+import { renderCalendar } from '../components/calendarTemplate'
+import { createBoardModalTemplates } from '../components/boardModalTemplates'
+import { registerBoardEvents } from '../controllers/registerBoardEvents'
+import { registerMeetingEvents } from '../controllers/registerMeetingEvents'
+import { createDashboardTemplates } from './dashboardTemplates'
+import { createTeamTemplates } from './teamTemplates'
+import { createMeetingTemplates } from './meetingTemplates'
 
 export function mountCommitTool(app, toast, options = {}) {
-const state={view:options.initialView || 'intro',step:0,teamSection:'schedule',selected:0,darkMeeting:false};
-const controller=new AbortController();
-let dashboardWorkspaces=boardStore.state.workspaces;
-let memberRows=boardStore.state.members;
-let archives=boardStore.state.archives;
-let currentUser=structuredClone(mockUserProfile);
-const {team,activeMeeting,calendar:calendarData,meetingRoom,inviteMembers,teamCreateColors,meetingControls}=boardUiMock;
-const logo=()=>`<a class="logo" href="#" data-view="home" aria-label="코밋툴 홈"><span class="logo-mark"></span></a>`;
-const notify=text=>{toast.textContent=text;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)};
-const setBusy=busy=>{app.setAttribute('aria-busy',String(busy))};
-const optionTags=(items,selected)=>items.map(item=>`<option ${item===selected?'selected':''}>${item}</option>`).join('');
-const runTask=async(task,onSuccess)=>{setBusy(true);try{const result=await task();onSuccess?.(result);return result}catch(error){notify(error?.message||'요청을 처리하지 못했습니다.')}finally{setBusy(false)}};
+  const state = {
+    view: options.initialView || 'intro',
+    step: 0,
+    selected: 0,
+    darkMeeting: false
+  }
+  const controller = new AbortController()
+  let dashboardWorkspaces = boardStore.state.workspaces
+  let memberRows = boardStore.state.members
+  let archives = boardStore.state.archives
+  let currentUser = structuredClone(mockUserProfile)
 
-function authView(signup=false){return `<main class="auth-page"><div class="auth-logo">${logo()}</div><form class="auth-card" data-submit="auth"><h1>${signup?'회원가입':'로그인'}</h1><label class="field">이메일 주소<input name="email" type="email" placeholder="example@committool.com" required></label><label class="field"><span class="field-line">비밀번호 ${signup?'':`<button type="button">비밀번호를 잊으셨나요?</button>`}</span><div class="password-box"><input name="password" type="password" required><button type="button" data-action="eye">◉</button></div></label>${signup?`<label class="field">비밀번호 확인<div class="password-box"><input name="passwordConfirm" type="password" required><button type="button" data-action="eye">◉</button></div></label>`:''}<button class="primary block">${signup?'회원가입':'로그인'} →</button><div class="auth-divider"></div><p class="switch">${signup?'이미 계정이 있으신가요?':'아직 계정이 없으신가요?'} <button type="button" data-view="${signup?'login':'signup'}">${signup?'로그인':'회원가입'}</button></p></form><div class="auth-links">이용약관　 개인정보처리방침　 고객지원</div></main>`}
+  const {
+    team,
+    activeMeeting,
+    calendar: calendarData,
+    meetingRoom,
+    inviteMembers,
+    teamCreateColors,
+    meetingControls
+  } = boardUiMock
 
-function introView(){return `<main class="intro-page"><header class="intro-header">${logo()}<nav><button class="primary" data-view="login">무료 시작하기</button></nav></header><section class="intro-hero"><span>WORK SMARTER, TOGETHER</span><h1>AI와 함께하는<br><strong>스마트한 팀 협업</strong>, 코밋툴</h1><p>문서 분석부터 스마트 스케줄링, 지능형 화상 회의까지.<br>엔터프라이즈급 AI 보안 기술로 당신의 팀이 더 본질적인 업무에 집중하도록 돕습니다.</p><div><button class="primary" data-view="login">무료로 시작하기</button><button class="demo-btn" data-action="show-demo">◉ 데모 보기</button></div></section><section class="features"><header><span>KEY FEATURES</span><h2>팀 생산성을 극대화하는 <strong>핵심 기능</strong></h2><p>코밋툴만의 지능형 솔루션을 확인해 보세요.</p></header><div class="feature-grid"><article class="feature-card document-ai"><h3>Document AI</h3><p>수천 장의 문서를 빠르게 분석하고, 핵심 요약부터 콘텐츠 기반 질문 답변까지 제공합니다.</p></article><article class="feature-card scheduling"><h3>Smart Scheduling</h3><p>팀원들의 스케줄을 분석해 최적의 미팅 시간을 제안하고 우선순위를 관리합니다.</p></article><article class="feature-card meeting-feature"><div><h3>지능형 화상 회의</h3><p>실시간 자동 자막, 회의록 요약과 주요 안건 트래킹까지 회의 전 과정을 AI가 보조합니다.</p></div></article></div></section><section class="intro-cta"><h2>지금 바로 코밋툴과 함께<br>팀의 미래를 설계하세요.</h2><p>모든 핵심 기능을 무료로 체험해 보세요.</p><div><button data-view="login">무료 체험 시작</button><button data-view="login">로그인</button></div></section></main>`}
-
-function onboardingView(){const step=onboardingMock.steps[state.step];return `<main class="onboarding-page"><div class="auth-logo">${logo()}</div><section class="onboarding-card"><div class="step-head"><b>STEP 0${state.step+1}/0${onboardingMock.steps.length}</b><span>${step.label}</span></div><div class="progress"><i style="width:${((state.step+1)/onboardingMock.steps.length)*100}%"></i></div><h1>${step.title}</h1>${step.options?`<div class="choice-grid">${step.options.map((option,index)=>`<button class="${index===state.selected?'active':''}" data-choice="${index}">${option}</button>`).join('')}</div>`:`<p class="choice-label">연령대</p><div class="choice-row">${step.ageOptions.map((option,index)=>`<button class="${index===1?'active':''}" data-choice="age-${index}">${option}</button>`).join('')}</div><p class="choice-label">성별</p><div class="choice-row">${step.genderOptions.map(option=>`<button data-choice="gender-${option.value}">${option.label}</button>`).join('')}</div>`}<footer class="step-footer"><button class="later" data-view="home">나중에 하기</button><button class="primary" data-action="next-step">${state.step===onboardingMock.steps.length-1?'시작':'다음'} →</button></footer></section></main>`}
-
-const teamMenu=[['schedule','calendar','일정'],['documents','shared','공유 문서'],['minutes','minutes','회의록'],['summary','summary','AI 요약'],['feedback','star','AI 피드백'],['members','members','멤버'],['settings','settings','설정']];
-function sideIcon(name){return `<img class="side-icon side-icon-${name}" src="/assets/icons/${name}.svg" alt="" aria-hidden="true">`}
-function meetingControl(item){return `<button class="meeting-control ${item.active?'active':''}" data-control="${item.id}"><span><img src="/assets/icons/${item.id}.svg" alt="" aria-hidden="true"></span><small>${item.label}</small></button>`}
-const directList=()=>`<div class="direct-list"><header><b>다이렉트 메시지</b><small>온라인 ${meetingRoom.directContacts.length}명</small></header>${meetingRoom.directContacts.map(contact=>`<button type="button" class="direct-contact" data-direct-name="${contact.name}"><i>${contact.avatarText}</i><span><b>${contact.name}</b><small>${contact.preview}</small></span><em>${contact.time}</em></button>`).join('')}</div>`;
-const directConversation=name=>{const contact=meetingRoom.directContacts.find(item=>item.name===name);if(!contact)return directList();return `<div class="direct-conversation"><header><button type="button" data-action="direct-back">←</button><div><b>${contact.name}</b><small>온라인</small></div></header>${contact.messages.map(message=>`<article class="${message.mine?'me':''}"><b>${message.sender}　<small>${message.time}</small></b><p>${message.body}</p></article>`).join('')}</div>`};
-function enhanceMeetingHeader(){const actions=app.querySelector('.meeting-top>span');if(!actions)return;actions.className='meeting-top-actions';actions.innerHTML=`<button type="button" class="participant-count" data-action="show-participants"><span>${meetingRoom.participants.slice(1,4).map(participant=>`<i>${participant.avatarText.slice(0,1)}</i>`).join('')}</span><b>${meetingRoom.totalParticipants}명 참가 중</b></button><button type="button" class="meeting-help" data-action="meeting-help"><i>?</i><b>도움말</b></button>`}
-const meetingInfoModal=type=>type==='participants'?`<div class="modal-backdrop"><section class="modal meeting-info-modal"><button class="close" type="button" data-action="close">×</button><small>MEETING PARTICIPANTS</small><h2>참가자 ${meetingRoom.totalParticipants}명</h2><div class="meeting-member-list">${meetingRoom.participants.map(participant=>`<article><i>${participant.avatarText.slice(0,1)}</i><span><b>${participant.displayName}</b><small>${participant.status}</small></span><em>${participant.role}</em></article>`).join('')}<p>외 ${meetingRoom.totalParticipants-meetingRoom.participants.length}명이 참여하고 있습니다.</p></div></section></div>`:`<div class="modal-backdrop"><section class="modal meeting-info-modal"><button class="close" type="button" data-action="close">×</button><small>MEETING HELP</small><h2>회의 도움말</h2><div class="meeting-help-content"><article><b>마이크와 카메라</b><p>하단 버튼을 눌러 마이크와 카메라를 켜거나 끌 수 있습니다.</p></article><article><b>화면 고정</b><p>참가자 영상에 마우스를 올린 뒤 핀 버튼을 누르면 화면을 고정할 수 있습니다.</p></article><article><b>채팅과 다이렉트</b><p>전체 채팅을 사용하거나 참가자를 선택해 1:1 메시지를 보낼 수 있습니다.</p></article><article><b>화면 공유</b><p>공유 버튼을 누르면 화면이나 특정 창을 팀원에게 공유할 수 있습니다.</p></article></div></section></div>`;
-const meetingMoreMenu=()=>`<section class="meeting-more-menu"><header><b>더보기</b><small>회의 기능 설정</small></header><button type="button" data-more-option="blur"><i>◫</i><span><b>배경 흐리기</b><small>내 영상의 배경을 흐리게 표시</small></span><em>✓</em></button><button type="button" data-more-option="fullscreen"><i>⛶</i><span><b>전체 화면</b><small>회의 화면을 크게 보기</small></span><em>✓</em></button><hr><button type="button" data-more-option="settings"><i>⚙</i><span><b>회의 설정</b><small>오디오와 비디오 장치 설정</small></span><em>→</em></button></section>`;
-function topbar(){return `<header class="topbar">${logo()}<button class="user-pill" data-view="profile"><i>${currentUser.avatarText}</i> ${currentUser.nickname}</button></header>`}
-function teamDock(){return `<aside class="team-dock"><strong>TEAM</strong><nav><button class="team-bubble active">A7</button><button class="team-bubble">FE</button><button class="team-bubble">PL</button><button class="team-bubble add" data-action="new-team">＋</button></nav><div class="dock-bottom"><button>?</button><button data-view="profile">⚙</button></div></aside>`}
-function sideNav(active='schedule'){return `<aside class="side-nav"><small class="eyebrow">${team.eyebrow}</small><h2>${team.name}</h2><p>${team.role} · 멤버 ${team.memberCount}명</p><nav>${teamMenu.map(x=>`<button class="${active===x[0]?'active':''}" data-team-section="${x[0]}">${sideIcon(x[1])}<span>${x[2]}</span>${x[0]==='members'?`<b>${team.memberCount}</b>`:''}</button>`).join('')}</nav><button class="back-main" data-view="home">← 메인으로</button></aside>`}
-function shell(content,active='schedule',archive=false){return `<main class="app-shell">${topbar()}<div class="workspace">${teamDock()}${sideNav(active,archive)}<section class="main-area">${content}</section></div></main>`}
-
-function calendar(){const cellCount=Math.ceil((calendarData.leadingBlankDays+calendarData.totalDays)/7)*7;const cells=Array.from({length:cellCount},(_,i)=>i-calendarData.leadingBlankDays+1);return `<section class="calendar"><header class="calendar-head"><h2>팀 일정</h2><div class="month-ctrl"><button>‹</button><b>${calendarData.year}년 ${calendarData.month}월</b><button>›</button></div></header><div class="calendar-grid">${calendarData.weekdays.map(day=>`<b>${day}</b>`).join('')}${cells.map(day=>`<div class="day ${day<1||day>calendarData.totalDays?'muted':''}">${day>0&&day<=calendarData.totalDays?day:''}${calendarData.events.filter(event=>event.day===day).map(event=>`<span class="event ${event.tone==='default'?'':event.tone}">${event.title}</span>`).join('')}</div>`).join('')}</div></section>`}
-function scheduleView(){return shell(`<header class="page-heading"><div><span class="eyebrow">TEAM SCHEDULE</span><h1>${team.name} 팀 스페이스</h1><p>진행 중인 회의와 팀 일정을 한눈에 확인하세요.</p></div><button class="outline-btn" data-action="invite">초대 링크 공유</button></header><div class="live-label"><i></i><b>진행 중인 회의</b><small>1개의 회의가 진행 중입니다.</small></div><div class="meeting-cards"><article class="live-card"><h2>${activeMeeting.title}　<small style="color:#15a866">${activeMeeting.status}</small></h2><p>${activeMeeting.description}</p><footer>◷ ${activeMeeting.date} · ${activeMeeting.time}　 ♙ ${activeMeeting.participantCount}명 참여 중 <button data-view="meeting">회의 입장 →</button></footer></article><button class="create-card" data-action="new-meeting"><i>＋</i><b>새 회의 만들기</b><span>팀원들과 바로 회의를 시작하세요.</span></button></div>${calendar()}`,'schedule')}
-
-function membersView(){return shell(`<header class="page-heading"><div><span class="eyebrow">TEAM MEMBER</span><h1>팀 멤버</h1><p>팀 멤버를 초대하고 권한을 관리하세요</p></div><button class="primary" data-action="invite">＋ 멤버 초대</button></header><section class="member-table"><div class="table-tools"><span><button>☰ 조건</button> <button>☰ 정렬</button></span><input placeholder="⌕　 멤버를 찾아보세요..."></div><div class="member-row head"><span>이름</span><span>역할</span><span>상태</span><span>최근 활동</span></div>${memberRows.map((m,i)=>`<article class="member-row"><div class="person"><i class="avatar">${m[0]}</i><span>${m[1]}<small>${m[2]}</small></span></div><span class="role">${m[3]}</span><span class="status ${m[4]==='Away'?'away':m[4]==='Offline'?'off':''}">${m[4]}</span><span>${m[5]}</span></article>`).join('')}<footer class="table-foot">Showing 4 of 8 members</footer></section>`,'members')}
-function documentsView(section='documents'){const names={documents:'공유 문서',minutes:'회의록',summary:'AI 요약',feedback:'AI 피드백'};const descriptions={documents:'팀원과 함께 작성 중인 문서를 확인하고 편집하세요.',minutes:'회의별 발언과 결정사항이 정리된 회의록입니다.',summary:'AI가 회의의 핵심 내용과 액션 아이템을 정리했습니다.',feedback:'AI가 분석한 회의 품질과 개선 제안을 확인하세요.'};const rows=archives[section] || [];return shell(`<header class="page-heading archive-heading"><div><span class="eyebrow">MEETING ARCHIVE</span><h1>${names[section]}</h1><p>${descriptions[section]}</p></div><button class="primary" data-action="new-document">＋ 새 문서</button></header><section class="archive-stats"><article><span>전체 문서</span><b>${rows.length}</b><small>이번 주 +${section==='documents'?3:2}</small></article><article><span>${section==='feedback'?'평균 참여도':'최근 업데이트'}</span><b>${section==='feedback'?'87%':'오늘'}</b><small>${section==='feedback'?'지난주 대비 +4%':'6개 변경됨'}</small></article><article><span>${section==='summary'?'완료된 액션':'팀 공유'}</span><b>${section==='summary'?'14':'8명'}</b><small>${section==='summary'?'진행 중 7개':'모든 멤버에게 공개'}</small></article></section><section class="archive-panel"><div class="archive-tools"><div class="filter-tabs"><button class="active">전체</button><button>최근 열어본</button><button>내 문서</button></div><label>⌕<input placeholder="${names[section]} 검색"></label><select><option>최근 수정 순</option><option>이름 순</option></select></div><div class="archive-list">${rows.map((r,i)=>`<article class="archive-row"><i class="archive-icon ${section}">${section==='summary'?'AI':section==='feedback'?'✦':'▤'}</i><div class="archive-title"><b>${r[0]}</b><span>${r[1]}</span></div><div><small>${section==='documents'?'편집자':'회의 정보'}</small><b>${r[2]}</b></div><div><small>업데이트</small><b>${r[3]}</b></div><em>${r[4]}</em><button data-action="open-document">열기 →</button></article>`).join('')}</div><footer class="archive-footer"><span>총 ${rows.length}개의 항목</span><div><button disabled>‹</button><button class="active">1</button><button>›</button></div></footer></section>`,section,true)}
-
-function teamSettingsView(){return shell(`<header class="page-heading"><div><span class="eyebrow">TEAM SETTINGS</span><h1>팀 스페이스 설정</h1><p>팀 정보, 접근 권한과 알림 정책을 관리하세요.</p></div><button class="primary" data-action="save-team">변경사항 저장</button></header><div class="team-settings-grid"><section class="settings-card"><header><i>${team.badge}</i><div><h2>기본 정보</h2><p>팀 멤버에게 표시되는 정보입니다.</p></div></header><label class="field">팀 스페이스 이름<input value="${team.name}"></label><label class="field">팀 설명<textarea>${team.description}</textarea></label><label class="field">팀 대표 색상<select>${team.colorOptions.map(color=>`<option>${color}</option>`).join('')}</select></label></section><section class="settings-card"><header><i>♙</i><div><h2>접근 및 권한</h2><p>새 멤버의 기본 접근 수준을 설정합니다.</p></div></header><div class="setting-toggle"><span><b>초대 링크 활성화</b><small>링크를 가진 사용자가 가입할 수 있습니다.</small></span><button class="switch-on" data-action="toggle-switch"><i></i></button></div><div class="setting-toggle"><span><b>Owner 승인 필요</b><small>새 멤버 가입 전 승인을 요청합니다.</small></span><button data-action="toggle-switch"><i></i></button></div><label class="field">신규 멤버 기본 역할<select>${team.defaultMemberRoles.map(role=>`<option>${role}</option>`).join('')}</select></label></section><section class="settings-card wide"><header><i>♢</i><div><h2>알림 설정</h2><p>팀 전체에 적용되는 기본 알림입니다.</p></div></header><div class="notification-grid"><label><input type="checkbox" checked> 회의 시작 10분 전 알림</label><label><input type="checkbox" checked> 새 문서 및 댓글 알림</label><label><input type="checkbox" checked> AI 요약 생성 완료 알림</label><label><input type="checkbox"> 주간 활동 리포트</label></div></section><section class="settings-card danger wide"><header><i>!</i><div><h2>위험 영역</h2><p>이 작업은 되돌릴 수 없으니 주의하세요.</p></div><button class="danger-btn">팀 스페이스 삭제</button></header></section></div>`,'settings')}
-
-function homeView(){return `<main class="app-shell main-home">${topbar()}<div class="main-home-layout"><aside class="workspace-sidebar"><label class="workspace-search">⌕<input placeholder="팀 스페이스 검색"></label><small>MY WORKSPACES</small><nav>${dashboardWorkspaces.map(workspace=>`<button class="workspace-item" data-view="schedule"><i>${workspace.badge}</i><span><b>${workspace.name}</b><small>${workspace.role} · 멤버 ${workspace.members}명</small></span><em>•••</em></button>`).join('')}<button class="workspace-add" data-action="new-team">＋</button></nav><footer><button>ⓘ　도움말 및 지원</button><button data-action="logout">⇥　로그아웃</button></footer></aside><section class="home-dashboard"><div class="live-label"><i></i><b>회의 바로가기</b><small>1개의 회의가 진행 중입니다.</small></div><article class="live-card home-live-card"><header><div><h2>${activeMeeting.title} <small>${activeMeeting.status}</small></h2><p>${activeMeeting.description}</p></div><div class="meeting-avatars">${activeMeeting.avatars.map(avatar=>`<i>${avatar}</i>`).join('')}</div></header><footer>◷ ${activeMeeting.date} · ${activeMeeting.time}　 ♙ ${activeMeeting.participantCount}명 참여 중 <button data-view="meeting">회의 입장 →</button></footer></article>${calendar().replace('팀 일정','나의 일정')}<button class="floating-add" data-action="new-meeting">＋</button></section></div></main>`}
-
-function settingsSide(active){return `<aside class="side-nav settings-nav"><div class="search-dark">⌕　기능 검색</div><small class="settings-label">설정</small><nav class="settings-menu"><button class="${active==='profile'?'active':''}" data-view="profile">${sideIcon('members')}<span>프로필 변경</span></button><button class="${active==='password'?'active':''}" data-view="password">${sideIcon('lock')}<span>비밀번호 변경</span></button></nav><button class="back-main" data-view="home">← 이전으로 가기</button></aside>`}
-function settingsShell(content,active){return `<main class="app-shell">${topbar()}<div class="workspace settings-shell">${settingsSide(active)}<section class="settings-content">${content}</section></div></main>`}
-function profileView(){return settingsShell(`<form class="profile-settings" data-submit="save"><header class="account-heading"><span>ACCOUNT SETTINGS</span><h1>프로필 설정</h1><p>내 정보를 최신 상태로 유지하고 팀원들에게 나를 소개해 보세요.</p></header><div class="profile-settings-body"><aside class="photo-card"><div class="photo-circle">${sideIcon('camera')}<button type="button">＋</button></div><b>프로필 사진</b><small>권장 크기 400 × 400px<br>JPG, PNG · 최대 5MB</small><button type="button" class="upload-photo">사진 업로드</button><p>✓ 얼굴이 잘 보이는 사진을 권장해요.</p></aside><section class="profile-fields"><div class="form-section-title"><b>기본 정보</b><small>서비스에서 표시되는 정보를 입력해 주세요.</small></div><label class="field">닉네임<div class="input-with-meta"><span>♙</span><input name="nickname" value="${currentUser.nickname}" maxlength="10"><small>${currentUser.nickname.length}/10</small></div></label><label class="field">전화번호<input name="phone" value="${currentUser.phone}"></label><div class="form-section-title role-title"><b>직무 및 프로필</b><small>맞춤형 팀 경험을 위해 직무 정보를 선택해 주세요.</small></div><div class="profile-grid"><fieldset><legend>성별</legend>${profileOptions.genders.map(gender=>`<label class="radio-card ${currentUser.gender===gender.value?'active':''}"><input type="radio" name="gender" value="${gender.value}" ${currentUser.gender===gender.value?'checked':''}> ${gender.label}</label>`).join('')}</fieldset><label class="field">연령대<select name="ageGroup">${optionTags(profileOptions.ageGroups,currentUser.ageGroup)}</select></label><label class="field">직군<select name="jobGroup">${optionTags(profileOptions.jobGroups,currentUser.jobGroup)}</select></label><label class="field">세부 직무<select name="job">${optionTags(profileOptions.jobs,currentUser.job)}</select></label></div><button class="primary profile-submit">저장</button></section></div></form>`,'profile')}
-function passwordView(){return settingsShell(`<div class="password-layout password-settings"><form class="password-card" data-submit="save"><h1>비밀번호 변경</h1><label class="field">현재 비밀번호<div class="password-box"><input name="currentPassword" type="password" required><button type="button" data-action="eye">◉</button></div></label><hr><label class="field">새로운 비밀번호<div class="password-box"><input name="newPassword" type="password" required><button type="button" data-action="eye">◉</button></div></label><div class="strength-label"><b>비밀번호 강도</b><span>약함</span></div><div class="strength-bar"><i></i></div><label class="field">새로운 비밀번호 확인<div class="password-box"><input name="newPasswordConfirm" type="password" required><button type="button" data-action="eye">◉</button></div></label><div class="password-actions"><button class="primary">비밀번호 변경 →</button><button type="button">취소</button></div></form><aside><section class="requirements"><h2>보안 요구사항</h2><article><i>✓</i><div><b>최소 12자 이상</b><p>긴 비밀번호일수록 무차별 대입 공격에 더 안전합니다.</p></div></article><article><i>✓</i><div><b>복잡성</b><p>문자(A-z), 숫자(0-9), 특수문자(!@#)를 조합하세요.</p></div></article><article><i>✓</i><div><b>반복 피하기</b><p>이메일 주소 일부나 단순한 연속 문자를 사용하지 마세요.</p></div></article></section></aside></div>`,'password')}
-
-function meetingView(){return `<main class="meeting-room ${state.darkMeeting?'dark':''}"><header class="meeting-top"><h1>🔴　${activeMeeting.roomTitle} (${activeMeeting.status})</h1><span><b>+${meetingRoom.totalParticipants}</b>　? 도움말</span></header><div class="meeting-content"><section class="video-column"><div class="video-grid">${meetingRoom.participants.slice(0,4).map(participant=>`<article class="video-tile"><div class="video-person">${participant.avatarText}</div><button class="meeting-pin" type="button" data-action="pin-participant" aria-label="${participant.displayName} 화면 고정" aria-pressed="false"></button><div class="participant-badge ${participant.muted?'is-muted':''}"><button type="button" data-action="toggle-participant-mic" aria-label="${participant.displayName} 마이크 ${participant.muted?'켜기':'음소거'}">${participant.muted?'🔇':'🎙'}</button><span>${participant.displayName}</span></div></article>`).join('')}</div><footer class="controls"><span class="meeting-agenda">${activeMeeting.agendaTime}　| ${activeMeeting.roomTitle}</span><div class="control-items">${meetingControls.map(meetingControl).join('')}</div><i class="control-divider"></i><button class="hangup" data-view="home" aria-label="통화 종료"><img src="/assets/icons/hangup.svg" alt="" aria-hidden="true"></button></footer></section><aside class="chat-panel"><nav class="chat-tabs"><button class="active">채팅</button><button>다이렉트</button></nav><section class="messages">${meetingRoom.chatMessages.map(message=>`<article class="${message.mine?'me':''}"><b>${message.sender}　<small>${message.time}</small></b><p>${message.body}</p></article>`).join('')}</section><form class="chat-input" data-submit="chat"><input placeholder="메시지를 입력하세요..."><button>▷</button></form></aside></div></main>`}
-
-function modal(type){if(type==='team')return `<div class="modal-backdrop"><form class="modal" data-submit="modal"><button class="close" type="button" data-action="close">×</button><small style="color:#4285ef">NEW TEAM SPACE</small><h2>새 팀 스페이스</h2><label class="field">팀 이름<input required></label><label class="field">설명<textarea></textarea></label><div class="colors"><span style="margin-right:auto"><b>팀 색상</b><br><small>팀 아이콘과 포인트 색상에 사용됩니다.</small></span>${teamCreateColors.map(color=>`<button type="button" style="background:${color.value};border:${color.bordered?'.8px solid #111':'0'}"></button>`).join('')}</div><button class="primary block">팀 스페이스 만들기</button></form></div>`;if(type==='meeting')return `<div class="modal-backdrop"><form class="modal" data-submit="modal"><button class="close" type="button" data-action="close">×</button><small style="color:#4285ef">NEW MEETING</small><h2>회의 생성하기</h2><label class="field">회의 이름<input required></label><label class="field">담당 팀<select>${dashboardWorkspaces.map(workspace=>`<option value="${workspace.id}">${workspace.name}</option>`).join('')}</select></label><div style="height:84px"></div><button class="primary block">회의 만들기</button></form></div>`;return `<div class="modal-backdrop"><section class="modal invite-modal"><button class="close" data-action="close">×</button><h2>멤버 초대 및 공유</h2><p>프로젝트 팀원을 초대하세요.</p><div class="invite-row"><input placeholder="email@example.com"><select><option>편집 가능</option></select><button class="primary">초대 발송 →</button></div><div class="invite-list"><b>현재 멤버 ${inviteMembers.length}</b>${inviteMembers.map(member=>`<article><i class="avatar">${member.avatarText}</i><span>${member.name}<br><small>${member.email}</small></span><em>${member.role}</em></article>`).join('')}</div><button class="outline-btn block">▣ 링크 복사</button></section></div>`}
-
-const views={intro:introView,login:()=>authView(false),signup:()=>authView(true),onboarding:onboardingView,home:homeView,schedule:scheduleView,members:membersView,documents:()=>documentsView('documents'),minutes:()=>documentsView('minutes'),summary:()=>documentsView('summary'),feedback:()=>documentsView('feedback'),settings:teamSettingsView,profile:profileView,password:passwordView,meeting:meetingView};
-function render(view=state.view){state.view=view;app.innerHTML=views[view]();if(view==='meeting')enhanceMeetingHeader();window.scrollTo(0,0)}
-document.addEventListener('click',async e=>{const view=e.target.closest('[data-view]');if(view){e.preventDefault();render(view.dataset.view);return}const section=e.target.closest('[data-team-section]');if(section){render(section.dataset.teamSection);return}const choice=e.target.closest('[data-choice]');if(choice){const group=choice.closest('.choice-grid,.choice-row');group?.querySelectorAll('[data-choice]').forEach(button=>button.classList.toggle('active',button===choice));const selected=Number(choice.dataset.choice);if(Number.isFinite(selected))state.selected=selected;return}const filter=e.target.closest('.filter-tabs button');if(filter){filter.parentElement.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button===filter));return}const team=e.target.closest('.team-bubble:not(.add)');if(team){team.parentElement.querySelectorAll('.team-bubble').forEach(button=>button.classList.toggle('active',button===team));notify(`${team.textContent.trim()} 팀을 선택했습니다.`);return}const monthButton=e.target.closest('.month-ctrl button');if(monthButton){const label=monthButton.parentElement.querySelector('b');const match=label.textContent.match(/(\d+)년\s*(\d+)월/);if(match){let year=Number(match[1]);let month=Number(match[2])+(monthButton===monthButton.parentElement.firstElementChild?-1:1);if(month<1){month=12;year--}if(month>12){month=1;year++}label.textContent=`${year}년 ${month}월`}return}const action=e.target.closest('[data-action]')?.dataset.action;if(action==='show-demo')render('home');if(action==='next-step'){if(state.step<onboardingMock.steps.length-1){state.step++;state.selected=0;render('onboarding')}else render('home')}if(action==='eye'){const input=e.target.closest('.password-box').querySelector('input');input.type=input.type==='password'?'text':'password'}if(action==='new-team')document.body.insertAdjacentHTML('beforeend',modal('team'));if(action==='new-meeting')document.body.insertAdjacentHTML('beforeend',modal('meeting'));if(action==='new-document')notify('새 문서 작성 화면을 준비했습니다.');if(action==='open-document')notify('문서를 열었습니다.');if(action==='save-team')await runTask(()=>Promise.resolve({success:true}),()=>notify('팀 설정을 저장했습니다.'));if(action==='toggle-switch')e.target.closest('button').classList.toggle('switch-on');if(action==='invite')document.body.insertAdjacentHTML('beforeend',modal('invite'));if(action==='logout')await runTask(()=>authStore.logout(),()=>render('intro'));if(action==='close')e.target.closest('.modal-backdrop').remove();if(e.target.closest('[data-control]'))e.target.closest('[data-control]').classList.toggle('active')},{signal:controller.signal});
-document.addEventListener('submit',async e=>{e.preventDefault();if(e.target.dataset.submit==='auth'){const payload=Object.fromEntries(new FormData(e.target));await runTask(()=>state.view==='signup'?authStore.signup(payload):authStore.login(payload),result=>{currentUser={...currentUser,...result.user};state.step=0;render('onboarding')});return}if(e.target.dataset.submit==='save'){const payload=Object.fromEntries(new FormData(e.target));if(e.target.classList.contains('profile-settings'))await runTask(()=>userStore.updateProfile(payload),result=>{currentUser={...currentUser,...result};notify('프로필을 저장했습니다.');render('profile')});else await runTask(()=>userStore.changePassword(payload),()=>notify('비밀번호를 변경했습니다.'));return}if(e.target.dataset.submit==='modal'){const isTeam=e.target.textContent.includes('팀 스페이스');const fields=e.target.querySelectorAll('input,textarea,select');const payload={name:fields[0]?.value||'새 항목',description:fields[1]?.value||''};await runTask(()=>isTeam?boardStore.createWorkspace(payload):boardStore.createMeeting(payload),()=>{e.target.closest('.modal-backdrop').remove();notify('성공적으로 만들었습니다.')});return}if(e.target.dataset.submit==='chat'){const input=e.target.querySelector('input');if(input.value.trim()){document.querySelector('.messages').insertAdjacentHTML('beforeend',`<article class="me"><b>${currentUser.nickname}　<small>방금</small></b><p>${input.value.replace(/[<>]/g,'')}</p></article>`);input.value=''}}},{signal:controller.signal});
-document.addEventListener('input',e=>{if(e.target.matches('.workspace-search input')){const query=e.target.value.trim().toLowerCase();document.querySelectorAll('.workspace-item').forEach(item=>item.hidden=!item.textContent.toLowerCase().includes(query))}if(e.target.matches('.table-tools input,.archive-tools input')){const query=e.target.value.trim().toLowerCase();const container=e.target.closest('.member-table,.archive-panel');container?.querySelectorAll('.member-row:not(.head),.archive-row').forEach(row=>row.hidden=!row.textContent.toLowerCase().includes(query))}},{signal:controller.signal});
-document.addEventListener('click',e=>{const pin=e.target.closest('[data-action="pin-participant"]');if(!pin)return;const participant=pin.closest('.video-tile').querySelector('.participant-badge span').textContent;const willPin=!pin.classList.contains('is-pinned');document.querySelectorAll('.meeting-pin').forEach(button=>{button.classList.remove('is-pinned');button.setAttribute('aria-pressed','false')});if(willPin){pin.classList.add('is-pinned');pin.setAttribute('aria-pressed','true')}notify(willPin?`${participant} 화면을 고정했습니다.`:'화면 고정을 해제했습니다.')},{signal:controller.signal});
-document.addEventListener('click',e=>{const mic=e.target.closest('[data-action="toggle-participant-mic"]');if(!mic)return;const badge=mic.closest('.participant-badge');const muted=badge.classList.toggle('is-muted');mic.textContent=muted?'🔇':'🎙';mic.setAttribute('aria-label',`${badge.querySelector('span').textContent} 마이크 ${muted?'켜기':'음소거'}`);notify(muted?'마이크를 음소거했습니다.':'마이크를 켰습니다.')},{signal:controller.signal});
-document.addEventListener('click',e=>{const panel=document.querySelector('.chat-panel .messages');if(!panel)return;const input=document.querySelector('.chat-input input');const tab=e.target.closest('.chat-tabs button');if(tab){if(!panel.dataset.chatHtml)panel.dataset.chatHtml=panel.innerHTML;tab.parentElement.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button===tab));const isDirect=tab.textContent.trim()==='다이렉트';panel.innerHTML=isDirect?directList():panel.dataset.chatHtml;input.disabled=isDirect;input.placeholder=isDirect?'대화 상대를 선택하세요...':'메시지를 입력하세요...';return}const contact=e.target.closest('[data-direct-name]');if(contact){const name=contact.dataset.directName;panel.innerHTML=directConversation(name);panel.dataset.recipient=name;input.disabled=false;input.placeholder=`${name}에게 메시지 보내기...`;input.focus();return}if(e.target.closest('[data-action="direct-back"]')){panel.innerHTML=directList();delete panel.dataset.recipient;input.disabled=true;input.placeholder='대화 상대를 선택하세요...'}},{signal:controller.signal});
-document.addEventListener('click',e=>{const action=e.target.closest('[data-action]')?.dataset.action;if(action==='show-participants')document.body.insertAdjacentHTML('beforeend',meetingInfoModal('participants'));if(action==='meeting-help')document.body.insertAdjacentHTML('beforeend',meetingInfoModal('help'))},{signal:controller.signal});
-document.addEventListener('click',e=>{const more=e.target.closest('[data-control="more"]');const controls=e.target.closest('.controls');if(more){const menu=controls.querySelector('.meeting-more-menu');if(menu)menu.remove();else controls.insertAdjacentHTML('beforeend',meetingMoreMenu());return}const option=e.target.closest('[data-more-option]');if(option){if(option.dataset.moreOption==='settings'){notify('회의 설정 화면을 준비했습니다.');return}const enabled=option.classList.toggle('enabled');notify(`${option.querySelector('b').textContent} 기능을 ${enabled?'켰습니다.':'껐습니다.'}`);return}if(!e.target.closest('.meeting-more-menu')){document.querySelector('.meeting-more-menu')?.remove();document.querySelector('[data-control="more"]')?.classList.remove('active')}},{signal:controller.signal});
-render();
-setBusy(true)
-Promise.all([boardStore.load(), userStore.load()])
-  .then(([boardState, loadedProfile]) => {
-    dashboardWorkspaces = boardState.workspaces
-    memberRows = boardState.members
-    archives = boardState.archives
-    currentUser = {...currentUser, ...loadedProfile}
-    if (['home', 'members', 'documents', 'minutes', 'summary', 'feedback', 'profile'].includes(state.view)) {
-      render()
+  const notify = text => {
+    toast.textContent = text
+    toast.classList.add('show')
+    setTimeout(() => toast.classList.remove('show'), 1800)
+  }
+  const setBusy = busy => app.setAttribute('aria-busy', String(busy))
+  const setCurrentUser = profile => {
+    currentUser = { ...currentUser, ...profile }
+  }
+  const runTask = async (task, onSuccess) => {
+    setBusy(true)
+    try {
+      const result = await task()
+      onSuccess?.(result)
+      return result
+    } catch (error) {
+      notify(error?.message || '요청을 처리하지 못했습니다.')
+      return undefined
+    } finally {
+      setBusy(false)
     }
+  }
+
+  const { topbar, shell, settingsShell } = createAppShellTemplates({
+    team,
+    getCurrentUser: () => currentUser
   })
-  .catch(error => notify(error?.message || '데이터를 불러오지 못했습니다.'))
-  .finally(() => setBusy(false))
-return () => {controller.abort();document.querySelectorAll('.modal-backdrop').forEach(modal=>modal.remove())};
+  const authViews = createAuthTemplates({ state, onboardingMock, renderLogo })
+  const dashboardViews = createDashboardTemplates({
+    getWorkspaces: () => dashboardWorkspaces,
+    activeMeeting,
+    calendarData,
+    topbar,
+    renderCalendar
+  })
+  const teamViews = createTeamTemplates({
+    team,
+    activeMeeting,
+    calendarData,
+    getMembers: () => memberRows,
+    getArchives: () => archives,
+    shell,
+    renderCalendar
+  })
+  const userViews = createUserTemplates({
+    getCurrentUser: () => currentUser,
+    profileOptions,
+    settingsShell,
+    renderSideIcon
+  })
+  const meetingTemplates = createMeetingTemplates({
+    app,
+    state,
+    activeMeeting,
+    meetingRoom,
+    meetingControls
+  })
+  const renderModal = createBoardModalTemplates({
+    getWorkspaces: () => dashboardWorkspaces,
+    inviteMembers,
+    teamCreateColors
+  })
+  const views = {
+    ...authViews,
+    ...dashboardViews,
+    ...teamViews,
+    ...userViews,
+    meeting: meetingTemplates.meeting
+  }
+
+  function render(view = state.view) {
+    if (view !== state.view && options.onNavigate) {
+      options.onNavigate(view)
+      return
+    }
+    state.view = view
+    app.innerHTML = views[view]()
+    if (view === 'meeting') meetingTemplates.enhanceMeetingHeader()
+    window.scrollTo(0, 0)
+  }
+
+  registerNavigationEvents({ signal: controller.signal, render })
+  registerAuthEvents({
+    signal: controller.signal,
+    state,
+    onboardingMock,
+    authStore,
+    runTask,
+    render,
+    setCurrentUser
+  })
+  registerUserEvents({
+    signal: controller.signal,
+    userStore,
+    runTask,
+    render,
+    notify,
+    setCurrentUser
+  })
+  registerBoardEvents({
+    signal: controller.signal,
+    boardStore,
+    render,
+    renderModal,
+    runTask,
+    notify
+  })
+  registerMeetingEvents({
+    signal: controller.signal,
+    getCurrentUser: () => currentUser,
+    notify,
+    directList: meetingTemplates.directList,
+    directConversation: meetingTemplates.directConversation,
+    meetingInfoModal: meetingTemplates.meetingInfoModal,
+    meetingMoreMenu: meetingTemplates.meetingMoreMenu
+  })
+
+  render()
+  setBusy(true)
+  Promise.all([boardStore.load(), userStore.load()])
+    .then(([boardState, loadedProfile]) => {
+      dashboardWorkspaces = boardState.workspaces
+      memberRows = boardState.members
+      archives = boardState.archives
+      setCurrentUser(loadedProfile)
+      if (
+        ['home', 'members', 'documents', 'minutes', 'summary', 'feedback', 'profile'].includes(
+          state.view
+        )
+      ) {
+        render()
+      }
+    })
+    .catch(error => notify(error?.message || '데이터를 불러오지 못했습니다.'))
+    .finally(() => setBusy(false))
+
+  return {
+    setView(view) {
+      if (!views[view]) return
+      state.view = view
+      render(view)
+    },
+    destroy() {
+      controller.abort()
+      document.querySelectorAll('.modal-backdrop').forEach(modal => modal.remove())
+    }
+  }
 }
