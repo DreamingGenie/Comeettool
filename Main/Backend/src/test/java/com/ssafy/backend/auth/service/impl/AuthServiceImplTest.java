@@ -39,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -686,6 +687,38 @@ class AuthServiceImplTest {
             Set<ConstraintViolation<RequestTokenRefreshDto>> violations =
                     validator.validate(new RequestTokenRefreshDto("some.jwt.token"));
             assertThat(violations).isEmpty();
+        }
+    }
+
+    // =====================================================================
+    // AUTH-04: logout() 테스트
+    // 인증 안 된 요청이 컨트롤러 진입 전 401로 막히는지는 서비스 단위 테스트로 검증할 수 없다
+    // (그건 필터 단계 관심사) — JwtAuthenticationFilterTest에 별도로 추가했다.
+    // =====================================================================
+
+    @Nested
+    @DisplayName("로그아웃")
+    class Logout {
+
+        private static final String USER_ID = "1";
+
+        @Test
+        @DisplayName("로그아웃하면_Redis의_refreshToken이_삭제된다")
+        void 로그아웃하면_Redis의_refreshToken이_삭제된다() {
+            // when
+            authService.logout(USER_ID);
+
+            // then
+            verify(refreshTokenService, times(1)).delete(USER_ID);
+        }
+
+        @Test
+        @DisplayName("Redis에_값이_이미_없어도_예외_없이_멱등하게_처리된다")
+        void Redis에_값이_이미_없어도_예외_없이_멱등하게_처리된다() {
+            // given: RefreshTokenService.delete는 키가 없어도 예외를 던지지 않는다(Spring Data Redis 기본 동작) — 재로그아웃 시나리오
+            // when & then
+            assertThatCode(() -> authService.logout(USER_ID)).doesNotThrowAnyException();
+            verify(refreshTokenService, times(1)).delete(USER_ID);
         }
     }
 }

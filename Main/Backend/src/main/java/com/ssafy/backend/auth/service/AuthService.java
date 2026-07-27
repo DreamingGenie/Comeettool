@@ -17,4 +17,7 @@ public interface AuthService {
 
     // AUTH-03: refreshToken 검증 후 새 accessToken만 재발급 (rotation 없음, refreshToken 그대로 유지).
     ResponseTokenRefreshDto refreshAccessToken(RequestTokenRefreshDto request);
+
+    // AUTH-04: Redis의 refresh:{userId}를 삭제해 세션을 종료. 이미 없어도 멱등하게 200 처리.
+    void logout(String userId);
 }

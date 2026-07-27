@@ -12,6 +12,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -53,6 +54,16 @@ class JwtAuthenticationFilterTest {
     @DisplayName("보호 경로 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
     void protectedNoTokenReturns401Unauthorized() throws Exception {
         mockMvc.perform(get(PROTECTED))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
+    }
+
+    @Test
+    @DisplayName("AUTH-04 로그아웃 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
+    void logoutWithoutTokenReturns401Unauthorized() throws Exception {
+        // /logout은 SecurityConfig의 permitAll 목록에 없어 인증이 필요하다.
+        // 만료·위변조 토큰에 대한 401 처리는 필터 공통 로직이라 위 PROTECTED 경로 테스트들로 이미 검증됨.
+        mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
     }
