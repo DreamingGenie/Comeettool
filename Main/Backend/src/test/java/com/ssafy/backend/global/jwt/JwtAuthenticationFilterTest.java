@@ -94,4 +94,14 @@ class JwtAuthenticationFilterTest {
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    @DisplayName("AUTH-04 로그아웃 - 유효 토큰 → 200 SUCCESS")
+    void logoutWithValidTokenReturns200Success() throws Exception {
+        // /logout은 실제 핸들러가 있어서(다른 PROTECTED 경로와 달리) 인증 통과 시 200까지 확인 가능하다.
+        String token = jwtProvider.createAccessToken("42");
+        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("SUCCESS")));
+    }
 }
