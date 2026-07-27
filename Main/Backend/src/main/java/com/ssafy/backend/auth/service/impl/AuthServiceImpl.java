@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 
 /**
- * AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 Access Token 재발급 로직.
+ * AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 Access Token 재발급, AUTH-04 로그아웃 로직.
  * 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder 빈)로 해싱해 저장·비교한다.
  */
 @Service
@@ -88,6 +88,12 @@ public class AuthServiceImpl implements AuthService {
 
         String accessToken = jwtProvider.createAccessToken(userId);
         return new ResponseTokenRefreshDto("Bearer", accessToken);
+    }
+
+    @Override
+    public void logout(String userId) {
+        // RefreshTokenService.delete는 키가 없어도 예외 없이 지나가므로 별도 존재 확인이 필요 없다(멱등).
+        refreshTokenService.delete(userId);
     }
 
     private String normalizeEmail(String email) {

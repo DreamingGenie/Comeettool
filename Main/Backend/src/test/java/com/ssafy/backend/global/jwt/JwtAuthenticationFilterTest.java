@@ -12,6 +12,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,6 +59,16 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("AUTH-04 로그아웃 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
+    void logoutWithoutTokenReturns401Unauthorized() throws Exception {
+        // /logout은 SecurityConfig의 permitAll 목록에 없어 인증이 필요하다.
+        // 만료·위변조 토큰에 대한 401 처리는 필터 공통 로직이라 위 PROTECTED 경로 테스트들로 이미 검증됨.
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
+    }
+
+    @Test
     @DisplayName("보호 경로 - 무효 토큰 → 401 AUTH_TOKEN_INVALID")
     void protectedInvalidTokenReturns401Invalid() throws Exception {
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer not.a.jwt"))
@@ -82,5 +93,15 @@ class JwtAuthenticationFilterTest {
         String token = jwtProvider.createAccessToken("42");
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("AUTH-04 로그아웃 - 유효 토큰 → 200 SUCCESS")
+    void logoutWithValidTokenReturns200Success() throws Exception {
+        // /logout은 실제 핸들러가 있어서(다른 PROTECTED 경로와 달리) 인증 통과 시 200까지 확인 가능하다.
+        String token = jwtProvider.createAccessToken("42");
+        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("SUCCESS")));
     }
 }
