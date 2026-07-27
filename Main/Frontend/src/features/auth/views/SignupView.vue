@@ -38,7 +38,6 @@ import { useRouter } from 'vue-router'
 import AppLogo from '../../../shared/components/AppLogo.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../stores/authStore'
-import { userStore } from '../../user/stores/userStore'
 
 const router = useRouter()
 const { notify } = useToast()
@@ -54,9 +53,8 @@ async function submit() {
   }
   submitting.value = true
   try {
-    const result = await authStore.signup(form)
-    userStore.setProfile(result.user)
-    await router.push('/onboarding')
+    await authStore.signup(form)
+    await router.push('/login')
   } catch (error) {
     notify(error?.message || '회원가입하지 못했습니다.')
   } finally {

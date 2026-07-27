@@ -1,19 +1,17 @@
+import { cloneMockValue, mockResponse } from '../../../shared/api/mockResponse'
 import { userMockDatabase } from './userMockDatabase'
 
-const wait = value =>
-  new Promise(resolve => setTimeout(() => resolve(structuredClone(value)), 180))
-
 export const userMockApi = {
-  getMe: () => wait(userMockDatabase.profile),
-  getProfileOptions: () => wait(userMockDatabase.profileOptions),
-  getOnboardingOptions: () => wait(userMockDatabase.onboarding),
+  getMe: () => mockResponse(userMockDatabase.profile),
+  getProfileOptions: () => mockResponse(userMockDatabase.profileOptions),
+  getOnboardingOptions: () => mockResponse(userMockDatabase.onboarding),
   saveOnboarding: data => {
-    userMockDatabase.onboardingAnswers = structuredClone(data)
-    return wait(userMockDatabase.onboardingAnswers)
+    userMockDatabase.onboardingAnswers = cloneMockValue(data)
+    return mockResponse(userMockDatabase.onboardingAnswers)
   },
   updateProfile: data => {
     Object.assign(userMockDatabase.profile, data)
-    return wait(userMockDatabase.profile)
+    return mockResponse(userMockDatabase.profile)
   },
-  changePassword: () => wait({ success: true })
+  changePassword: () => mockResponse({ success: true })
 }

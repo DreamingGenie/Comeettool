@@ -16,8 +16,8 @@ export const authStore = {
   },
   async signup(form) {
     const result = await dataSource.auth.signup(form)
-    state.user = result.user
-    state.authenticated = true
+    state.user = null
+    state.authenticated = false
     return result
   },
   async logout() {

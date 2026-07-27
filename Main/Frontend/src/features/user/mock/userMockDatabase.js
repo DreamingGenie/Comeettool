@@ -1,3 +1,5 @@
+import { cloneMockValue } from '../../../shared/api/mockResponse'
+
 export const mockUserProfile = {
   id: 1,
   nickname: '김인송',
@@ -45,7 +47,7 @@ export const onboardingMock = {
 }
 
 export const userMockDatabase = {
-  profile: structuredClone(mockUserProfile),
+  profile: cloneMockValue(mockUserProfile),
   profileOptions,
   onboarding: onboardingMock,
   onboardingAnswers: {}

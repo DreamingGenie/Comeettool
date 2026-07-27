@@ -1,27 +1,26 @@
 import { boardMockDatabase } from './boardMockDatabase'
-
-const wait = (value, delay = 180) =>
-  new Promise(resolve => setTimeout(() => resolve(structuredClone(value)), delay))
+import { cloneMockValue, mockResponse } from '../../../shared/api/mockResponse'
 
 const createId = prefix =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`
 
 export const boardMockApi = {
-  getDashboard: () => wait({ workspaces: boardMockDatabase.workspaces }),
+  getDashboard: () => mockResponse({ workspaces: boardMockDatabase.workspaces }),
   getTeam: teamId =>
-    wait(
+    mockResponse(
       boardMockDatabase.teams.find(team => team.id === teamId) ||
         boardMockDatabase.teams[0]
     ),
-  getMembers: () => wait(boardMockDatabase.members),
-  getActiveMeeting: () => wait(boardMockDatabase.activeMeetings[0] || null),
+  getMembers: () => mockResponse(boardMockDatabase.members),
+  getActiveMeeting: () =>
+    mockResponse(boardMockDatabase.activeMeetings[0] || null),
   getEvents: (teamId, year, month) => {
     const source =
       boardMockDatabase.calendars[teamId] ||
       boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
     const firstDay = new Date(year, month - 1, 1).getDay()
     const totalDays = new Date(year, month, 0).getDate()
-    return wait({
+    return mockResponse({
       ...source,
       year,
       month,
@@ -36,32 +35,32 @@ export const boardMockApi = {
   getArchive: (_teamId, section) => {
     const rows = boardMockDatabase.archives[section] || []
     const stats = boardMockDatabase.archiveStats[section] || null
-    return wait({
+    return mockResponse({
       rows,
       stats: stats ? { ...stats, total: rows.length } : null
     })
   },
   getMeetingRoom: meetingId =>
-    wait(
+    mockResponse(
       boardMockDatabase.meetingRooms[meetingId] ||
         Object.values(boardMockDatabase.meetingRooms)[0]
     ),
   getParticipants: meetingId =>
-    wait(
+    mockResponse(
       (
         boardMockDatabase.meetingRooms[meetingId] ||
         Object.values(boardMockDatabase.meetingRooms)[0]
       )?.participants || []
     ),
   getMessages: meetingId =>
-    wait(
+    mockResponse(
       (
         boardMockDatabase.meetingRooms[meetingId] ||
         Object.values(boardMockDatabase.meetingRooms)[0]
       )?.chatMessages || []
     ),
   getInviteMembers: teamId =>
-    wait(
+    mockResponse(
       boardMockDatabase.inviteMembers[teamId] ||
         boardMockDatabase.inviteMembers[boardMockDatabase.teams[0]?.id] ||
       []
@@ -71,7 +70,7 @@ export const boardMockApi = {
       boardMockDatabase.teams.find(item => item.id === teamId) ||
       boardMockDatabase.teams[0]
     Object.assign(team, data)
-    return wait(team)
+    return mockResponse(team)
   },
   inviteMember: (teamId, data) => {
     const targetTeamId =
@@ -84,7 +83,7 @@ export const boardMockApi = {
       role: data.permission || 'MEMBER'
     }
     boardMockDatabase.inviteMembers[targetTeamId].push(member)
-    return wait(member)
+    return mockResponse(member)
   },
   createWorkspace: data => {
     const workspace = {
@@ -105,11 +104,13 @@ export const boardMockApi = {
       memberCount: 1
     })
     boardMockDatabase.calendars[workspace.id] = {
-      ...structuredClone(boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]),
+      ...cloneMockValue(
+        boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
+      ),
       events: []
     }
     boardMockDatabase.inviteMembers[workspace.id] = []
-    return wait(workspace)
+    return mockResponse(workspace)
   },
   createMeeting: data => {
     const meeting = {
@@ -143,7 +144,7 @@ export const boardMockApi = {
       chatMessages: [],
       directContacts: []
     }
-    return wait(meeting)
+    return mockResponse(meeting)
   },
   createEvent: data => {
     const event = { id: createId('event'), ...data }
@@ -151,7 +152,7 @@ export const boardMockApi = {
       boardMockDatabase.calendars[data.teamId] ||
       boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
     calendar?.events.push(event)
-    return wait(event)
+    return mockResponse(event)
   },
   sendMessage: (meetingId, body) => {
     const room =
@@ -165,7 +166,7 @@ export const boardMockApi = {
       mine: true
     }
     room?.chatMessages.push(message)
-    return wait(message)
+    return mockResponse(message)
   },
   sendDirectMessage: (meetingId, contactId, body) => {
     const room =
@@ -184,7 +185,7 @@ export const boardMockApi = {
       contact.preview = message.body
       contact.time = message.time
     }
-    return wait(message)
+    return mockResponse(message)
   },
   updateParticipant: (meetingId, participantId, data) => {
     const room =
@@ -192,6 +193,6 @@ export const boardMockApi = {
       Object.values(boardMockDatabase.meetingRooms)[0]
     const participant = room?.participants.find(item => item.id === participantId)
     Object.assign(participant, data)
-    return wait(participant)
+    return mockResponse(participant)
   }
 }
