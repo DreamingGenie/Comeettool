@@ -38,7 +38,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional
-    public ResponseCreateSpaceDto createSpace(Long userId, RequestCreateSpaceDto request) {
+    public ResponseCreateSpaceDto addSpace(Long userId, RequestCreateSpaceDto request) {
         User owner = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.AUTH_UNAUTHORIZED));
 
@@ -60,7 +60,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ResponseSpaceListDto> findMySpaces(Long userId) {
+    public List<ResponseSpaceListDto> findSpaceList(Long userId) {
         List<Team> teams = memberRepository.findActiveTeamsByUserId(userId);
         if (teams.isEmpty()) {
             return List.of();
@@ -90,7 +90,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional(readOnly = true)
-    public ResponseSpaceDetailDto findSpaceDetail(Long userId, Long spaceId) {
+    public ResponseSpaceDetailDto findSpaceDetails(Long userId, Long spaceId) {
         Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
 
