@@ -8,8 +8,16 @@ import * as Y from 'yjs'
 import {Hocuspocus} from '@hocuspocus/server'
 import {Database} from '@hocuspocus/extension-database'
 import {WebSocketServer} from "ws";
+import pg from 'pg'
 
+const {Pool} = pg
 const port = Number(process.env.PORT || 3000)
+const databaseUrl = process.env.DATABASE_URL || 'postgresql://comeettool:comeettool@localhost:5432/comeettool'
+const pool = new Pool({
+    connectionString: databaseUrl,
+    max: 10
+})
+
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.join(rootDir, 'data')
 const stateDir = path.join(dataDir, 'states')
@@ -175,13 +183,25 @@ const app = express()
 
 app.disable('x-powered-by')
 app.use(express.json({limit: '64kb'}))
-app.get('/health', (_request, response) => {
-    response.json({
-        status: 'ok',
-        server: 'file-crdt',
-    })
+app.get('/health', async (_request, response) => {
+    try {
+        await pool.query('SELECT 1')
+
+        response.json({
+            status: 'ok',
+            server: 'file-crdt',
+            database: 'postgresql',
+        })
+    } catch (_error) {
+        response.status(503).json({
+            status: 'unavailable',
+            server: 'file-crdt',
+            database: 'postgresql',
+        })
+    }
 })
 
+// [API] 문서 목록 조회
 app.get('/api/documents', async (_request, response) => {
     const documents = await getDocuments()
 
@@ -192,6 +212,7 @@ app.get('/api/documents', async (_request, response) => {
     response.json(sortedDocuments)
 })
 
+//[API] 문서 상세 조회
 app.get('/api/documents/:id', async (request, response) => {
     const documents = await getDocuments()
     const document = documents.find(item => item.id === request.params.id)
@@ -203,6 +224,7 @@ app.get('/api/documents/:id', async (request, response) => {
     response.json(document)
 })
 
+//[API] 문서 생성
 app.post('/api/documents', async (request, response) => {
     const title = typeof request.body.title === 'string' ? request.body.title.trim() : ''
     const createdBy = typeof request.body.createdBy === 'string' ? request.body.createdBy.trim() : ''
@@ -235,6 +257,7 @@ app.post('/api/documents', async (request, response) => {
     response.status(201).json(document)
 })
 
+// [API] 문서 삭제
 app.delete('/api/documents/:id', async (request, response) => {
     const documents = await getDocuments()
     const remainingDocuments = documents.filter(item => item.id !== request.params.id)
@@ -256,11 +279,18 @@ webSocketServer.on('connection', (socket, request) => {
     const connection = hocuspocus.handleConnection(socket, request)
 
     socket.on('message', data => {
-        connection.handleMessage(data)
+        connection.handleMessage(new Uint8Array(data))
     })
 
-    socket.on('close', () => {
-        connection.handleClose()
+    socket.on('close', (code, reason) => {
+        connection.handleClose({
+            code,
+            reason: reason.toString(),
+        })
+    })
+
+    socket.on('error', error => {
+        console.error('WebSocket 오류:', error)
     })
 })
 
@@ -276,12 +306,14 @@ server.on('upgrade', (request, socket, head) => {
 })
 
 server.listen(port, '0.0.0.0', () => {
-    console.log(`파일 기반 CRDT 서버 8단계가 ${port}번 포트에서 실행 중입니다.`)
+    console.log(`파일 기반 CRDT 서버가 ${port}번 포트에서 실행 중입니다.`)
 })
 
 async function shutdown() {
     server.close(async () => {
         await hocuspocus.destroy()
+
+        await pool.end()
 
         process.exit(0)
     })
