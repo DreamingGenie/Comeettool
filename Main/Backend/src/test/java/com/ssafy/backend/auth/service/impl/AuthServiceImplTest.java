@@ -2,8 +2,10 @@ package com.ssafy.backend.auth.service.impl;
 
 import com.ssafy.backend.auth.dto.RequestLoginDto;
 import com.ssafy.backend.auth.dto.RequestSignupDto;
+import com.ssafy.backend.auth.dto.RequestTokenRefreshDto;
 import com.ssafy.backend.auth.dto.ResponseLoginDto;
 import com.ssafy.backend.auth.dto.ResponseSignupDto;
+import com.ssafy.backend.auth.dto.ResponseTokenRefreshDto;
 import com.ssafy.backend.auth.mapper.UserMapper;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
@@ -11,6 +13,9 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.security.SignatureException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -40,13 +45,15 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * AuthServiceImpl.signup() 단위 테스트.
- * Repository/Mapper/PasswordEncoder는 전부 Mock — 실제 DB·BCrypt 연산 없이 서비스 로직만 검증한다.
+ * AuthServiceImpl 단위 테스트 (AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 토큰 재발급).
+ * Repository/Mapper/PasswordEncoder/JwtProvider/RefreshTokenService는 전부 Mock —
+ * 실제 DB·BCrypt·JWT 서명 연산 없이 서비스 로직만 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthServiceImpl 단위 테스트")
@@ -80,6 +87,10 @@ class AuthServiceImplTest {
     void setUp() {
         requestSignupDto = new RequestSignupDto(EMAIL, RAW_PASSWORD);
     }
+
+    // =====================================================================
+    // AUTH-01: signup() 테스트
+    // =====================================================================
 
     @Nested
     @DisplayName("회원가입 성공")
@@ -495,6 +506,185 @@ class AuthServiceImplTest {
         void 유효한_이메일과_비밀번호는_검증을_통과한다() {
             Set<ConstraintViolation<RequestLoginDto>> violations =
                     validator.validate(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+            assertThat(violations).isEmpty();
+        }
+    }
+
+    // =====================================================================
+    // AUTH-03: refreshAccessToken() 테스트
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Access Token 재발급 성공")
+    class TokenRefreshSuccess {
+
+        private static final String REFRESH_TOKEN = "valid.refresh.token";
+        private static final String NEW_ACCESS_TOKEN = "new.access.token";
+        private static final String USER_ID = "1";
+
+        private void givenValidRefreshToken() {
+            Claims claims = mock(Claims.class);
+            given(claims.getSubject()).willReturn(USER_ID);
+            given(claims.get("type", String.class)).willReturn("refresh");
+            given(jwtProvider.parse(REFRESH_TOKEN)).willReturn(claims);
+            given(refreshTokenService.isValid(USER_ID, REFRESH_TOKEN)).willReturn(true);
+            given(jwtProvider.createAccessToken(USER_ID)).willReturn(NEW_ACCESS_TOKEN);
+        }
+
+        @Test
+        @DisplayName("refreshToken이_유효하면_새_accessToken을_발급하고_tokenType은_Bearer다")
+        void refreshToken이_유효하면_새_accessToken을_발급하고_tokenType은_Bearer다() {
+            // given
+            givenValidRefreshToken();
+
+            // when
+            ResponseTokenRefreshDto result = authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN));
+
+            // then
+            assertThat(result.tokenType()).isEqualTo("Bearer");
+            assertThat(result.accessToken()).isEqualTo(NEW_ACCESS_TOKEN);
+        }
+
+        @Test
+        @DisplayName("재발급_성공해도_refreshToken은_재발급되거나_Redis에_다시_쓰이지_않는다_rotation_없음")
+        void 재발급_성공해도_refreshToken은_재발급되거나_Redis에_다시_쓰이지_않는다_rotation_없음() {
+            // given
+            givenValidRefreshToken();
+
+            // when
+            authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN));
+
+            // then: 기존 refreshToken·Redis 값 그대로 유지 — write 자체가 없어야 한다
+            verify(jwtProvider, never()).createRefreshToken(anyString());
+            verify(refreshTokenService, never()).save(anyString(), anyString(), anyLong());
+            verify(refreshTokenService, never()).delete(anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("Access Token 재발급 실패")
+    class TokenRefreshFailure {
+
+        private static final String REFRESH_TOKEN = "some.refresh.token";
+        private static final String USER_ID = "1";
+
+        @Test
+        @DisplayName("서명이_유효하지_않으면_AUTH_REFRESH_FAILED_예외가_발생한다")
+        void 서명이_유효하지_않으면_AUTH_REFRESH_FAILED_예외가_발생한다() {
+            // given
+            given(jwtProvider.parse(REFRESH_TOKEN)).willThrow(new SignatureException("invalid signature"));
+
+            // when & then
+            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+
+        @Test
+        @DisplayName("만료된_refreshToken이면_AUTH_REFRESH_FAILED_예외가_발생한다")
+        void 만료된_refreshToken이면_AUTH_REFRESH_FAILED_예외가_발생한다() {
+            // given
+            given(jwtProvider.parse(REFRESH_TOKEN)).willThrow(new ExpiredJwtException(null, null, "expired"));
+
+            // when & then
+            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+
+        @Test
+        @DisplayName("type이_access인_토큰으로_요청하면_AUTH_REFRESH_FAILED_예외가_발생한다")
+        void type이_access인_토큰으로_요청하면_AUTH_REFRESH_FAILED_예외가_발생한다() {
+            // given: access 토큰을 refresh 엔드포인트에 잘못 사용한 경우 — 파싱 자체는 성공한다
+            Claims claims = mock(Claims.class);
+            given(claims.get("type", String.class)).willReturn("access");
+            given(jwtProvider.parse(REFRESH_TOKEN)).willReturn(claims);
+
+            // when & then
+            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_REFRESH_FAILED);
+            // type 검증에서 이미 걸러지므로 Redis 조회까지 갈 필요가 없다
+            verify(refreshTokenService, never()).isValid(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("Redis_검증에_실패하면_AUTH_REFRESH_FAILED_예외가_발생한다")
+        void Redis_검증에_실패하면_AUTH_REFRESH_FAILED_예외가_발생한다() {
+            // given: isValid()가 false를 반환하는 모든 경우(키 없음·값 불일치)를 대표하는 케이스.
+            // AuthServiceImpl 입장에서는 두 상황이 isValid() == false로 동일하게 관찰되어 구분할 수 없다.
+            Claims claims = mock(Claims.class);
+            given(claims.getSubject()).willReturn(USER_ID);
+            given(claims.get("type", String.class)).willReturn("refresh");
+            given(jwtProvider.parse(REFRESH_TOKEN)).willReturn(claims);
+            given(refreshTokenService.isValid(USER_ID, REFRESH_TOKEN)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+
+        @Test
+        @DisplayName("실패_시_원인에_상관없이_Redis에_어떤_값도_쓰지_않고_새_accessToken도_발급하지_않는다")
+        void 실패_시_원인에_상관없이_Redis에_어떤_값도_쓰지_않고_새_accessToken도_발급하지_않는다() {
+            // given
+            given(jwtProvider.parse(REFRESH_TOKEN)).willThrow(new SignatureException("invalid signature"));
+
+            // when
+            assertThatThrownBy(() -> authService.refreshAccessToken(new RequestTokenRefreshDto(REFRESH_TOKEN)))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(jwtProvider, never()).createAccessToken(anyString());
+            verify(refreshTokenService, never()).save(anyString(), anyString(), anyLong());
+            verify(refreshTokenService, never()).delete(anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("RequestTokenRefreshDto Bean Validation (컨트롤러 진입 전 방어선)")
+    class RequestTokenRefreshDtoValidation {
+
+        private static ValidatorFactory validatorFactory;
+        private static Validator validator;
+
+        @BeforeAll
+        static void setUpValidator() {
+            validatorFactory = Validation.buildDefaultValidatorFactory();
+            validator = validatorFactory.getValidator();
+        }
+
+        @AfterAll
+        static void closeValidator() {
+            validatorFactory.close();
+        }
+
+        @Test
+        @DisplayName("refreshToken이_null이면_검증에_실패한다")
+        void refreshToken이_null이면_검증에_실패한다() {
+            Set<ConstraintViolation<RequestTokenRefreshDto>> violations =
+                    validator.validate(new RequestTokenRefreshDto(null));
+            assertThat(violations).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("refreshToken이_빈문자열이면_검증에_실패한다")
+        void refreshToken이_빈문자열이면_검증에_실패한다() {
+            Set<ConstraintViolation<RequestTokenRefreshDto>> violations =
+                    validator.validate(new RequestTokenRefreshDto(""));
+            assertThat(violations).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("유효한_refreshToken은_검증을_통과한다")
+        void 유효한_refreshToken은_검증을_통과한다() {
+            Set<ConstraintViolation<RequestTokenRefreshDto>> violations =
+                    validator.validate(new RequestTokenRefreshDto("some.jwt.token"));
             assertThat(violations).isEmpty();
         }
     }

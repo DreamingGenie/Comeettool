@@ -2,8 +2,10 @@ package com.ssafy.backend.auth.service.impl;
 
 import com.ssafy.backend.auth.dto.RequestLoginDto;
 import com.ssafy.backend.auth.dto.RequestSignupDto;
+import com.ssafy.backend.auth.dto.RequestTokenRefreshDto;
 import com.ssafy.backend.auth.dto.ResponseLoginDto;
 import com.ssafy.backend.auth.dto.ResponseSignupDto;
+import com.ssafy.backend.auth.dto.ResponseTokenRefreshDto;
 import com.ssafy.backend.auth.mapper.UserMapper;
 import com.ssafy.backend.auth.service.AuthService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
@@ -12,6 +14,8 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 
 /**
- * AUTH-01 회원가입, AUTH-02 로그인 로직.
+ * AUTH-01 회원가입, AUTH-02 로그인, AUTH-03 Access Token 재발급 로직.
  * 비밀번호는 BCrypt(SecurityConfig의 PasswordEncoder 빈)로 해싱해 저장·비교한다.
  */
 @Service
@@ -71,6 +75,21 @@ public class AuthServiceImpl implements AuthService {
         return new ResponseLoginDto("Bearer", accessToken, refreshToken, userId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ResponseTokenRefreshDto refreshAccessToken(RequestTokenRefreshDto request) {
+        Claims claims = parseRefreshTokenClaimsOrThrow(request.refreshToken());
+        String userId = claims.getSubject();
+
+        // Redis에 저장된 refresh:{userId} 값과 다르면(만료·로그아웃·미존재) 재발급 거부. Rotation 없음 — Redis write 안 함.
+        if (!refreshTokenService.isValid(userId, request.refreshToken())) {
+            throw new CustomException(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+
+        String accessToken = jwtProvider.createAccessToken(userId);
+        return new ResponseTokenRefreshDto("Bearer", accessToken);
+    }
+
     private String normalizeEmail(String email) {
         return email.toLowerCase(Locale.ROOT);
     }
@@ -79,5 +98,20 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByEmail(email)) {
             throw new CustomException(ErrorCode.AUTH_EMAIL_DUPLICATED);
         }
+    }
+
+    // 서명 실패·만료·형식 오류를 원인 구분 없이 전부 AUTH_REFRESH_FAILED로 통일(보안상 이유 비노출).
+    private Claims parseRefreshTokenClaimsOrThrow(String refreshToken) {
+        Claims claims;
+        try {
+            claims = jwtProvider.parse(refreshToken);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new CustomException(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+
+        if (!"refresh".equals(claims.get("type", String.class))) {
+            throw new CustomException(ErrorCode.AUTH_REFRESH_FAILED);
+        }
+        return claims;
     }
 }
