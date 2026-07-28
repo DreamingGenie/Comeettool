@@ -10,7 +10,8 @@ public record JwtProperties(
         String privateKeyPath,
         String publicKeyPath,
         String issuer,
-        String appAudience,
+        String apiAudience,
+        String yjsAudience,
         long accessExpirationSeconds,
         long refreshExpirationSeconds
 ) {

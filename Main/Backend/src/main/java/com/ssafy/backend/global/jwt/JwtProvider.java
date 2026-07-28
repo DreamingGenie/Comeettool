@@ -24,7 +24,7 @@ public class JwtProvider {
     private final PrivateKey privateKey;
     private final RSAPublicKey publicKey;
     private final String issuer;
-    private final String appAudience;
+    private final String apiAudience;
     private final long accessExpMs;
     private final long refreshExpMs;
 
@@ -32,7 +32,7 @@ public class JwtProvider {
         this.privateKey = RsaKeyUtil.loadPrivateKey(props.privateKeyPath());
         this.publicKey = (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath());
         this.issuer = props.issuer();
-        this.appAudience = props.appAudience();
+        this.apiAudience = props.apiAudience();
         this.accessExpMs = props.accessExpirationSeconds() * 1000;
         this.refreshExpMs = props.refreshExpirationSeconds() * 1000;
     }
@@ -43,7 +43,7 @@ public class JwtProvider {
                 .header().keyId(KEY_ID).and()
                 .subject(userId)
                 .issuer(issuer)
-                .audience().add(appAudience).and()
+                .audience().add(apiAudience).and()
                 .claim("type", "access")
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessExpMs))
@@ -57,7 +57,7 @@ public class JwtProvider {
                 .header().keyId(KEY_ID).and()
                 .subject(userId)
                 .issuer(issuer)
-                .audience().add(appAudience).and()
+                .audience().add(apiAudience).and()
                 .claim("type", "refresh")
                 .id(UUID.randomUUID().toString())
                 .issuedAt(now)
@@ -80,7 +80,7 @@ public class JwtProvider {
         if (!issuer.equals(claims.getIssuer())) {
             throw new JwtException("Invalid issuer");
         }
-        if (claims.getAudience() == null || !claims.getAudience().contains(appAudience)) {
+        if (claims.getAudience() == null || !claims.getAudience().contains(apiAudience)) {
             throw new JwtException("Invalid audience");
         }
         if (claims.getSubject() == null || claims.getSubject().isBlank()) {
