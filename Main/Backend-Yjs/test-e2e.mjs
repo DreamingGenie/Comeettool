@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url'
 import * as Y from 'yjs'
 import {WebSocket} from 'ws'
 import {HocuspocusProvider} from '@hocuspocus/provider'
-import {exportJJWK, generateKeyPair, SignJWT} from 'jose'
+import {exportJWK, generateKeyPair, SignJWT} from 'jose'
 import pg from 'pg'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
