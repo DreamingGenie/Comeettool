@@ -81,4 +81,33 @@ public class User {
     public boolean isOnboarded() {
         return sex != null && age != null;
     }
+
+    // AUTH-06 PATCH 부분 수정 — 인자가 null이면 해당 필드는 건드리지 않는다(요청에 안 보낸 필드로 간주).
+    public void updateProfile(String nickname, String phone, String sex, Integer age,
+                               String jobFamily, String jobRole, String description, String displayColor) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (phone != null) {
+            this.phone = phone;
+        }
+        if (sex != null) {
+            this.sex = sex;
+        }
+        if (age != null) {
+            this.age = age;
+        }
+        if (jobFamily != null) {
+            this.jobFamily = jobFamily;
+        }
+        if (jobRole != null) {
+            this.jobRole = jobRole;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (displayColor != null) {
+            this.displayColor = displayColor;
+        }
+    }
 }
