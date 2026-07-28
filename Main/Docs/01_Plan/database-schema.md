@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS sound_texts CASCADE;
 DROP TABLE IF EXISTS minutes CASCADE;
 DROP TABLE IF EXISTS meeting_rooms CASCADE;
 DROP TABLE IF EXISTS participants CASCADE;
+DROP TABLE IF EXISTS meeting_member CASCADE;  -- 구 명칭(→ participants). 기존 스키마 재적용 시 정리용
 DROP TABLE IF EXISTS documents_version CASCADE;
 DROP TABLE IF EXISTS voices CASCADE;
 
