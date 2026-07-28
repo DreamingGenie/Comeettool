@@ -13,6 +13,7 @@ public record JwtProperties(
         String apiAudience,
         String yjsAudience,
         long accessExpirationSeconds,
-        long refreshExpirationSeconds
+        long refreshExpirationSeconds,
+        long collaborationExpirationSeconds
 ) {
 }

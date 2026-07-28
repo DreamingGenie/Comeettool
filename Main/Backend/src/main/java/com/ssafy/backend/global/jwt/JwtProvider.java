@@ -25,16 +25,20 @@ public class JwtProvider {
     private final RSAPublicKey publicKey;
     private final String issuer;
     private final String apiAudience;
+    private final String yjsAudience;
     private final long accessExpMs;
     private final long refreshExpMs;
+    private final long collaborationExpMs;
 
     public JwtProvider(JwtProperties props) {
         this.privateKey = RsaKeyUtil.loadPrivateKey(props.privateKeyPath());
         this.publicKey = (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath());
         this.issuer = props.issuer();
         this.apiAudience = props.apiAudience();
+        this.yjsAudience = props.yjsAudience();
         this.accessExpMs = props.accessExpirationSeconds() * 1000;
         this.refreshExpMs = props.refreshExpirationSeconds() * 1000;
+        this.collaborationExpMs = props.collaborationExpirationSeconds() * 1000;
     }
 
     public String createAccessToken(String userId) {
@@ -62,6 +66,33 @@ public class JwtProvider {
                 .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + refreshExpMs))
+                .signWith(privateKey, Jwts.SIG.RS256)
+                .compact();
+    }
+
+    public String createCollaborationToken(
+            String userId,
+            UUID documentId,
+            Long teamId,
+            String permission
+    ) {
+        if (!"READ".equals(permission) && !"WRITE".equals(permission)) {
+            throw new IllegalArgumentException("Permission must be READ or WRITE");
+        }
+
+        Date now = new Date();
+        return Jwts.builder()
+                .header().keyId(KEY_ID).and()
+                .subject(userId)
+                .issuer(issuer)
+                .audience().add(yjsAudience).and()
+                .claim("type", "collaboration")
+                .claim("documentId", documentId.toString())
+                .claim("teamId", teamId)
+                .claim("permission", permission)
+                .id(UUID.randomUUID().toString())
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + collaborationExpMs))
                 .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
     }
