@@ -1,11 +1,13 @@
 package com.ssafy.backend.global.jwt;
 
+import com.ssafy.backend.document.authorization.DocumentPermissionReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -18,9 +20,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 인증 필터 + SecurityConfig 통합 테스트 (실제 시큐리티 체인).
- * 로컬 PostgreSQL·keys/ 필요 (@SpringBootTest 컨텍스트).
- * (@AutoConfigureMockMvc 대신 MockMvcBuilders로 직접 구성 — Boot 4 패키지 이동 회피)
+ * 인증 필터 + SecurityConfig 통합 테스트 (실제 시큐리티 체인). 로컬 PostgreSQL·keys/ 필요 (@SpringBootTest 컨텍스트). (@AutoConfigureMockMvc 대신
+ * MockMvcBuilders로 직접 구성 — Boot 4 패키지 이동 회피)
  */
 @SpringBootTest
 @DisplayName("인증 필터 통합 (JwtAuthenticationFilter)")
@@ -34,6 +35,9 @@ class JwtAuthenticationFilterTest {
 
     @Autowired
     private JwtProvider jwtProvider;
+
+    @MockitoBean
+    private DocumentPermissionReader documentPermissionReader;
 
     private MockMvc mockMvc;
 
@@ -97,7 +101,16 @@ class JwtAuthenticationFilterTest {
     @DisplayName("보호 경로 - 만료 토큰 → 401 AUTH_TOKEN_EXPIRED")
     void protectedExpiredTokenReturns401Expired() throws Exception {
         JwtProvider expired = new JwtProvider(
-                new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", -120, -120));
+                new JwtProperties(
+                        "classpath:keys/jwt_private.pem",
+                        "classpath:keys/jwt_public.pem",
+                        "a707-api",
+                        "a707-api",
+                        "a707-yjs",
+                        -120,
+                        -120,
+                        300
+                ));
         String token = expired.createAccessToken("42");
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized())

@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import java.security.PublicKey;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.security.PrivateKey;
@@ -31,6 +32,7 @@ public class JwtProvider {
     private final long refreshExpMs;
     private final long collaborationExpMs;
 
+    @Autowired
     public JwtProvider(JwtProperties props) {
         this(
                 props,

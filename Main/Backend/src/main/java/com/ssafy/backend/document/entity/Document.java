@@ -18,7 +18,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "document")
+@Table(name = "documents")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Document {
