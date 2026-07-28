@@ -7,7 +7,7 @@ import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.entity.Member;
-import com.ssafy.backend.space.entity.MemberRole;
+import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.space.service.SpaceService;
@@ -61,8 +61,8 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional(readOnly = true)
     public List<ResponseSpaceListDto> findSpaceList(Long userId) {
-        // [Team, 내 역할] 을 한 번의 조인 쿼리로 가져온다.
-        List<Object[]> rows = memberRepository.findActiveTeamsWithMyRole(userId);
+        // [Team, 내 권한] 을 한 번의 조인 쿼리로 가져온다.
+        List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(userId);
         if (rows.isEmpty()) {
             return List.of();
         }
@@ -77,9 +77,9 @@ public class SpaceServiceImpl implements SpaceService {
         return rows.stream()
                 .map(row -> {
                     Team team = (Team) row[0];
-                    MemberRole role = (MemberRole) row[1];
+                    MemberAuthority authority = (MemberAuthority) row[1];
                     long count = memberCountByTeam.getOrDefault(team.getId(), 0L);
-                    return spaceMapper.toListItem(team, role.name(), count);
+                    return spaceMapper.toListItem(team, authority.name(), count);
                 })
                 .toList();
     }

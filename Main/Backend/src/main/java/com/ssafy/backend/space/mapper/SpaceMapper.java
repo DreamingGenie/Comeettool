@@ -28,7 +28,7 @@ public class SpaceMapper {
         );
     }
 
-    public ResponseSpaceListDto toListItem(Team team, String myRole, long memberCount) {
+    public ResponseSpaceListDto toListItem(Team team, String myAuthority, long memberCount) {
         return new ResponseSpaceListDto(
                 team.getId(),
                 team.getName(),
@@ -36,7 +36,7 @@ public class SpaceMapper {
                 team.getColor(),
                 team.getProfileImageUrl(),
                 team.getOwnerId(),
-                myRole,
+                myAuthority,
                 memberCount
         );
     }
@@ -46,8 +46,8 @@ public class SpaceMapper {
                 member.getId(),
                 member.getUserId(),
                 member.getNickname(),
-                member.getRole().name(),
-                member.getAuthority().name()
+                member.getAuthority().name(),
+                member.getTeamRoleId()
         );
     }
 

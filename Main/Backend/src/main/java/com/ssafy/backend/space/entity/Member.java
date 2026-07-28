@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 /**
  * members 테이블 매핑 엔티티 (스페이스 참여자).
  * (team_id, user_id) 유니크 — 한 사용자는 한 스페이스에 하나의 멤버로만 존재한다.
- * team·user 는 BIGINT FK 이지만 본 작업 범위에서는 식별자(Long)로만 다룬다.
+ * team·user·team_role 은 BIGINT FK 이지만 본 작업 범위에서는 식별자(Long)로만 다룬다.
  */
 @Entity
 @Table(name = "members")
@@ -36,32 +36,32 @@ public class Member {
     private Long teamId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
-    private MemberRole role;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "authority", nullable = false)
-    private MemberRole authority;
+    private MemberAuthority authority;
+
+    // 배정된 역할(team_roles FK). 1 멤버 = 최대 1 역할, 미배정 시 null. 역할 부여는 MEMBER-06 범위.
+    @Column(name = "team_role_id")
+    private Long teamRoleId;
 
     @Column(name = "nickname", nullable = false)
     private String nickname;
 
     @Builder
-    private Member(Long userId, Long teamId, MemberRole role, MemberRole authority, String nickname) {
+    private Member(Long userId, Long teamId, MemberAuthority authority, Long teamRoleId, String nickname) {
         this.userId = userId;
         this.teamId = teamId;
-        this.role = role;
         this.authority = authority;
+        this.teamRoleId = teamRoleId;
         this.nickname = nickname;
     }
 
-    // SPACE-01: 생성자를 Owner 멤버로 등록. role·authority 모두 OWNER.
+    // SPACE-01: 생성자를 Owner 권한 멤버로 등록. 역할은 미배정(null).
     public static Member owner(Long userId, Long teamId, String nickname) {
         return Member.builder()
                 .userId(userId)
                 .teamId(teamId)
-                .role(MemberRole.OWNER)
-                .authority(MemberRole.OWNER)
+                .authority(MemberAuthority.OWNER)
+                .teamRoleId(null)
                 .nickname(nickname)
                 .build();
     }

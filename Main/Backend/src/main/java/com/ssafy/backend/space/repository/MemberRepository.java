@@ -21,16 +21,16 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     List<Object[]> countMembersByTeamIds(@Param("teamIds") List<Long> teamIds);
 
     /**
-     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 역할.
-     * Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team, MemberRole] 배열이다.
+     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 권한.
+     * Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team, MemberAuthority] 배열이다.
      */
     @Query("""
-            select t, m.role
+            select t, m.authority
             from Team t, Member m
             where m.teamId = t.id
               and m.userId = :userId
               and t.isDeleted = false
             order by t.createdAt desc
             """)
-    List<Object[]> findActiveTeamsWithMyRole(@Param("userId") Long userId);
+    List<Object[]> findActiveTeamsWithMyAuthority(@Param("userId") Long userId);
 }

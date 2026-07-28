@@ -7,7 +7,7 @@ import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.entity.Member;
-import com.ssafy.backend.space.entity.MemberRole;
+import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.space.repository.MemberRepository;
@@ -105,8 +105,8 @@ class SpaceServiceImplTest {
             Member savedMember = memberCaptor.getValue();
             assertThat(savedMember.getUserId()).isEqualTo(USER_ID);
             assertThat(savedMember.getTeamId()).isEqualTo(TEAM_ID);
-            assertThat(savedMember.getRole()).isEqualTo(MemberRole.OWNER);
-            assertThat(savedMember.getAuthority()).isEqualTo(MemberRole.OWNER);
+            assertThat(savedMember.getAuthority()).isEqualTo(MemberAuthority.OWNER);
+            assertThat(savedMember.getTeamRoleId()).isNull();
         }
 
         @Test
@@ -165,7 +165,7 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("참여 중인 스페이스가 없으면 빈 목록을 반환한다")
         void findSpaceList_returnsEmptyWhenNoneJoined() {
-            given(memberRepository.findActiveTeamsWithMyRole(USER_ID)).willReturn(List.of());
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID)).willReturn(List.of());
 
             List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
 
@@ -178,8 +178,8 @@ class SpaceServiceImplTest {
         void findSpaceList_fillsMyRoleAndMemberCount() {
             // given
             Team team = teamWithId(TEAM_ID, USER_ID);
-            given(memberRepository.findActiveTeamsWithMyRole(USER_ID))
-                    .willReturn(List.<Object[]>of(new Object[]{team, MemberRole.OWNER}));
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID))
+                    .willReturn(List.<Object[]>of(new Object[]{team, MemberAuthority.OWNER}));
             given(memberRepository.countMembersByTeamIds(List.of(TEAM_ID)))
                     .willReturn(List.<Object[]>of(new Object[]{TEAM_ID, 3L}));
 
@@ -189,7 +189,7 @@ class SpaceServiceImplTest {
             // then
             assertThat(result).hasSize(1);
             assertThat(result.get(0).spaceId()).isEqualTo(TEAM_ID);
-            assertThat(result.get(0).myRole()).isEqualTo("OWNER");
+            assertThat(result.get(0).myAuthority()).isEqualTo("OWNER");
             assertThat(result.get(0).memberCount()).isEqualTo(3L);
         }
     }
@@ -214,7 +214,7 @@ class SpaceServiceImplTest {
             // then
             assertThat(result.spaceId()).isEqualTo(TEAM_ID);
             assertThat(result.members()).hasSize(1);
-            assertThat(result.members().get(0).role()).isEqualTo("OWNER");
+            assertThat(result.members().get(0).authority()).isEqualTo("OWNER");
         }
 
         @Test

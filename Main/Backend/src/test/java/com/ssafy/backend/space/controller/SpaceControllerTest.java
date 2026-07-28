@@ -119,7 +119,7 @@ class SpaceControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value("SUCCESS"))
                     .andExpect(jsonPath("$.data[0].spaceId").value(10))
-                    .andExpect(jsonPath("$.data[0].myRole").value("OWNER"))
+                    .andExpect(jsonPath("$.data[0].myAuthority").value("OWNER"))
                     .andExpect(jsonPath("$.data[0].memberCount").value(3));
         }
 
@@ -145,7 +145,7 @@ class SpaceControllerTest {
         @DisplayName("멤버면 상세 정보와 참여자를 200으로 반환한다")
         void findSpaceDetails_returns200WithInfoAndMembers() throws Exception {
             ResponseSpaceMemberDto member =
-                    new ResponseSpaceMemberDto(1L, 7L, "진", "OWNER", "OWNER");
+                    new ResponseSpaceMemberDto(1L, 7L, "진", "OWNER", null);
             ResponseSpaceDetailDto detail =
                     new ResponseSpaceDetailDto(10L, "팀A", "설명", "#123456", null, 7L, null, List.of(member));
             given(spaceService.findSpaceDetails(7L, 10L)).willReturn(detail);
@@ -153,7 +153,7 @@ class SpaceControllerTest {
             mockMvc.perform(get("/api/v1/spaces/{spaceId}", 10L))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.spaceId").value(10))
-                    .andExpect(jsonPath("$.data.members[0].role").value("OWNER"));
+                    .andExpect(jsonPath("$.data.members[0].authority").value("OWNER"));
         }
 
         @Test
