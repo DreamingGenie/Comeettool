@@ -72,7 +72,8 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenService.save(userId, refreshToken, jwtProvider.getRefreshExpirationSeconds());
 
-        return new ResponseLoginDto("Bearer", accessToken, refreshToken, userId, user.isOnboarded());
+        // JWT sub·Redis 키는 String(userId)을 그대로 쓰고, 응답 DTO만 AUTH-01/05와 통일해 Long으로 내려준다.
+        return new ResponseLoginDto("Bearer", accessToken, refreshToken, user.getId(), user.isOnboarded());
     }
 
     @Override

@@ -330,7 +330,7 @@ class AuthServiceImplTest {
 
             assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
             assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
-            assertThat(result.userId()).isEqualTo("1");
+            assertThat(result.userId()).isEqualTo(1L);
         }
 
         @Test
