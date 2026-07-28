@@ -4,7 +4,7 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
-import com.ssafy.backend.user.mapper.UserMapper;
+import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,7 +23,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * UserServiceImpl.getMyProfile() 단위 테스트 (AUTH-05).
- * UserRepository만 Mock — UserMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서
+ * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서
  * "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
@@ -35,13 +35,13 @@ class UserServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
-    private final UserMapper userMapper = new UserMapper();
+    private final UserProfileMapper userProfileMapper = new UserProfileMapper();
 
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, userMapper);
+        userService = new UserServiceImpl(userRepository, userProfileMapper);
     }
 
     private User buildUser() {

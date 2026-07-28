@@ -5,10 +5,10 @@ import com.ssafy.backend.user.entity.User;
 import org.springframework.stereotype.Component;
 
 /**
- * user 도메인의 Entity ↔ Dto 변환 전담 (auth.mapper.UserMapper와는 별개 — 회원가입 전용 매핑만 그쪽에 있음).
+ * user 도메인의 Entity ↔ Dto 변환 전담.
  */
 @Component
-public class UserMapper {
+public class UserProfileMapper {
 
     public ResponseMyProfileDto toMyProfileResponse(User user) {
         return new ResponseMyProfileDto(

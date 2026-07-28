@@ -4,7 +4,7 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
-import com.ssafy.backend.user.mapper.UserMapper;
+import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
-    private final UserMapper userMapper;
+    private final UserProfileMapper userProfileMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -28,6 +28,6 @@ public class UserServiceImpl implements UserService {
         // 탈퇴 등으로 이후 유효하지 않게 될 가능성을 방어적으로 처리한다.
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-        return userMapper.toMyProfileResponse(user);
+        return userProfileMapper.toMyProfileResponse(user);
     }
 }
