@@ -4,6 +4,7 @@ public record ResponseLoginDto(
         String tokenType,
         String accessToken,
         String refreshToken,
-        String userId
+        Long userId,
+        boolean onboarded
 ) {
 }

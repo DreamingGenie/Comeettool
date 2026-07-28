@@ -76,4 +76,38 @@ public class User {
         this.password = password;
         this.isDeleted = false;
     }
+
+    // 별도 컬럼 없이 sex·age 존재 여부로 판단 (온보딩 3단계에서 두 값을 함께 입력받는 화면 기준).
+    public boolean isOnboarded() {
+        return sex != null && age != null;
+    }
+
+    // AUTH-06 PATCH 부분 수정 — 인자가 null이면 해당 필드는 건드리지 않는다(요청에 안 보낸 필드로 간주).
+    public void updateProfile(String nickname, String phone, String sex, Integer age,
+                               String jobFamily, String jobRole, String description, String displayColor) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (phone != null) {
+            this.phone = phone;
+        }
+        if (sex != null) {
+            this.sex = sex;
+        }
+        if (age != null) {
+            this.age = age;
+        }
+        if (jobFamily != null) {
+            this.jobFamily = jobFamily;
+        }
+        if (jobRole != null) {
+            this.jobRole = jobRole;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (displayColor != null) {
+            this.displayColor = displayColor;
+        }
+    }
 }

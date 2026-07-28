@@ -302,11 +302,23 @@ class AuthServiceImplTest {
         }
 
         private void givenLoginStubs() {
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(userWithId));
+            givenLoginStubs(userWithId);
+        }
+
+        private void givenLoginStubs(User user) {
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
             given(jwtProvider.createAccessToken("1")).willReturn(ACCESS_TOKEN);
             given(jwtProvider.createRefreshToken("1")).willReturn(REFRESH_TOKEN);
             given(jwtProvider.getRefreshExpirationSeconds()).willReturn(REFRESH_TTL_SECONDS);
+        }
+
+        private User buildUserWithOnboardingFields(String sex, Integer age) {
+            User user = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
+            ReflectionTestUtils.setField(user, "id", 1L);
+            ReflectionTestUtils.setField(user, "sex", sex);
+            ReflectionTestUtils.setField(user, "age", age);
+            return user;
         }
 
         @Test
@@ -318,7 +330,7 @@ class AuthServiceImplTest {
 
             assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
             assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
-            assertThat(result.userId()).isEqualTo("1");
+            assertThat(result.userId()).isEqualTo(1L);
         }
 
         @Test
@@ -363,6 +375,47 @@ class AuthServiceImplTest {
             assertThat(ttlCaptor.getValue())
                     .as("TTL은 14일(1,209,600초)이어야 한다")
                     .isEqualTo(1_209_600L);
+        }
+
+        @Test
+        @DisplayName("sex와_age가_모두_있으면_로그인_응답의_onboarded는_true다")
+        void sex와_age가_모두_있으면_로그인_응답의_onboarded는_true다() {
+            givenLoginStubs(buildUserWithOnboardingFields("FEMALE", 25));
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.onboarded()).isTrue();
+        }
+
+        @Test
+        @DisplayName("sex만_있고_age가_없으면_로그인_응답의_onboarded는_false다")
+        void sex만_있고_age가_없으면_로그인_응답의_onboarded는_false다() {
+            givenLoginStubs(buildUserWithOnboardingFields("FEMALE", null));
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.onboarded()).isFalse();
+        }
+
+        @Test
+        @DisplayName("age만_있고_sex가_없으면_로그인_응답의_onboarded는_false다")
+        void age만_있고_sex가_없으면_로그인_응답의_onboarded는_false다() {
+            givenLoginStubs(buildUserWithOnboardingFields(null, 25));
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.onboarded()).isFalse();
+        }
+
+        @Test
+        @DisplayName("sex와_age가_모두_없으면_로그인_응답의_onboarded는_false다")
+        void sex와_age가_모두_없으면_로그인_응답의_onboarded는_false다() {
+            // userWithId는 email·password만 채워져 있어 sex·age가 기본적으로 null이다.
+            givenLoginStubs();
+
+            ResponseLoginDto result = authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD));
+
+            assertThat(result.onboarded()).isFalse();
         }
     }
 
