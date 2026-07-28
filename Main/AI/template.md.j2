@@ -1,0 +1,47 @@
+# 회의록: {{ minutes.title }}
+
+- **일시**: {{ meeting_date }}
+- **참석 화자 수**: {{ speaker_count }}
+
+## 요약
+{{ minutes.summary }}
+
+## 주요 논의사항
+{% for topic in minutes.topics %}
+{{ loop.index }}. **{{ topic.title }}**
+   {{ topic.summary }}
+{% else %}
+_(추출된 주제 없음)_
+{% endfor %}
+
+## 결정사항
+| 결정 내용 | 근거 시점 |
+|---|---|
+{% for d in minutes.decisions %}| {{ d.content }} | {{ d.timestamp }} |
+{% else %}
+_(결정사항 없음)_
+{% endfor %}
+
+## 액션 아이템
+| 담당자 | 할 일 | 기한 | 근거 시점 |
+|---|---|---|---|
+{% for a in minutes.action_items %}| {{ a.assignee or "미배정" }} | {{ a.task }} | {{ a.due_date or "-" }} | {{ a.source_timestamp }} |
+{% else %}
+_(액션 아이템 없음)_
+{% endfor %}
+
+## 미해결/보류 사항
+{% for issue in minutes.open_issues %}- {{ issue }}
+{% else %}
+_(없음)_
+{% endfor %}
+
+---
+<details>
+<summary>전체 발화 로그 (원문)</summary>
+
+{% for seg in transcript %}
+[{{ seg.speaker }}, {{ "%.1f"|format(seg.start) }}s] {{ seg.text }}
+{% endfor %}
+
+</details>
