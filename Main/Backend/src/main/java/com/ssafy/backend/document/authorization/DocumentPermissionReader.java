@@ -8,6 +8,6 @@ import java.util.UUID;
  *
  * <p>구현체는 OWNER/MEMBER를 WRITE로, GUEST를 READ로 변환해야 한다.</p>
  */
-interface DocumentPermissionReader {
+public interface DocumentPermissionReader {
     Optional<DocumentAccess> findByDocumentIdAndUserId(UUID documentId, Long userId);
 }
