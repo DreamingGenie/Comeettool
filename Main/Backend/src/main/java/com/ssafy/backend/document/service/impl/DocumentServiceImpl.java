@@ -6,6 +6,7 @@ import com.ssafy.backend.document.dto.ResponseCollaborationTokenDto;
 import com.ssafy.backend.document.service.DocumentService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.jwt.JwtProvider;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -18,11 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentPermissionReader documentPermissionReader;
-    private final jwtProvider jwtProvider;
+    private final JwtProvider jwtProvider;
 
     @Override
     @Transactional(readOnly = true)
-    ResponseCollaborationTokenDto issueCollaborationToken(UUID documentId, String userId) {
+    public ResponseCollaborationTokenDto issueCollaborationToken(UUID documentId, String userId) {
         Long parsedUserId = parseUserId(userId);
         DocumentAccess access = documentPermissionReader
                 .findByDocumentIdAndUserId(documentId, parsedUserId)
