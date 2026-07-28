@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DocumentRepository extends JpaRepository<Document, UUID> {
 
-    Optional<Document> findByIdAndDeletedFalse(UUID id);
+    Optional<Document> findById(UUID id);
 
-    List<Document> findAllByTeamIdAndDeletedFalseOrderByUpdatedAtDesc(Long teamId);
+    List<Document> findAllByTeamId(Long teamId);
 }
