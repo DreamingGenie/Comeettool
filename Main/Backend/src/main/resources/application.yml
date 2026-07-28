@@ -19,8 +19,12 @@ jwt:
   # classpath 로드(실행 디렉터리 무관). prod는 외부 파일 주입: file:/secure/path
   private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt_private.pem}
   public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt_public.pem}
+  issuer: ${JWT_ISSUER:a707-api}
+  api-audience: ${JWT_API_AUDIENCE:a707-api}
+  yjs-audience: ${JWT_YJS_AUDIENCE:a707-yjs}
   access-expiration-seconds: 1800      # 30분
   refresh-expiration-seconds: 1209600  # 14일
+  collaboration-expiration-seconds: 300 # 5분
 
 ---
 # ===== local (개인 로컬 개발) =====
