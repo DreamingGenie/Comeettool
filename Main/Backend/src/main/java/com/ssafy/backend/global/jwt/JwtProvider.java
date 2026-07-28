@@ -3,6 +3,7 @@ package com.ssafy.backend.global.jwt;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import java.security.PublicKey;
 import org.springframework.stereotype.Component;
 
 import java.security.PrivateKey;
@@ -31,8 +32,16 @@ public class JwtProvider {
     private final long collaborationExpMs;
 
     public JwtProvider(JwtProperties props) {
-        this.privateKey = RsaKeyUtil.loadPrivateKey(props.privateKeyPath());
-        this.publicKey = (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath());
+        this(
+                props,
+                RsaKeyUtil.loadPrivateKey(props.privateKeyPath()),
+                (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath())
+        );
+    }
+
+    JwtProvider(JwtProperties props, PrivateKey privateKey, RSAPublicKey publicKey) {
+        this.privateKey = privateKey;
+        this.publicKey = publicKey;
         this.issuer = props.issuer();
         this.apiAudience = props.apiAudience();
         this.yjsAudience = props.yjsAudience();
