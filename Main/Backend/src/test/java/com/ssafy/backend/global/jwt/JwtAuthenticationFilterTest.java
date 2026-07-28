@@ -27,8 +27,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("인증 필터 통합 (JwtAuthenticationFilter)")
 class JwtAuthenticationFilterTest {
 
-    // 핸들러가 없는 보호 경로 → 인증 통과 시 404(NOT_FOUND)
-    private static final String PROTECTED = "/api/v1/spaces";
+    // 핸들러가 없는 보호 경로 → 인증 통과 시 404(NOT_FOUND).
+    // 실제 핸들러(/api/v1/spaces 등)와 겹치지 않도록 존재하지 않는 경로를 쓴다.
+    private static final String PROTECTED = "/api/v1/__no_handler__";
 
     @Autowired
     private WebApplicationContext context;
