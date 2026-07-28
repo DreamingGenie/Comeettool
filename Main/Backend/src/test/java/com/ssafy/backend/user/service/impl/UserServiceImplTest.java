@@ -1,8 +1,12 @@
 package com.ssafy.backend.user.service.impl;
 
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.jwt.JwtProvider;
+import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
+import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
@@ -14,13 +18,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 /**
  * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile).
@@ -36,13 +45,22 @@ class UserServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtProvider jwtProvider;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     private final UserProfileMapper userProfileMapper = new UserProfileMapper();
 
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, userProfileMapper);
+        userService = new UserServiceImpl(userRepository, userProfileMapper, passwordEncoder, jwtProvider, refreshTokenService);
     }
 
     private User buildUser() {
@@ -258,6 +276,179 @@ class UserServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+    }
+
+    // =====================================================================
+    // AUTH-07: changePassword() 테스트
+    // =====================================================================
+
+    private User buildUserWithPassword(String encodedPassword) {
+        User user = User.builder().email("user@example.com").password(encodedPassword).build();
+        ReflectionTestUtils.setField(user, "id", USER_ID);
+        return user;
+    }
+
+    @Nested
+    @DisplayName("비밀번호 변경 성공")
+    class ChangePasswordSuccess {
+
+        @Test
+        @DisplayName("현재_비밀번호가_일치하면_새_비밀번호로_갱신하고_새_토큰을_반환한다")
+        void 현재_비밀번호가_일치하면_새_비밀번호로_갱신하고_새_토큰을_반환한다() {
+            // given
+            User user = buildUserWithPassword("$2a$10$encoded");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("OldPass1!", "$2a$10$encoded")).willReturn(true);
+            given(passwordEncoder.encode("NewPass1!")).willReturn("$2a$10$newencoded");
+            given(jwtProvider.createAccessToken("1")).willReturn("new.access.token");
+            given(jwtProvider.createRefreshToken("1")).willReturn("new.refresh.token");
+            given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1_209_600L);
+
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+
+            // when
+            ResponseChangePasswordDto result = userService.changePassword(USER_ID, request);
+
+            // then
+            assertThat(result.tokenType()).isEqualTo("Bearer");
+            assertThat(result.accessToken()).isEqualTo("new.access.token");
+            assertThat(result.refreshToken()).isEqualTo("new.refresh.token");
+        }
+
+        @Test
+        @DisplayName("비밀번호_갱신_후_Redis에_새_Refresh_Token이_저장된다")
+        void 비밀번호_갱신_후_Redis에_새_Refresh_Token이_저장된다() {
+            // given
+            User user = buildUserWithPassword("$2a$10$encoded");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches(anyString(), anyString())).willReturn(true);
+            given(passwordEncoder.encode(anyString())).willReturn("$2a$10$newencoded");
+            given(jwtProvider.createAccessToken("1")).willReturn("new.access.token");
+            given(jwtProvider.createRefreshToken("1")).willReturn("new.refresh.token");
+            given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1_209_600L);
+
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+
+            // when
+            userService.changePassword(USER_ID, request);
+
+            // then
+            verify(refreshTokenService).save("1", "new.refresh.token", 1_209_600L);
+        }
+
+        @Test
+        @DisplayName("password_hash_필드가_새_값으로_갱신된다")
+        void password_hash_필드가_새_값으로_갱신된다() {
+            // given
+            User user = buildUserWithPassword("$2a$10$old");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches(anyString(), anyString())).willReturn(true);
+            given(passwordEncoder.encode("NewPass1!")).willReturn("$2a$10$new");
+            given(jwtProvider.createAccessToken(anyString())).willReturn("access");
+            given(jwtProvider.createRefreshToken(anyString())).willReturn("refresh");
+            given(jwtProvider.getRefreshExpirationSeconds()).willReturn(1_209_600L);
+
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+
+            // when
+            userService.changePassword(USER_ID, request);
+
+            // then: 더티 체킹으로 변경됐는지 — user 엔티티의 password 필드가 새 값으로 세팅됐는지 확인
+            assertThat(user.getPassword()).isEqualTo("$2a$10$new");
+        }
+    }
+
+    @Nested
+    @DisplayName("비밀번호 변경 실패")
+    class ChangePasswordFailure {
+
+        @Test
+        @DisplayName("존재하지_않는_userId면_USER_NOT_FOUND_예외가_발생한다")
+        void 존재하지_않는_userId면_USER_NOT_FOUND_예외가_발생한다() {
+            // given
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+
+            // when & then
+            assertThatThrownBy(() -> userService.changePassword(999L, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("현재_비밀번호가_틀리면_PASSWORD_MISMATCH_예외가_발생한다")
+        void 현재_비밀번호가_틀리면_PASSWORD_MISMATCH_예외가_발생한다() {
+            // given
+            User user = buildUserWithPassword("$2a$10$encoded");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("WrongPass1!", "$2a$10$encoded")).willReturn(false);
+
+            RequestChangePasswordDto request = new RequestChangePasswordDto("WrongPass1!", "NewPass1!");
+
+            // when & then
+            assertThatThrownBy(() -> userService.changePassword(USER_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        @Test
+        @DisplayName("현재_비밀번호_불일치_시_토큰_발급과_Redis_저장이_수행되지_않는다")
+        void 현재_비밀번호_불일치_시_토큰_발급과_Redis_저장이_수행되지_않는다() {
+            // given
+            User user = buildUserWithPassword("$2a$10$encoded");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(passwordEncoder.matches(anyString(), anyString())).willReturn(false);
+
+            RequestChangePasswordDto request = new RequestChangePasswordDto("WrongPass1!", "NewPass1!");
+
+            // when
+            assertThatThrownBy(() -> userService.changePassword(USER_ID, request))
+                    .isInstanceOf(CustomException.class);
+
+            // then: 토큰 발급·Redis 저장 일체 없음
+            verify(jwtProvider, org.mockito.Mockito.never()).createAccessToken(anyString());
+            verify(jwtProvider, org.mockito.Mockito.never()).createRefreshToken(anyString());
+            verify(refreshTokenService, org.mockito.Mockito.never()).save(anyString(), anyString(), anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("비밀번호 변경 - Bean Validation")
+    class RequestChangePasswordDtoValidation {
+
+        private final jakarta.validation.Validator validator =
+                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+
+        @Test
+        @DisplayName("currentPassword가_blank면_검증_실패")
+        void currentPassword가_blank면_검증_실패() {
+            RequestChangePasswordDto dto = new RequestChangePasswordDto("", "NewPass1!");
+            assertThat(validator.validate(dto)).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("newPassword가_정책에_맞지_않으면_검증_실패")
+        void newPassword가_정책에_맞지_않으면_검증_실패() {
+            // 특수문자 없음
+            RequestChangePasswordDto dto = new RequestChangePasswordDto("OldPass1!", "NewPass12");
+            assertThat(validator.validate(dto)).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("newPassword가_8자_미만이면_검증_실패")
+        void newPassword가_8자_미만이면_검증_실패() {
+            RequestChangePasswordDto dto = new RequestChangePasswordDto("OldPass1!", "Np1!");
+            assertThat(validator.validate(dto)).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("유효한_요청이면_검증_통과")
+        void 유효한_요청이면_검증_통과() {
+            RequestChangePasswordDto dto = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+            assertThat(validator.validate(dto)).isEmpty();
         }
     }
 }

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
+import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -256,6 +258,126 @@ class UserControllerTest {
 
             // when & then
             mockMvc.perform(patch("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me/password 성공")
+    class ChangePasswordSuccess {
+
+        @Test
+        @DisplayName("유효한_요청이면_200과_새_토큰을_반환한다")
+        void 유효한_요청이면_200과_새_토큰을_반환한다() throws Exception {
+            // given
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+            ResponseChangePasswordDto response = new ResponseChangePasswordDto(
+                    "Bearer", "new.access.token", "new.refresh.token"
+            );
+            given(userService.changePassword(eq(1L), any(RequestChangePasswordDto.class))).willReturn(response);
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me/password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                    .andExpect(jsonPath("$.data.accessToken").value("new.access.token"))
+                    .andExpect(jsonPath("$.data.refreshToken").value("new.refresh.token"));
+        }
+
+        @Test
+        @DisplayName("principal의_userId가_Long으로_변환되어_서비스에_전달된다")
+        void principal의_userId가_Long으로_변환되어_서비스에_전달된다() throws Exception {
+            // given
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+            given(userService.changePassword(eq(1L), any(RequestChangePasswordDto.class)))
+                    .willReturn(new ResponseChangePasswordDto("Bearer", "a", "r"));
+            authenticateAs(USER_ID);
+
+            // when
+            mockMvc.perform(patch("/api/v1/users/me/password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+
+            // then
+            verify(userService).changePassword(eq(1L), any(RequestChangePasswordDto.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me/password 검증 실패")
+    class ChangePasswordValidationFailure {
+
+        @Test
+        @DisplayName("currentPassword가_blank이면_400_VALIDATION_FAILED를_반환한다")
+        void currentPassword가_blank이면_400_VALIDATION_FAILED를_반환한다() throws Exception {
+            // given: currentPassword 빈 문자열
+            RequestChangePasswordDto request = new RequestChangePasswordDto("", "NewPass1!");
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me/password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("newPassword가_정책_위반이면_400_VALIDATION_FAILED를_반환한다")
+        void newPassword가_정책_위반이면_400_VALIDATION_FAILED를_반환한다() throws Exception {
+            // given: 특수문자 없음 — 정책 위반
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NoSpecial1");
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me/password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me/password 실패")
+    class ChangePasswordFailure {
+
+        @Test
+        @DisplayName("현재_비밀번호_불일치_시_401_PASSWORD_MISMATCH를_반환한다")
+        void 현재_비밀번호_불일치_시_401_PASSWORD_MISMATCH를_반환한다() throws Exception {
+            // given
+            RequestChangePasswordDto request = new RequestChangePasswordDto("WrongPass1!", "NewPass1!");
+            given(userService.changePassword(eq(1L), any(RequestChangePasswordDto.class)))
+                    .willThrow(new CustomException(ErrorCode.PASSWORD_MISMATCH));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me/password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("PASSWORD_MISMATCH"));
+        }
+
+        @Test
+        @DisplayName("서비스에서_USER_NOT_FOUND가_발생하면_404를_반환한다")
+        void 서비스에서_USER_NOT_FOUND가_발생하면_404를_반환한다() throws Exception {
+            // given
+            RequestChangePasswordDto request = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
+            given(userService.changePassword(eq(1L), any(RequestChangePasswordDto.class)))
+                    .willThrow(new CustomException(ErrorCode.USER_NOT_FOUND));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me/password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound())

@@ -1,19 +1,24 @@
 package com.ssafy.backend.user.service.impl;
 
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.jwt.JwtProvider;
+import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
+import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정 로직. 이후 AUTH-07~08, 10도 여기에 추가될 예정.
+ * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정, AUTH-07 비밀번호 변경 로직. 이후 AUTH-08, 10, 11도 여기에 추가될 예정.
  */
 @Service
 @RequiredArgsConstructor
@@ -21,6 +26,9 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final UserProfileMapper userProfileMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional(readOnly = true)
@@ -45,5 +53,28 @@ public class UserServiceImpl implements UserService {
         );
 
         return userProfileMapper.toMyProfileResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public ResponseChangePasswordDto changePassword(Long userId, RequestChangePasswordDto request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        // 현재 비밀번호 BCrypt 검증
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        // 새 비밀번호로 갱신 (더티 체킹 — save() 불필요)
+        user.updatePassword(passwordEncoder.encode(request.newPassword()));
+
+        // 새 토큰 발급 및 Redis Refresh Token 교체
+        String userIdStr = String.valueOf(userId);
+        String newAccessToken = jwtProvider.createAccessToken(userIdStr);
+        String newRefreshToken = jwtProvider.createRefreshToken(userIdStr);
+        refreshTokenService.save(userIdStr, newRefreshToken, jwtProvider.getRefreshExpirationSeconds());
+
+        return new ResponseChangePasswordDto("Bearer", newAccessToken, newRefreshToken);
     }
 }

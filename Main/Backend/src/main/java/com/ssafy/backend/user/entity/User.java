@@ -110,4 +110,9 @@ public class User {
             this.displayColor = displayColor;
         }
     }
+
+    // AUTH-07 비밀번호 변경 — 영속 엔티티 필드 변경 → 더티 체킹으로 자동 UPDATE, save() 불필요.
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
 }
