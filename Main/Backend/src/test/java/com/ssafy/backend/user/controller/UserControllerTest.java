@@ -1,8 +1,10 @@
 package com.ssafy.backend.user.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -22,20 +25,22 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Collections;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * UserController 단위(standalone MockMvc) 테스트 (AUTH-05).
- * Spring 컨텍스트를 띄우지 않고 컨트롤러 하나만 MockMvc에 등록한다 — SecurityConfig·DB·Redis 전부 불필요.
- * (@WebMvcTest는 앱의 실제 SecurityConfig까지 함께 로드해 JwtProvider 등 연쇄적인 빈이 필요해져 이 방식을 택함)
- * standalone 모드엔 시큐리티 필터 체인이 없어 SecurityMockMvcRequestPostProcessors.authentication()이 먹지 않으므로,
- * SecurityContextHolder에 직접 Authentication을 심어 @AuthenticationPrincipal을 채운다.
- * UserService는 Mock — 요청/응답 매핑·principal(userId) 처리·예외→상태코드 변환만 검증한다.
- * 토큰 자체가 없는 401 케이스는 실제 필터 체인이 필요해 JwtAuthenticationFilterTest(@SpringBootTest)에서 검증한다.
+ * UserController 단위(standalone MockMvc) 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile). Spring 컨텍스트를 띄우지 않고 컨트롤러
+ * 하나만 MockMvc에 등록한다 — SecurityConfig·DB·Redis 전부 불필요. (@WebMvcTest는 앱의 실제 SecurityConfig까지 함께 로드해 JwtProvider 등 연쇄적인 빈이
+ * 필요해져 이 방식을 택함) standalone 모드엔 시큐리티 필터 체인이 없어 SecurityMockMvcRequestPostProcessors.authentication()이 먹지 않으므로,
+ * SecurityContextHolder에 직접 Authentication을 심어 @AuthenticationPrincipal을 채운다. UserService는 Mock — 요청/응답
+ * 매핑·principal(userId) 처리·예외→상태코드 변환만 검증한다. 토큰 자체가 없는 401 케이스는 실제 필터 체인이 필요해
+ * JwtAuthenticationFilterTest(@SpringBootTest)에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserController 단위 테스트")
@@ -48,6 +53,8 @@ class UserControllerTest {
 
     @InjectMocks
     private UserController userController;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private MockMvc mockMvc;
 
@@ -151,6 +158,106 @@ class UserControllerTest {
 
             // when & then
             mockMvc.perform(get("/api/v1/users/me"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me 성공")
+    class ModifyMyProfileSuccess {
+
+        @Test
+        @DisplayName("인증된_사용자가_수정을_요청하면_200과_수정된_프로필을_반환한다")
+        void 인증된_사용자가_수정을_요청하면_200과_수정된_프로필을_반환한다() throws Exception {
+            // given
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "새닉네임", "010-1234-5678", "M", 20,
+                    "소프트웨어 개발", "Frontend Developer", "안녕하세요!", "#3B82F6"
+            );
+            ResponseMyProfileDto response = new ResponseMyProfileDto(
+                    1L, "user1@test.com", "새닉네임", "010-1234-5678",
+                    "https://cdn.example.com/profile.jpg", "M", 20,
+                    "소프트웨어 개발", "Frontend Developer", "안녕하세요!", "#3B82F6"
+            );
+            given(userService.modifyMyProfile(eq(1L), any(RequestUpdateProfileDto.class))).willReturn(response);
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.nickname").value("새닉네임"))
+                    .andExpect(jsonPath("$.data.phone").value("010-1234-5678"))
+                    .andExpect(jsonPath("$.data.userColor").value("#3B82F6"));
+        }
+
+        @Test
+        @DisplayName("빈_body를_보내도_검증을_통과하고_서비스에는_전부_null인_요청이_전달된다")
+        void 빈_body를_보내도_검증을_통과하고_서비스에는_전부_null인_요청이_전달된다() throws Exception {
+            // given: 필드를 아예 안 보낸 경우 — 실제 미변경 로직은 서비스 계층(UserServiceImplTest)에서 검증됨.
+            // 여기선 컨트롤러가 이걸 400으로 거부하지 않고 그대로 통과시키는지만 확인한다.
+            ResponseMyProfileDto unchanged = new ResponseMyProfileDto(
+                    1L, "user1@test.com", "기존닉네임", "010-0000-0000",
+                    null, "F", 30, "기존직군", "기존직무", "기존소개", "#000000"
+            );
+            given(userService.modifyMyProfile(eq(1L), any(RequestUpdateProfileDto.class))).willReturn(unchanged);
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.nickname").value("기존닉네임"));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me 검증 실패")
+    class ModifyMyProfileValidationFailure {
+
+        // 검증 규칙 자체(경계값 등)의 상세 커버리지는 RequestUpdateProfileDtoTest가 전담한다.
+        // 여기선 검증 실패가 실제로 400 VALIDATION_FAILED로 배선되는지 대표 케이스 하나로만 확인한다.
+        @Test
+        @DisplayName("검증에_실패하면_400_VALIDATION_FAILED를_반환한다")
+        void 검증에_실패하면_400_VALIDATION_FAILED를_반환한다() throws Exception {
+            // given: 21자 (max=20 초과)
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "가".repeat(21), null, null, null, null, null, null, null
+            );
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me 실패")
+    class ModifyMyProfileFailure {
+
+        @Test
+        @DisplayName("서비스에서_USER_NOT_FOUND_예외가_발생하면_404와_에러코드를_그대로_응답한다")
+        void 서비스에서_USER_NOT_FOUND_예외가_발생하면_404와_에러코드를_그대로_응답한다() throws Exception {
+            // given
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "닉네임", null, null, null, null, null, null, null
+            );
+            given(userService.modifyMyProfile(eq(1L), any(RequestUpdateProfileDto.class)))
+                    .willThrow(new CustomException(ErrorCode.USER_NOT_FOUND));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
         }

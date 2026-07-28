@@ -2,6 +2,7 @@ package com.ssafy.backend.user.service.impl;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
@@ -22,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 /**
- * UserServiceImpl.findMyProfile() 단위 테스트 (AUTH-05).
+ * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile).
  * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서
  * "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
  */
@@ -49,6 +50,10 @@ class UserServiceImplTest {
         ReflectionTestUtils.setField(user, "id", USER_ID);
         return user;
     }
+
+    // =====================================================================
+    // AUTH-05: findMyProfile() 테스트
+    // =====================================================================
 
     @Nested
     @DisplayName("내 프로필 조회 성공")
@@ -129,6 +134,127 @@ class UserServiceImplTest {
 
             // when & then
             assertThatThrownBy(() -> userService.findMyProfile(999L))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+    }
+
+    // =====================================================================
+    // AUTH-06: modifyMyProfile() 테스트
+    // =====================================================================
+
+    private User buildFullyPopulatedUser() {
+        User user = buildUser();
+        ReflectionTestUtils.setField(user, "nickname", "기존닉네임");
+        ReflectionTestUtils.setField(user, "phone", "010-0000-0000");
+        ReflectionTestUtils.setField(user, "sex", "F");
+        ReflectionTestUtils.setField(user, "age", 30);
+        ReflectionTestUtils.setField(user, "jobFamily", "기존직군");
+        ReflectionTestUtils.setField(user, "jobRole", "기존직무");
+        ReflectionTestUtils.setField(user, "description", "기존소개");
+        ReflectionTestUtils.setField(user, "displayColor", "#000000");
+        return user;
+    }
+
+    @Nested
+    @DisplayName("내 프로필 수정 성공 - 전체 필드")
+    class ModifyMyProfileFullUpdate {
+
+        @Test
+        @DisplayName("모든_필드를_요청하면_전부_새_값으로_반영된다")
+        void 모든_필드를_요청하면_전부_새_값으로_반영된다() {
+            // given
+            User user = buildFullyPopulatedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "새닉네임", "010-1234-5678", "M", 20,
+                    "소프트웨어 개발", "Frontend Developer", "새소개", "#3B82F6"
+            );
+
+            // when
+            ResponseMyProfileDto result = userService.modifyMyProfile(USER_ID, request);
+
+            // then
+            assertThat(result.nickname()).isEqualTo("새닉네임");
+            assertThat(result.phone()).isEqualTo("010-1234-5678");
+            assertThat(result.sex()).isEqualTo("M");
+            assertThat(result.age()).isEqualTo(20);
+            assertThat(result.jobFamily()).isEqualTo("소프트웨어 개발");
+            assertThat(result.jobRole()).isEqualTo("Frontend Developer");
+            assertThat(result.userDescription()).isEqualTo("새소개");
+            assertThat(result.userColor()).isEqualTo("#3B82F6");
+        }
+    }
+
+    @Nested
+    @DisplayName("내 프로필 수정 성공 - 부분 수정")
+    class ModifyMyProfilePartialUpdate {
+
+        @Test
+        @DisplayName("nickname만_요청하면_나머지_필드는_기존_값을_그대로_유지한다")
+        void nickname만_요청하면_나머지_필드는_기존_값을_그대로_유지한다() {
+            // given
+            User user = buildFullyPopulatedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "새닉네임", null, null, null, null, null, null, null
+            );
+
+            // when
+            ResponseMyProfileDto result = userService.modifyMyProfile(USER_ID, request);
+
+            // then: nickname만 바뀌고 나머지는 buildFullyPopulatedUser()의 기존 값 그대로
+            assertThat(result.nickname()).isEqualTo("새닉네임");
+            assertThat(result.phone()).isEqualTo("010-0000-0000");
+            assertThat(result.sex()).isEqualTo("F");
+            assertThat(result.age()).isEqualTo(30);
+            assertThat(result.jobFamily()).isEqualTo("기존직군");
+            assertThat(result.jobRole()).isEqualTo("기존직무");
+            assertThat(result.userDescription()).isEqualTo("기존소개");
+            assertThat(result.userColor()).isEqualTo("#000000");
+        }
+
+        @Test
+        @DisplayName("모든_필드가_null인_요청은_아무_것도_변경하지_않는다")
+        void 모든_필드가_null인_요청은_아무_것도_변경하지_않는다() {
+            // given
+            User user = buildFullyPopulatedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    null, null, null, null, null, null, null, null
+            );
+
+            // when
+            ResponseMyProfileDto result = userService.modifyMyProfile(USER_ID, request);
+
+            // then: buildFullyPopulatedUser()의 기존 값이 전부 그대로 유지
+            assertThat(result.nickname()).isEqualTo("기존닉네임");
+            assertThat(result.phone()).isEqualTo("010-0000-0000");
+            assertThat(result.sex()).isEqualTo("F");
+            assertThat(result.age()).isEqualTo(30);
+            assertThat(result.jobFamily()).isEqualTo("기존직군");
+            assertThat(result.jobRole()).isEqualTo("기존직무");
+            assertThat(result.userDescription()).isEqualTo("기존소개");
+            assertThat(result.userColor()).isEqualTo("#000000");
+        }
+    }
+
+    @Nested
+    @DisplayName("내 프로필 수정 실패")
+    class ModifyMyProfileFailure {
+
+        @Test
+        @DisplayName("존재하지_않는_userId로_수정하면_USER_NOT_FOUND_예외가_발생한다")
+        void 존재하지_않는_userId로_수정하면_USER_NOT_FOUND_예외가_발생한다() {
+            // given
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "닉네임", null, null, null, null, null, null, null
+            );
+
+            // when & then
+            assertThatThrownBy(() -> userService.modifyMyProfile(999L, request))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND);
