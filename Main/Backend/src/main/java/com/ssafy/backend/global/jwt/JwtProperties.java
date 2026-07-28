@@ -9,7 +9,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record JwtProperties(
         String privateKeyPath,
         String publicKeyPath,
+        String issuer,
+        String apiAudience,
+        String yjsAudience,
         long accessExpirationSeconds,
-        long refreshExpirationSeconds
+        long refreshExpirationSeconds,
+        long collaborationExpirationSeconds
 ) {
 }
