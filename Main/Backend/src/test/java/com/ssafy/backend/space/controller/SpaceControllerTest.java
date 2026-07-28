@@ -122,6 +122,19 @@ class SpaceControllerTest {
                     .andExpect(jsonPath("$.data[0].myRole").value("OWNER"))
                     .andExpect(jsonPath("$.data[0].memberCount").value(3));
         }
+
+        @Test
+        @DisplayName("참여 스페이스가 없으면 200과 빈 배열(null 아님)을 반환한다")
+        void findSpaceList_returns200WithEmptyArray() throws Exception {
+            given(spaceService.findSpaceList(7L)).willReturn(List.of());
+
+            mockMvc.perform(get("/api/v1/spaces"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    // FE 계약: 빈 목록은 null이 아니라 [] 로 직렬화된다.
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data").isEmpty());
+        }
     }
 
     @Nested
