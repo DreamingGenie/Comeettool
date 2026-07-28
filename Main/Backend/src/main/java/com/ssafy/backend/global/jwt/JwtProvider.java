@@ -135,4 +135,8 @@ public class JwtProvider {
     public long getRefreshExpirationSeconds() {
         return refreshExpMs / 1000;
     }
+
+    public long getCollaborationExpirationSeconds() {
+        return collaborationExpMs / 1000;
+    }
 }
