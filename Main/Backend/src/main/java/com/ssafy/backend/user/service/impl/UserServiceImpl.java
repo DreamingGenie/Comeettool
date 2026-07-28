@@ -23,7 +23,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public ResponseMyProfileDto getMyProfile(Long userId) {
+    public ResponseMyProfileDto findMyProfile(Long userId) {
         // JWT principal이 가리키는 userId는 로그인 시 실제 DB에서 조회해 발급된 값이라 이론상 항상 존재하지만,
         // 탈퇴 등으로 이후 유효하지 않게 될 가능성을 방어적으로 처리한다.
         User user = userRepository.findById(userId)

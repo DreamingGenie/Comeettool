@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 /**
- * UserServiceImpl.getMyProfile() 단위 테스트 (AUTH-05).
+ * UserServiceImpl.findMyProfile() 단위 테스트 (AUTH-05).
  * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서
  * "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
  */
@@ -71,7 +71,7 @@ class UserServiceImplTest {
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
 
             // when
-            ResponseMyProfileDto result = userService.getMyProfile(USER_ID);
+            ResponseMyProfileDto result = userService.findMyProfile(USER_ID);
 
             // then
             assertThat(result.userId()).isEqualTo(1L); // Long — AUTH-01과 동일하게 통일
@@ -102,7 +102,7 @@ class UserServiceImplTest {
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
 
             // when
-            ResponseMyProfileDto result = userService.getMyProfile(USER_ID);
+            ResponseMyProfileDto result = userService.findMyProfile(USER_ID);
 
             // then
             assertThat(result.nickname()).isNull();
@@ -128,7 +128,7 @@ class UserServiceImplTest {
             given(userRepository.findById(999L)).willReturn(Optional.empty());
 
             // when & then
-            assertThatThrownBy(() -> userService.getMyProfile(999L))
+            assertThatThrownBy(() -> userService.findMyProfile(999L))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND);

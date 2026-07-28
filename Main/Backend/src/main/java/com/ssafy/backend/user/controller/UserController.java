@@ -22,7 +22,7 @@ public class UserController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<ResponseMyProfileDto>> getMyProfile(@AuthenticationPrincipal String userId) {
-        ResponseMyProfileDto response = userService.getMyProfile(Long.parseLong(userId));
+        ResponseMyProfileDto response = userService.findMyProfile(Long.parseLong(userId));
         return ResponseEntity.ok(ApiResponse.success("프로필 조회 성공", response));
     }
 }

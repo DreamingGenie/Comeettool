@@ -82,7 +82,7 @@ class UserControllerTest {
                     "https://cdn.example.com/profile.jpg", "M", 20,
                     "소프트웨어 개발", "Frontend Developer", "안녕하세요!", "#000000"
             );
-            given(userService.getMyProfile(1L)).willReturn(response);
+            given(userService.findMyProfile(1L)).willReturn(response);
             authenticateAs(USER_ID);
 
             // when & then
@@ -109,7 +109,7 @@ class UserControllerTest {
             ResponseMyProfileDto response = new ResponseMyProfileDto(
                     1L, "user1@test.com", null, null, null, null, null, null, null, null, "#000000"
             );
-            given(userService.getMyProfile(1L)).willReturn(response);
+            given(userService.findMyProfile(1L)).willReturn(response);
             authenticateAs(USER_ID);
 
             // when & then
@@ -124,7 +124,7 @@ class UserControllerTest {
         @DisplayName("인증_principal의_문자열_userId를_Long으로_변환해_서비스에_전달한다")
         void 인증_principal의_문자열_userId를_Long으로_변환해_서비스에_전달한다() throws Exception {
             // given
-            given(userService.getMyProfile(42L)).willReturn(
+            given(userService.findMyProfile(42L)).willReturn(
                     new ResponseMyProfileDto(42L, "a@b.com", null, null, null, null, null, null, null, null, "#000000")
             );
             authenticateAs("42");
@@ -134,7 +134,7 @@ class UserControllerTest {
                     .andExpect(status().isOk());
 
             // then: "42"(String) → 42L(Long)로 정확히 변환되어 서비스에 전달됐는지 확인
-            verify(userService).getMyProfile(42L);
+            verify(userService).findMyProfile(42L);
         }
     }
 
@@ -146,7 +146,7 @@ class UserControllerTest {
         @DisplayName("서비스에서_USER_NOT_FOUND_예외가_발생하면_404와_에러코드를_그대로_응답한다")
         void 서비스에서_USER_NOT_FOUND_예외가_발생하면_404와_에러코드를_그대로_응답한다() throws Exception {
             // given
-            given(userService.getMyProfile(1L)).willThrow(new CustomException(ErrorCode.USER_NOT_FOUND));
+            given(userService.findMyProfile(1L)).willThrow(new CustomException(ErrorCode.USER_NOT_FOUND));
             authenticateAs(USER_ID);
 
             // when & then
