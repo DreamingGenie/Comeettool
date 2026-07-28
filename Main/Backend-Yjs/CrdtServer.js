@@ -6,10 +6,18 @@ import {Hocuspocus} from '@hocuspocus/server'
 import {Database} from '@hocuspocus/extension-database'
 import {WebSocketServer} from 'ws'
 import pg from 'pg'
+import {
+    createCollaborationAuthenticator,
+    parseDocumentName,
+} from './collaboration-auth.js'
 
 const {Pool} = pg
 const port = Number(process.env.PORT || 3000)
 const databaseUrl = process.env.DATABASE_URL
+const springJwksUrl = process.env.SPRING_JWKS_URL
+    || 'http://localhost:8080/.well-known/jwks.json'
+const jwtIssuer = process.env.JWT_ISSUER || 'a707-api'
+const jwtYjsAudience = process.env.JWT_YJS_AUDIENCE || 'a707-yjs'
 
 if (!databaseUrl) {
     throw new Error('DATABASE_URL 환경변수가 필요합니다.')
@@ -32,25 +40,6 @@ function createEmptyYjsState() {
 
 function hashState(state) {
     return crypto.createHash('sha256').update(state).digest()
-}
-
-function parseDocumentName(documentName) {
-    const match = /^document:([0-9a-f-]{36}):epoch:(\d+)$/i.exec(documentName)
-
-    if (!match) {
-        throw new Error(`잘못된 문서 연결 이름입니다: ${documentName}`)
-    }
-
-    const epoch = Number(match[2])
-
-    if (epoch !== 1) {
-        throw new Error('지원하지 않는 문서 세대입니다. 문서 정보를 새로 조회해주세요.')
-    }
-
-    return {
-        documentId: match[1],
-        epoch,
-    }
 }
 
 function mapDocument(row) {
@@ -85,29 +74,38 @@ function mapVersion(row) {
 async function getActiveDocument(documentId, client = pool) {
     const result = await client.query(
         `SELECT d.*, COALESCE(s.persisted_revision, 0) AS persisted_revision
-           FROM documents d
-           LEFT JOIN documents_state s ON s.document_id = d.document_id
-          WHERE d.document_id = $1
-            AND d.is_deleted = FALSE`,
+         FROM documents d
+                  LEFT JOIN documents_state s ON s.document_id = d.document_id
+         WHERE d.document_id = $1
+           AND d.is_deleted = FALSE`,
         [documentId],
     )
 
     return result.rows[0] ?? null
 }
 
+const authenticateCollaboration = createCollaborationAuthenticator({
+    jwksUrl: springJwksUrl,
+    issuer: jwtIssuer,
+    audience: jwtYjsAudience,
+    isDocumentActive: async documentId =>
+        Boolean(await getActiveDocument(documentId)),
+})
+
 const hocuspocus = new Hocuspocus({
     debounce: 500,
     maxDebounce: 2000,
+    onAuthenticate: authenticateCollaboration,
     extensions: [
         new Database({
             fetch: async ({documentName}) => {
                 const {documentId} = parseDocumentName(documentName)
                 const result = await pool.query(
                     `SELECT s.yjs_state
-                       FROM documents_state s
-                       JOIN documents d ON d.document_id = s.document_id
-                      WHERE s.document_id = $1
-                        AND d.is_deleted = FALSE`,
+                     FROM documents_state s
+                              JOIN documents d ON d.document_id = s.document_id
+                     WHERE s.document_id = $1
+                       AND d.is_deleted = FALSE`,
                     [documentId],
                 )
 
@@ -122,16 +120,15 @@ const hocuspocus = new Hocuspocus({
                 const binary = Buffer.from(state)
                 const result = await pool.query(
                     `UPDATE documents_state s
-                        SET yjs_state = $2,
-                            binary_size = $3,
-                            state_hash = $4,
-                            persisted_revision = persisted_revision + 1,
-                            updated_at = CURRENT_TIMESTAMP
-                       FROM documents d
-                      WHERE s.document_id = $1
-                        AND d.document_id = s.document_id
-                        AND d.is_deleted = FALSE
-                  RETURNING s.persisted_revision`,
+                     SET yjs_state          = $2,
+                         binary_size        = $3,
+                         state_hash         = $4,
+                         persisted_revision = persisted_revision + 1,
+                         updated_at         = CURRENT_TIMESTAMP FROM documents d
+                     WHERE s.document_id = $1
+                       AND d.document_id = s.document_id
+                       AND d.is_deleted = FALSE
+                         RETURNING s.persisted_revision`,
                     [documentId, binary, binary.byteLength, hashState(binary)],
                 )
 
@@ -141,8 +138,8 @@ const hocuspocus = new Hocuspocus({
 
                 await pool.query(
                     `UPDATE documents
-                        SET updated_at = CURRENT_TIMESTAMP
-                      WHERE document_id = $1`,
+                     SET updated_at = CURRENT_TIMESTAMP
+                     WHERE document_id = $1`,
                     [documentId],
                 )
             },
@@ -184,11 +181,11 @@ app.get('/api/documents', async (request, response, next) => {
 
         const result = await pool.query(
             `SELECT d.*, COALESCE(s.persisted_revision, 0) AS persisted_revision
-               FROM documents d
-               LEFT JOIN documents_state s ON s.document_id = d.document_id
-              WHERE d.is_deleted = FALSE
-                    ${teamFilter}
-              ORDER BY d.updated_at DESC`,
+             FROM documents d
+                      LEFT JOIN documents_state s ON s.document_id = d.document_id
+             WHERE d.is_deleted = FALSE
+                 ${teamFilter}
+             ORDER BY d.updated_at DESC`,
             values,
         )
 
@@ -234,22 +231,19 @@ app.post('/api/documents', async (request, response, next) => {
         const documentId = crypto.randomUUID()
         const emptyState = createEmptyYjsState()
         const inserted = await client.query(
-            `INSERT INTO documents (
-                document_id,
-                team_id,
-                document_title
-             ) VALUES ($1, $2, $3)
-             RETURNING *`,
+            `INSERT INTO documents (document_id,
+                                    team_id,
+                                    document_title)
+             VALUES ($1, $2, $3) RETURNING *`,
             [documentId, teamId, title],
         )
 
         await client.query(
-            `INSERT INTO documents_state (
-                document_id,
-                yjs_state,
-                binary_size,
-                state_hash
-             ) VALUES ($1, $2, $3, $4)`,
+            `INSERT INTO documents_state (document_id,
+                                          yjs_state,
+                                          binary_size,
+                                          state_hash)
+             VALUES ($1, $2, $3, $4)`,
             [
                 documentId,
                 emptyState,
@@ -276,12 +270,11 @@ app.delete('/api/documents/:id', async (request, response, next) => {
     try {
         const result = await pool.query(
             `UPDATE documents
-                SET is_deleted = TRUE,
-                    deleted_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-              WHERE document_id = $1
-                AND is_deleted = FALSE
-          RETURNING document_id`,
+             SET is_deleted = TRUE,
+                 deleted_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE document_id = $1
+               AND is_deleted = FALSE RETURNING document_id`,
             [request.params.id],
         )
 
@@ -309,9 +302,9 @@ app.get('/api/documents/:id/versions', async (request, response, next) => {
 
         const result = await pool.query(
             `SELECT *
-               FROM documents_version
-              WHERE document_id = $1
-              ORDER BY version_number DESC`,
+             FROM documents_version
+             WHERE document_id = $1
+             ORDER BY version_number DESC`,
             [request.params.id],
         )
 
@@ -334,10 +327,10 @@ app.post('/api/documents/:id/versions', async (request, response, next) => {
 
         const documentResult = await client.query(
             `SELECT *
-               FROM documents
-              WHERE document_id = $1
-                AND is_deleted = FALSE
-              FOR UPDATE`,
+             FROM documents
+             WHERE document_id = $1
+               AND is_deleted = FALSE
+                 FOR UPDATE`,
             [request.params.id],
         )
 
@@ -348,29 +341,27 @@ app.post('/api/documents/:id/versions', async (request, response, next) => {
 
         const stateResult = await client.query(
             `SELECT *
-               FROM documents_state
-              WHERE document_id = $1
-              FOR UPDATE`,
+             FROM documents_state
+             WHERE document_id = $1
+                 FOR UPDATE`,
             [request.params.id],
         )
         const nextVersion = documentResult.rows[0].final_version + 1
         const versionId = crypto.randomUUID()
         const state = stateResult.rows[0]
         const inserted = await client.query(
-            `INSERT INTO documents_version (
-                document_version_id,
-                document_id,
-                version_number,
-                title_snapshot,
-                yjs_state,
-                editor_json,
-                trigger_type,
-                binary_size,
-                state_hash,
-                schema_version,
-                request_id
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING *`,
+            `INSERT INTO documents_version (document_version_id,
+                                            document_id,
+                                            version_number,
+                                            title_snapshot,
+                                            yjs_state,
+                                            editor_json,
+                                            trigger_type,
+                                            binary_size,
+                                            state_hash,
+                                            schema_version,
+                                            request_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
             [
                 versionId,
                 request.params.id,
@@ -388,9 +379,9 @@ app.post('/api/documents/:id/versions', async (request, response, next) => {
 
         await client.query(
             `UPDATE documents
-                SET final_version = $2,
-                    updated_at = CURRENT_TIMESTAMP
-              WHERE document_id = $1`,
+             SET final_version = $2,
+                 updated_at    = CURRENT_TIMESTAMP
+             WHERE document_id = $1`,
             [request.params.id, nextVersion],
         )
         await client.query('COMMIT')
@@ -402,9 +393,9 @@ app.post('/api/documents/:id/versions', async (request, response, next) => {
         if (error.code === '23505' && requestId) {
             const existing = await pool.query(
                 `SELECT *
-                   FROM documents_version
-                  WHERE document_id = $1
-                    AND request_id = $2`,
+                 FROM documents_version
+                 WHERE document_id = $1
+                   AND request_id = $2`,
                 [request.params.id, requestId],
             )
 
@@ -439,10 +430,10 @@ app.post(
 
             const documentResult = await client.query(
                 `SELECT *
-                   FROM documents
-                  WHERE document_id = $1
-                    AND is_deleted = FALSE
-                  FOR UPDATE`,
+                 FROM documents
+                 WHERE document_id = $1
+                   AND is_deleted = FALSE
+                     FOR UPDATE`,
                 [request.params.id],
             )
 
@@ -453,9 +444,9 @@ app.post(
 
             const versionResult = await client.query(
                 `SELECT *
-                   FROM documents_version
-                  WHERE document_version_id = $1
-                    AND document_id = $2`,
+                 FROM documents_version
+                 WHERE document_version_id = $1
+                   AND document_id = $2`,
                 [request.params.versionId, request.params.id],
             )
 
@@ -468,13 +459,13 @@ app.post(
 
             await client.query(
                 `UPDATE documents_state
-                    SET yjs_state = $2,
-                        binary_size = $3,
-                        state_hash = $4,
-                        schema_version = $5,
-                        persisted_revision = persisted_revision + 1,
-                        updated_at = CURRENT_TIMESTAMP
-                  WHERE document_id = $1`,
+                 SET yjs_state          = $2,
+                     binary_size        = $3,
+                     state_hash         = $4,
+                     schema_version     = $5,
+                     persisted_revision = persisted_revision + 1,
+                     updated_at         = CURRENT_TIMESTAMP
+                 WHERE document_id = $1`,
                 [
                     request.params.id,
                     target.yjs_state,
@@ -485,9 +476,9 @@ app.post(
             )
             await client.query(
                 `UPDATE documents
-                    SET document_title = $2,
-                        updated_at = CURRENT_TIMESTAMP
-                  WHERE document_id = $1`,
+                 SET document_title = $2,
+                     updated_at     = CURRENT_TIMESTAMP
+                 WHERE document_id = $1`,
                 [request.params.id, target.title_snapshot],
             )
             await client.query('COMMIT')
