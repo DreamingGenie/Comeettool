@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict'
 import {spawn} from 'node:child_process'
 import crypto from 'node:crypto'
+import {createServer} from 'node:http'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import * as Y from 'yjs'
 import {WebSocket} from 'ws'
 import {HocuspocusProvider} from '@hocuspocus/provider'
+import {exportJJWK, generateKeyPair, SignJWT} from 'jose'
 import pg from 'pg'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.TEST_PORT || 3210)
 const httpUrl = `http://127.0.0.1:${port}`
 const webSocketUrl = `ws://127.0.0.1:${port}/collaboration`
+const jwksPort = Number(process.env.TEST_JWKS_PORT || port + 1)
+const jwksUrl = `http://127.0.0.1:${jwksPort}/.well-known/jwks.json`
 const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
 const serverFile = process.env.TEST_SERVER_FILE || 'CrdtServer.js'
 const timeout = 10_000
@@ -21,6 +25,9 @@ const providers = new Set()
 
 let serverProcess
 let serverOutput = ''
+let jwksServer
+let jwtPrivateKey
+let collaborationToken
 let createdDocument
 let teamId
 let createdTestTeam = false
@@ -61,6 +68,9 @@ async function startServer() {
             ...process.env,
             PORT: String(port),
             DATABASE_URL: databaseUrl,
+            SPRING_JWKS_URL: jwksUrl,
+            JWT_ISSUER: 'a707-api',
+            JWT_YJS_AUDIENCE: 'a707-yjs',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
@@ -100,12 +110,63 @@ async function stopServer() {
     serverProcess = undefined
 }
 
+async function startJwksServer() {
+    const {privateKey, publicKey} = await generateKeyPair('RS256')
+    jwtPrivateKey = privateKey
+    const publicJwk = {
+        ...await exportJWK(publicKey),
+        alg: 'RS256',
+        kid: 'e2e-rsa-key',
+        use: 'sig',
+    }
+
+    jwksServer = createServer((request, response) => {
+        if (request.url !== '/.well-known/jwks.json') {
+            response.writeHead(404).end()
+            return
+        }
+
+        response.writeHead(200, {'content-type': 'application/json'})
+        response.end(JSON.stringify({keys: [publicJwk]}))
+    })
+
+    await new Promise((resolve, reject) => {
+        jwksServer.once('error', reject)
+        jwksServer.listen(jwksPort, '127.0.0.1', resolve)
+    })
+}
+
+async function stopJwksServer() {
+    if (!jwksServer) return
+
+    await new Promise(resolve => jwksServer.close(resolve))
+    jwksServer = undefined
+}
+
+async function createCollaborationToken(documentId) {
+    return new SignJWT({
+        type: 'collaboration',
+        documentId,
+        teamId,
+        permission: 'WRITE',
+    })
+        .setProtectedHeader({alg: 'RS256', kid: 'e2e-rsa-key'})
+        .setSubject('42')
+        .setIssuer('a707-api')
+        .setAudience('a707-yjs')
+        .setJti(crypto.randomUUID())
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(jwtPrivateKey)
+}
+
 function createProvider(documentName) {
     const document = new Y.Doc()
     let lastStatus = 'initializing'
     const provider = new HocuspocusProvider({
         url: webSocketUrl,
         name: documentName,
+        token: collaborationToken,
         document,
         WebSocketPolyfill: WebSocket,
         onStatus: ({status}) => {
@@ -146,8 +207,8 @@ function decodeText(state) {
 async function readStoredText(documentId) {
     const result = await pool.query(
         `SELECT yjs_state
-           FROM documents_state
-          WHERE document_id = $1`,
+         FROM documents_state
+         WHERE document_id = $1`,
         [documentId],
     )
 
@@ -159,14 +220,18 @@ async function readStoredText(documentId) {
 async function cleanup() {
     if (createdDocument) {
         await pool.query(
-            `DELETE FROM documents WHERE document_id = $1`,
+            `DELETE
+             FROM documents
+             WHERE document_id = $1`,
             [createdDocument.id],
         )
     }
 
     if (createdTestTeam) {
         await pool.query(
-            `DELETE FROM teams WHERE team_id = $1`,
+            `DELETE
+             FROM teams
+             WHERE team_id = $1`,
             [teamId],
         )
     }
@@ -189,7 +254,9 @@ async function main() {
             teamId = Number(process.env.TEST_TEAM_ID)
         } else {
             const team = await pool.query(
-                `SELECT team_id FROM teams ORDER BY team_id LIMIT 1`,
+                `SELECT team_id
+                 FROM teams
+                 ORDER BY team_id LIMIT 1`,
             )
 
             if (team.rowCount > 0) {
@@ -197,11 +264,10 @@ async function main() {
             } else {
                 teamId = Date.now()
                 await pool.query(
-                    `INSERT INTO teams (
-                        team_id,
-                        team_name,
-                        team_owner_id
-                     ) VALUES ($1, $2, $3)`,
+                    `INSERT INTO teams (team_id,
+                                        team_name,
+                                        team_owner_id)
+                     VALUES ($1, $2, $3)`,
                     [teamId, `CRDT E2E ${teamId}`, 0],
                 )
                 createdTestTeam = true
@@ -209,6 +275,7 @@ async function main() {
         }
     })
 
+    await startJwksServer()
     await startServer()
 
     await check('2. GET /health가 PostgreSQL 상태와 200을 반환', async () => {
@@ -235,14 +302,15 @@ async function main() {
 
         const result = await pool.query(
             `SELECT d.document_id, s.binary_size, octet_length(s.state_hash) hash_size
-               FROM documents d
-               JOIN documents_state s ON s.document_id = d.document_id
-              WHERE d.document_id = $1`,
+             FROM documents d
+                      JOIN documents_state s ON s.document_id = d.document_id
+             WHERE d.document_id = $1`,
             [createdDocument.id],
         )
         assert.equal(result.rowCount, 1)
         assert.ok(result.rows[0].binary_size > 0)
         assert.equal(result.rows[0].hash_size, 32)
+        collaborationToken = await createCollaborationToken(createdDocument.id)
     })
 
     const documentName =
@@ -355,8 +423,8 @@ async function main() {
 
         const result = await pool.query(
             `SELECT is_deleted, deleted_at IS NOT NULL AS has_deleted_at
-               FROM documents
-              WHERE document_id = $1`,
+             FROM documents
+             WHERE document_id = $1`,
             [createdDocument.id],
         )
         assert.equal(result.rows[0].is_deleted, true)
@@ -375,6 +443,7 @@ try {
 } finally {
     for (const provider of [...providers]) destroyProvider(provider)
     await stopServer()
+    await stopJwksServer()
     await cleanup().catch(error => {
         console.error('테스트 문서 정리 실패:', error)
         process.exitCode = 1
