@@ -9,6 +9,7 @@ public record RequestUpdateProfileDto(
         @Size(max = 20)
         String nickname,
 
+        @Pattern(regexp = "^\\d{3}-\\d{4}-\\d{4}$", message = "phone은 000-0000-0000 형식이어야 합니다.")
         String phone,
 
         @Pattern(regexp = "^[MF]$", message = "sex는 M 또는 F만 허용됩니다.")

@@ -93,6 +93,29 @@ class RequestUpdateProfileDtoTest {
     }
 
     @Nested
+    @DisplayName("phone")
+    class Phone {
+
+        @ParameterizedTest
+        @ValueSource(strings = {"010-1234-5678", "000-0000-0000", "070-9999-9999"})
+        @DisplayName("000-0000-0000_형식은_검증을_통과한다")
+        void 형식이_맞으면_검증을_통과한다(String phone) {
+            RequestUpdateProfileDto dto = new RequestUpdateProfileDto(
+                    null, phone, null, null, null, null, null, null);
+            assertThat(validator.validate(dto)).isEmpty();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"01012345678", "010-123-5678", "010-1234-567", "010.1234.5678", "not-a-phone"})
+        @DisplayName("형식에_맞지_않으면_검증에_실패한다")
+        void 형식에_맞지_않으면_검증에_실패한다(String phone) {
+            RequestUpdateProfileDto dto = new RequestUpdateProfileDto(
+                    null, phone, null, null, null, null, null, null);
+            assertThat(validator.validate(dto)).isNotEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("age")
     class Age {
 
@@ -160,14 +183,14 @@ class RequestUpdateProfileDtoTest {
     }
 
     @Nested
-    @DisplayName("phone, jobFamily, jobRole")
+    @DisplayName("jobFamily, jobRole")
     class UnconstrainedFields {
 
         @Test
         @DisplayName("특별한_제약이_없는_필드는_어떤_값이든_검증을_통과한다")
         void 특별한_제약이_없는_필드는_어떤_값이든_검증을_통과한다() {
             RequestUpdateProfileDto dto = new RequestUpdateProfileDto(
-                    null, "아무 전화번호나", null, null, "아무 직군이나", "아무 직무나", null, null);
+                    null, null, null, null, "아무 직군이나", "아무 직무나", null, null);
             assertThat(validator.validate(dto)).isEmpty();
         }
     }
