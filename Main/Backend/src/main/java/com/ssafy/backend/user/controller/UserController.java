@@ -1,7 +1,9 @@
 package com.ssafy.backend.user.controller;
 
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
+import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.service.UserService;
 import jakarta.validation.Valid;
@@ -36,5 +38,13 @@ public class UserController {
             @Valid @RequestBody RequestUpdateProfileDto request) {
         ResponseMyProfileDto response = userService.modifyMyProfile(Long.parseLong(userId), request);
         return ResponseEntity.ok(ApiResponse.success("프로필 수정 성공", response));
+    }
+
+    @PatchMapping("/me/password")
+    public ResponseEntity<ApiResponse<ResponseChangePasswordDto>> changePassword(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody RequestChangePasswordDto request) {
+        ResponseChangePasswordDto response = userService.changePassword(Long.parseLong(userId), request);
+        return ResponseEntity.ok(ApiResponse.success("비밀번호 변경 성공", response));
     }
 }
