@@ -11,21 +11,17 @@ export const boardMockApi = {
       boardMockDatabase.teams.find(team => team.id === teamId) ||
         boardMockDatabase.teams[0]
     ),
-  getMembers: () => mockResponse(boardMockDatabase.members),
+  getMembers: teamId =>
+    mockResponse(boardMockDatabase.membersByTeam[teamId] || []),
   getActiveMeeting: () =>
     mockResponse(boardMockDatabase.activeMeetings[0] || null),
   getEvents: (teamId, year, month) => {
     const source =
       boardMockDatabase.calendars[teamId] ||
       boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
-    const firstDay = new Date(year, month - 1, 1).getDay()
-    const totalDays = new Date(year, month, 0).getDate()
     return mockResponse({
-      ...source,
       year,
       month,
-      leadingBlankDays: firstDay,
-      totalDays,
       events:
         source.year === year && source.month === month
           ? source.events
@@ -101,7 +97,8 @@ export const boardMockApi = {
       eyebrow: `${workspace.name.toUpperCase()} TEAM`,
       name: workspace.name,
       description: workspace.description || '',
-      memberCount: 1
+      memberCount: 1,
+      color: workspace.color
     })
     boardMockDatabase.calendars[workspace.id] = {
       ...cloneMockValue(
@@ -110,7 +107,19 @@ export const boardMockApi = {
       events: []
     }
     boardMockDatabase.inviteMembers[workspace.id] = []
+    boardMockDatabase.membersByTeam[workspace.id] = [
+      ['ME', '나', 'me@committool.io', 'Admin', 'Active', 'Last active just now']
+    ]
     return mockResponse(workspace)
+  },
+  leaveWorkspace: teamId => {
+    const workspaceIndex = boardMockDatabase.workspaces.findIndex(
+      workspace => workspace.id === teamId
+    )
+    if (workspaceIndex >= 0) {
+      boardMockDatabase.workspaces.splice(workspaceIndex, 1)
+    }
+    return mockResponse(null)
   },
   createMeeting: data => {
     const meeting = {

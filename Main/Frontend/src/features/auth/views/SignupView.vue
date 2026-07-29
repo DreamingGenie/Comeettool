@@ -10,15 +10,36 @@
       <label class="field">
         비밀번호
         <div class="password-box">
-          <input v-model="form.password" :type="showPassword ? 'text' : 'password'" required />
-          <button type="button" aria-label="비밀번호 표시 전환" @click="showPassword = !showPassword">◉</button>
+          <input
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
+            minlength="8"
+            maxlength="20"
+            autocomplete="new-password"
+            required
+          />
+          <PasswordVisibilityButton
+            :visible="showPassword"
+            @toggle="showPassword = !showPassword"
+          />
         </div>
       </label>
       <label class="field">
         비밀번호 확인
         <div class="password-box">
-          <input v-model="form.passwordConfirm" :type="showConfirm ? 'text' : 'password'" required />
-          <button type="button" aria-label="비밀번호 확인 표시 전환" @click="showConfirm = !showConfirm">◉</button>
+          <input
+            v-model="form.passwordConfirm"
+            :type="showConfirm ? 'text' : 'password'"
+            minlength="8"
+            maxlength="20"
+            autocomplete="new-password"
+            required
+          />
+          <PasswordVisibilityButton
+            label="비밀번호 확인"
+            :visible="showConfirm"
+            @toggle="showConfirm = !showConfirm"
+          />
         </div>
       </label>
       <button class="primary block" :disabled="submitting">회원가입 →</button>
@@ -36,6 +57,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLogo from '../../../shared/components/AppLogo.vue'
+import PasswordVisibilityButton from '../../../shared/components/PasswordVisibilityButton.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../stores/authStore'
 
@@ -47,6 +69,12 @@ const showConfirm = ref(false)
 const submitting = ref(false)
 
 async function submit() {
+  const passwordPattern =
+    /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+=-])[A-Za-z\d!@#$%^&*()_+=-]{8,20}$/
+  if (!passwordPattern.test(form.password)) {
+    notify('비밀번호는 8~20자의 영문, 숫자, 특수문자를 포함해야 합니다.')
+    return
+  }
   if (form.password !== form.passwordConfirm) {
     notify('비밀번호가 일치하지 않습니다.')
     return

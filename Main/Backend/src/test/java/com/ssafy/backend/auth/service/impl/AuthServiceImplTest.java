@@ -102,7 +102,7 @@ class AuthServiceImplTest {
         void 이메일이_중복되지_않으면_회원가입에_성공하고_응답DTO를_반환한다() {
             // given
             ResponseSignupDto expected = new ResponseSignupDto(1L, EMAIL, OffsetDateTime.now());
-            given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+            given(userRepository.existsByEmailAndIsDeletedFalse(EMAIL)).willReturn(false);
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class))).willReturn(expected);
@@ -120,7 +120,7 @@ class AuthServiceImplTest {
         @DisplayName("회원가입_시_저장되는_비밀번호는_평문이_아닌_인코딩된_값이다")
         void 회원가입_시_저장되는_비밀번호는_평문이_아닌_인코딩된_값이다() {
             // given
-            given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+            given(userRepository.existsByEmailAndIsDeletedFalse(EMAIL)).willReturn(false);
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class)))
@@ -136,6 +136,25 @@ class AuthServiceImplTest {
                     .isEqualTo(ENCODED_PASSWORD)
                     .isNotEqualTo(RAW_PASSWORD);
         }
+
+        @Test
+        @DisplayName("탈퇴한_유저와_동일한_이메일이면_새_계정으로_정상_가입된다")
+        void 탈퇴한_유저와_동일한_이메일이면_새_계정으로_정상_가입된다() {
+            // given: existsByEmailAndIsDeletedFalse는 is_deleted=true인 행을 걸러내는 쿼리이므로,
+            // 탈퇴한 유저만 있는 상태에서는 false를 반환한다(탈퇴 이메일 재가입 허용 정책).
+            given(userRepository.existsByEmailAndIsDeletedFalse(EMAIL)).willReturn(false);
+            given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
+            given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(userMapper.toSignupResponse(any(User.class)))
+                    .willReturn(new ResponseSignupDto(2L, EMAIL, OffsetDateTime.now()));
+
+            // when
+            ResponseSignupDto actual = authService.signup(requestSignupDto);
+
+            // then: AUTH_EMAIL_DUPLICATED 없이 새 row(save)가 생성된다 — 기존 탈퇴 row와는 별개의 user_id.
+            assertThat(actual.email()).isEqualTo(EMAIL);
+            verify(userRepository, times(1)).save(any(User.class));
+        }
     }
 
     @Nested
@@ -143,10 +162,10 @@ class AuthServiceImplTest {
     class SignupFailure {
 
         @Test
-        @DisplayName("이메일이_이미_존재하면_AUTH_EMAIL_DUPLICATED_예외가_발생한다")
-        void 이메일이_이미_존재하면_AUTH_EMAIL_DUPLICATED_예외가_발생한다() {
-            // given
-            given(userRepository.existsByEmail(EMAIL)).willReturn(true);
+        @DisplayName("탈퇴하지_않은_이메일이_이미_존재하면_AUTH_EMAIL_DUPLICATED_예외가_발생한다")
+        void 탈퇴하지_않은_이메일이_이미_존재하면_AUTH_EMAIL_DUPLICATED_예외가_발생한다() {
+            // given: is_deleted=false인(활성) 계정이 이미 있는 경우 — 탈퇴 이메일 재사용 정책과 무관하게 여전히 막혀야 한다(회귀 확인).
+            given(userRepository.existsByEmailAndIsDeletedFalse(EMAIL)).willReturn(true);
 
             // when & then
             assertThatThrownBy(() -> authService.signup(requestSignupDto))
@@ -159,7 +178,7 @@ class AuthServiceImplTest {
         @DisplayName("이메일_중복_예외_발생시_비밀번호_인코딩과_저장과_매핑은_수행되지_않는다")
         void 이메일_중복_예외_발생시_비밀번호_인코딩과_저장과_매핑은_수행되지_않는다() {
             // given
-            given(userRepository.existsByEmail(EMAIL)).willReturn(true);
+            given(userRepository.existsByEmailAndIsDeletedFalse(EMAIL)).willReturn(true);
 
             // when
             assertThatThrownBy(() -> authService.signup(requestSignupDto))
@@ -183,7 +202,7 @@ class AuthServiceImplTest {
             String mixedCaseEmail = "User@Example.com";
             String normalizedEmail = "user@example.com";
             RequestSignupDto request = new RequestSignupDto(mixedCaseEmail, RAW_PASSWORD);
-            given(userRepository.existsByEmail(normalizedEmail)).willReturn(false);
+            given(userRepository.existsByEmailAndIsDeletedFalse(normalizedEmail)).willReturn(false);
             given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
             given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
             given(userMapper.toSignupResponse(any(User.class)))
@@ -193,7 +212,7 @@ class AuthServiceImplTest {
             authService.signup(request);
 
             // then: 중복검사·저장 둘 다 소문자로 정규화된 이메일로 수행돼야 한다
-            verify(userRepository).existsByEmail(normalizedEmail);
+            verify(userRepository).existsByEmailAndIsDeletedFalse(normalizedEmail);
             ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
             verify(userRepository).save(userCaptor.capture());
             assertThat(userCaptor.getValue().getEmail()).isEqualTo(normalizedEmail);
@@ -206,7 +225,7 @@ class AuthServiceImplTest {
             String mixedCaseEmail = "User@Example.com";
             String normalizedEmail = "user@example.com";
             RequestSignupDto request = new RequestSignupDto(mixedCaseEmail, RAW_PASSWORD);
-            given(userRepository.existsByEmail(normalizedEmail)).willReturn(true);
+            given(userRepository.existsByEmailAndIsDeletedFalse(normalizedEmail)).willReturn(true);
 
             // when & then
             assertThatThrownBy(() -> authService.signup(request))
@@ -306,7 +325,7 @@ class AuthServiceImplTest {
         }
 
         private void givenLoginStubs(User user) {
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
             given(jwtProvider.createAccessToken("1")).willReturn(ACCESS_TOKEN);
             given(jwtProvider.createRefreshToken("1")).willReturn(REFRESH_TOKEN);
@@ -427,7 +446,7 @@ class AuthServiceImplTest {
         @DisplayName("존재하지_않는_이메일로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다")
         void 존재하지_않는_이메일로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다() {
             // given
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.empty());
 
             // when & then
             assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
@@ -441,7 +460,7 @@ class AuthServiceImplTest {
         void 비밀번호가_일치하지_않으면_AUTH_LOGIN_FAILED_예외가_발생한다() {
             // given
             User user = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.of(user));
             given(passwordEncoder.matches("wrongPassword!", ENCODED_PASSWORD)).willReturn(false);
 
             // when & then
@@ -455,7 +474,7 @@ class AuthServiceImplTest {
         @DisplayName("이메일이_없으면_토큰_발급과_Redis_저장은_수행되지_않는다")
         void 이메일이_없으면_토큰_발급과_Redis_저장은_수행되지_않는다() {
             // given
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.empty());
 
             // when
             assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
@@ -472,8 +491,39 @@ class AuthServiceImplTest {
         void 비밀번호가_틀리면_토큰_발급과_Redis_저장은_수행되지_않는다() {
             // given
             User user = User.builder().email(EMAIL).password(ENCODED_PASSWORD).build();
-            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(user));
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(anyString(), eq(ENCODED_PASSWORD))).willReturn(false);
+
+            // when
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(jwtProvider, never()).createAccessToken(anyString());
+            verify(jwtProvider, never()).createRefreshToken(anyString());
+            verify(refreshTokenService, never()).save(anyString(), anyString(), anyLong());
+        }
+
+        @Test
+        @DisplayName("탈퇴한_계정으로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다")
+        void 탈퇴한_계정으로_로그인하면_AUTH_LOGIN_FAILED_예외가_발생한다() {
+            // given: findByEmailAndIsDeletedFalse는 is_deleted=true인 행을 애초에 조회 결과에서 제외하므로,
+            // 탈퇴 계정은 "존재하지 않는 이메일"과 완전히 같은 Optional.empty()로 관측된다 —
+            // 즉 서비스 계층은 둘을 구분할 방법이 없고, 그래서 응답도 100% 동일해진다(별도 에러코드 없음).
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.AUTH_LOGIN_FAILED);
+        }
+
+        @Test
+        @DisplayName("탈퇴한_계정_로그인_시도_시_토큰_발급과_Redis_저장이_수행되지_않는다")
+        void 탈퇴한_계정_로그인_시도_시_토큰_발급과_Redis_저장이_수행되지_않는다() {
+            // given
+            given(userRepository.findByEmailAndIsDeletedFalse(EMAIL)).willReturn(Optional.empty());
 
             // when
             assertThatThrownBy(() -> authService.login(new RequestLoginDto(EMAIL, RAW_PASSWORD)))
@@ -499,7 +549,7 @@ class AuthServiceImplTest {
             User user = User.builder().email(normalizedEmail).password(ENCODED_PASSWORD).build();
             ReflectionTestUtils.setField(user, "id", 1L);
 
-            given(userRepository.findByEmail(normalizedEmail)).willReturn(Optional.of(user));
+            given(userRepository.findByEmailAndIsDeletedFalse(normalizedEmail)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(RAW_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
             given(jwtProvider.createAccessToken("1")).willReturn("access.token");
             given(jwtProvider.createRefreshToken("1")).willReturn("refresh.token");
@@ -509,7 +559,7 @@ class AuthServiceImplTest {
             authService.login(new RequestLoginDto(mixedCaseEmail, RAW_PASSWORD));
 
             // then
-            verify(userRepository, times(1)).findByEmail(normalizedEmail);
+            verify(userRepository, times(1)).findByEmailAndIsDeletedFalse(normalizedEmail);
         }
     }
 

@@ -1,22 +1,26 @@
 import { request } from '../../../shared/api'
 
 export const userApi = {
-  getMe: () => request('/api/me'),
-  getProfileOptions: () => request('/api/profile-options'),
-  getOnboardingOptions: () => request('/api/onboarding/options'),
+  getMe: () => request('/api/v1/users/me'),
   saveOnboarding: data =>
-    request('/api/onboarding', {
-      method: 'POST',
+    request('/api/v1/users/me', {
+      method: 'PATCH',
       body: JSON.stringify(data)
     }),
   updateProfile: data =>
-    request('/api/me', {
-      method: 'PUT',
+    request('/api/v1/users/me', {
+      method: 'PATCH',
       body: JSON.stringify(data)
     }),
-  changePassword: data =>
-    request('/api/password', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    })
+  changePassword: ({ currentPassword, newPassword }) =>
+    request('/api/v1/users/me/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword })
+    }),
+  withdraw: () =>
+    request('/api/v1/users/me', {
+      method: 'DELETE'
+    }),
+  searchUsers: query =>
+    request(`/api/v1/users?query=${encodeURIComponent(query)}`)
 }

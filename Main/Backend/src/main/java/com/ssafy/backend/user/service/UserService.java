@@ -15,4 +15,7 @@ public interface UserService {
 
     // AUTH-07: 현재 비밀번호 검증 후 새 비밀번호로 변경, 토큰 재발급.
     ResponseChangePasswordDto changePassword(Long userId, RequestChangePasswordDto request);
+
+    // AUTH-08: soft delete 처리 후 Redis의 refresh token 삭제.
+    void withdraw(Long userId);
 }

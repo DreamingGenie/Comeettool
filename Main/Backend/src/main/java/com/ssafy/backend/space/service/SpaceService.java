@@ -17,4 +17,7 @@ public interface SpaceService {
 
     // SPACE-05: 스페이스 상세(정보 + 참여자). 요청자가 멤버가 아니면 접근 거부.
     ResponseSpaceDetailDto findSpaceDetails(Long userId, Long spaceId);
+
+    // SPACE-07: 요청자가 스페이스에서 나간다(members 행 hard delete). Owner는 소유권 위임 후에만 가능(정책 SP-1).
+    void removeMyMembership(Long userId, Long spaceId);
 }

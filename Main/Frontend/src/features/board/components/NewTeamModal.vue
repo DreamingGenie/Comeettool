@@ -11,24 +11,17 @@
         설명
         <textarea v-model.trim="form.description"></textarea>
       </label>
-      <div class="colors">
-        <span style="margin-right:auto">
+      <fieldset class="team-color-field">
+        <legend>
           <b>팀 색상</b><br />
           <small>팀 아이콘과 포인트 색상에 사용됩니다.</small>
-        </span>
-        <button
-          v-for="color in teamCreateColors"
-          :key="color.value"
-          type="button"
-          :aria-pressed="form.color === color.value"
-          :style="{
-            background: color.value,
-            border: color.bordered ? '.8px solid #111' : '0',
-            outline: form.color === color.value ? '2px solid #566fea' : 'none'
-          }"
-          @click="form.color = color.value"
-        ></button>
-      </div>
+        </legend>
+        <AppColorPicker
+          v-model="form.color"
+          :options="teamCreateColors"
+          subject="팀"
+        />
+      </fieldset>
       <button class="primary block" :disabled="submitting">팀 스페이스 만들기</button>
     </form>
   </BaseModal>
@@ -36,6 +29,7 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
+import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { teamCreateColors } from '../constants/teamCreateColors'
@@ -64,3 +58,27 @@ async function submit() {
   }
 }
 </script>
+
+<style scoped>
+.team-color-field {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 24px;
+  padding: 18px;
+  border: 1px solid #e1e5ed;
+  border-radius: 12px;
+  background: #f8f9fc;
+}
+
+.team-color-field legend {
+  display: block;
+  width: 100%;
+  padding: 0;
+}
+
+.team-color-field legend small {
+  color: #7a8394;
+  font-size: 10px;
+  font-weight: 400;
+}
+</style>

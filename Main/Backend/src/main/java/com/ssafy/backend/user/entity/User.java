@@ -115,4 +115,10 @@ public class User {
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
     }
+
+    // AUTH-08 회원 탈퇴 — soft delete. 실제 row는 삭제하지 않는다.
+    public void withdraw() {
+        this.isDeleted = true;
+        this.deletedAt = OffsetDateTime.now();
+    }
 }

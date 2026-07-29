@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정, AUTH-07 비밀번호 변경 로직. 이후 AUTH-08, 10, 11도 여기에 추가될 예정.
+ * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정, AUTH-07 비밀번호 변경, AUTH-08 회원 탈퇴 로직. 이후 AUTH-10, 11도 여기에 추가될 예정.
  */
 @Service
 @RequiredArgsConstructor
@@ -45,6 +45,11 @@ public class UserServiceImpl implements UserService {
     public ResponseMyProfileDto modifyMyProfile(Long userId, RequestUpdateProfileDto request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        // 로그인 후 Access Token(30분)이 만료되기 전에 탈퇴 처리된 경우를 방어 — 탈퇴 계정은 더 이상 수정할 수 없다.
+        if (user.isDeleted()) {
+            throw new CustomException(ErrorCode.ALREADY_DELETED_USER);
+        }
 
         // user는 영속 상태 엔티티라 필드 변경만으로 트랜잭션 커밋 시 UPDATE가 나간다(더티 체킹) — save() 호출 불필요.
         user.updateProfile(
@@ -76,5 +81,22 @@ public class UserServiceImpl implements UserService {
         refreshTokenService.save(userIdStr, newRefreshToken, jwtProvider.getRefreshExpirationSeconds());
 
         return new ResponseChangePasswordDto("Bearer", newAccessToken, newRefreshToken);
+    }
+
+    @Override
+    @Transactional
+    public void withdraw(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.isDeleted()) {
+            throw new CustomException(ErrorCode.ALREADY_DELETED_USER);
+        }
+
+        // 영속 엔티티 필드 변경 → 더티 체킹으로 자동 UPDATE, save() 불필요.
+        user.withdraw();
+
+        // 탈퇴 후에도 남아있는 Refresh Token으로 AUTH-03 재발급이 이어지는 걸 막는다(AUTH-04 로그아웃과 동일 로직).
+        refreshTokenService.delete(String.valueOf(userId));
     }
 }

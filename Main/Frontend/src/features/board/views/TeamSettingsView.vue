@@ -1,5 +1,5 @@
 <template>
-  <TeamLayout active-section="settings">
+  <TeamLayout active-section="settings" :retry="reloadBoard">
     <header class="page-heading">
       <div>
         <span class="eyebrow">TEAM SETTINGS</span>
@@ -13,15 +13,25 @@
         <header><i>{{ boardState.team.badge }}</i><div><h2>기본 정보</h2><p>팀 멤버에게 표시되는 정보입니다.</p></div></header>
         <label class="field">팀 스페이스 이름<input v-model.trim="form.name" /></label>
         <label class="field">팀 설명<textarea v-model.trim="form.description"></textarea></label>
-        <label class="field">
-          팀 대표 색상
-          <select v-model="form.color">
-            <option v-for="color in boardState.team.colorOptions" :key="color">{{ color }}</option>
-          </select>
-        </label>
+        <fieldset class="team-color-field">
+          <legend>
+            <b>팀 대표 색상</b><br />
+            <small>팀 아이콘과 포인트 색상에 사용됩니다.</small>
+          </legend>
+          <AppColorPicker
+            v-model="form.color"
+            :options="teamCreateColors"
+            subject="팀"
+          />
+        </fieldset>
       </section>
       <section class="settings-card">
-        <header><i>♙</i><div><h2>접근 및 권한</h2><p>새 멤버의 기본 접근 수준을 설정합니다.</p></div></header>
+        <header>
+          <i class="access-icon">
+            <img src="/assets/icons/identification.svg" alt="" aria-hidden="true" />
+          </i>
+          <div><h2>접근 및 권한</h2><p>새 멤버의 기본 접근 수준을 설정합니다.</p></div>
+        </header>
         <div class="setting-toggle">
           <span><b>초대 링크 활성화</b><small>링크를 가진 사용자가 가입할 수 있습니다.</small></span>
           <button type="button" :class="{ 'switch-on': form.inviteLinkEnabled }" @click="form.inviteLinkEnabled = !form.inviteLinkEnabled"><i></i></button>
@@ -38,7 +48,12 @@
         </label>
       </section>
       <section class="settings-card wide">
-        <header><i>♢</i><div><h2>알림 설정</h2><p>팀 전체에 적용되는 기본 알림입니다.</p></div></header>
+        <header>
+          <i class="notification-icon">
+            <img src="/assets/icons/bell.svg" alt="" aria-hidden="true" />
+          </i>
+          <div><h2>알림 설정</h2><p>팀 전체에 적용되는 기본 알림입니다.</p></div>
+        </header>
         <div class="notification-grid">
           <label><input v-model="form.notifications.meetingReminder" type="checkbox" /> 회의 시작 10분 전 알림</label>
           <label><input v-model="form.notifications.documentUpdates" type="checkbox" /> 새 문서 및 댓글 알림</label>
@@ -55,12 +70,16 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
+import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { teamCreateColors } from '../constants/teamCreateColors'
 import { boardStore } from '../stores/boardStore'
 
-const { boardState, teamId } = useBoardPage()
+const { boardState, teamId, reloadBoard } = useBoardPage({
+  resources: ['workspaces', 'team']
+})
 const { notify } = useToast()
 const saving = ref(false)
 const form = reactive({
@@ -109,3 +128,37 @@ async function save() {
   }
 }
 </script>
+
+<style scoped>
+.notification-icon img,
+.access-icon img {
+  display: block;
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%)
+    hue-rotate(211deg) brightness(98%) contrast(88%);
+}
+
+.team-color-field {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #e1e5ed;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+
+.team-color-field legend {
+  display: block;
+  width: 100%;
+  padding: 0;
+}
+
+.team-color-field legend small {
+  color: #7a8394;
+  font-size: 10px;
+  font-weight: 400;
+}
+</style>

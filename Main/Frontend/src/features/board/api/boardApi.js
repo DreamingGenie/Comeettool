@@ -1,9 +1,22 @@
-import { request } from '../../../shared/api'
+import { authSession, request } from '../../../shared/api'
+import {
+  toCreateSpaceRequest,
+  toDashboardViewModel,
+  toMemberRowsViewModel,
+  toTeamViewModel,
+  toWorkspaceViewModel
+} from '../mappers/spaceMapper'
 
 export const boardApi = {
-  getDashboard: () => request('/api/dashboard'),
-  getTeam: teamId => request(`/api/teams/${teamId}`),
-  getMembers: teamId => request(`/api/teams/${teamId}/members`),
+  getDashboard: async () =>
+    toDashboardViewModel(await request('/api/v1/spaces')),
+  getTeam: async spaceId =>
+    toTeamViewModel(
+      await request(`/api/v1/spaces/${spaceId}`),
+      authSession.get().userId
+    ),
+  getMembers: async spaceId =>
+    toMemberRowsViewModel(await request(`/api/v1/spaces/${spaceId}`)),
   getActiveMeeting: teamId => request(`/api/teams/${teamId}/meetings/active`),
   getMeetingRoom: meetingId => request(`/api/rooms/${meetingId}`),
   getParticipants: meetingId => request(`/api/rooms/${meetingId}/participants`),
@@ -20,10 +33,16 @@ export const boardApi = {
     }),
   getArchive: (teamId, section) =>
     request(`/api/teams/${teamId}/archive/${section}`),
-  createWorkspace: data =>
-    request('/api/workspaces', {
-      method: 'POST',
-      body: JSON.stringify(data)
+  createWorkspace: async data =>
+    toWorkspaceViewModel(
+      await request('/api/v1/spaces', {
+        method: 'POST',
+        body: JSON.stringify(toCreateSpaceRequest(data))
+      })
+    ),
+  leaveWorkspace: spaceId =>
+    request(`/api/v1/spaces/${spaceId}/members/me`, {
+      method: 'DELETE'
     }),
   createMeeting: data =>
     request('/api/rooms', {

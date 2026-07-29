@@ -11,6 +11,11 @@ import com.ssafy.backend.user.dto.ResponseMyProfileDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,20 +26,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile).
- * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서
- * "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
+ * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword, AUTH-08 withdraw).
+ * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서 "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserServiceImpl 단위 테스트")
@@ -60,7 +65,8 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, userProfileMapper, passwordEncoder, jwtProvider, refreshTokenService);
+        userService = new UserServiceImpl(userRepository, userProfileMapper, passwordEncoder, jwtProvider,
+                refreshTokenService);
     }
 
     private User buildUser() {
@@ -277,6 +283,46 @@ class UserServiceImplTest {
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("탈퇴한_유저가_프로필_수정을_시도하면_ALREADY_DELETED_USER_예외가_발생한다")
+        void 탈퇴한_유저가_프로필_수정을_시도하면_ALREADY_DELETED_USER_예외가_발생한다() {
+            // given: 로그인 후 Access Token이 만료되기 전에 탈퇴 처리된 상황을 시뮬레이션.
+            User user = buildFullyPopulatedUser();
+            ReflectionTestUtils.setField(user, "isDeleted", true);
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "새닉네임", null, null, null, null, null, null, null
+            );
+
+            // when & then
+            assertThatThrownBy(() -> userService.modifyMyProfile(USER_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.ALREADY_DELETED_USER);
+        }
+
+        @Test
+        @DisplayName("탈퇴한_유저_수정_시도_시_필드_값은_변경되지_않는다")
+        void 탈퇴한_유저_수정_시도_시_필드_값은_변경되지_않는다() {
+            // given
+            User user = buildFullyPopulatedUser();
+            ReflectionTestUtils.setField(user, "isDeleted", true);
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    "새닉네임", "010-9999-9999", "M", 20, "새직군", "새직무", "새소개", "#FFFFFF"
+            );
+
+            // when
+            assertThatThrownBy(() -> userService.modifyMyProfile(USER_ID, request))
+                    .isInstanceOf(CustomException.class);
+
+            // then: updateProfile()이 호출되지 않았으니 buildFullyPopulatedUser()의 기존 값 그대로다.
+            assertThat(user.getNickname()).isEqualTo("기존닉네임");
+            assertThat(user.getPhone()).isEqualTo("010-0000-0000");
+            assertThat(user.getSex()).isEqualTo("F");
+            assertThat(user.getAge()).isEqualTo(30);
+        }
     }
 
     // =====================================================================
@@ -419,8 +465,19 @@ class UserServiceImplTest {
     @DisplayName("비밀번호 변경 - Bean Validation")
     class RequestChangePasswordDtoValidation {
 
-        private final jakarta.validation.Validator validator =
-                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+        private static ValidatorFactory validatorFactory;
+        private static Validator validator;
+
+        @BeforeAll
+        static void setUpValidator() {
+            validatorFactory = Validation.buildDefaultValidatorFactory();
+            validator = validatorFactory.getValidator();
+        }
+
+        @AfterAll
+        static void closeValidator() {
+            validatorFactory.close();
+        }
 
         @Test
         @DisplayName("currentPassword가_blank면_검증_실패")
@@ -449,6 +506,127 @@ class UserServiceImplTest {
         void 유효한_요청이면_검증_통과() {
             RequestChangePasswordDto dto = new RequestChangePasswordDto("OldPass1!", "NewPass1!");
             assertThat(validator.validate(dto)).isEmpty();
+        }
+    }
+
+    // =====================================================================
+    // AUTH-08: withdraw() 테스트
+    // =====================================================================
+
+    private User buildAlreadyDeletedUser() {
+        User user = buildUser();
+        ReflectionTestUtils.setField(user, "isDeleted", true);
+        ReflectionTestUtils.setField(user, "deletedAt", OffsetDateTime.now().minusDays(1));
+        return user;
+    }
+
+    @Nested
+    @DisplayName("회원 탈퇴 성공")
+    class WithdrawSuccess {
+
+        @Test
+        @DisplayName("정상_탈퇴하면_isDeleted가_true로_바뀐다")
+        void 정상_탈퇴하면_isDeleted가_true로_바뀐다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when
+            userService.withdraw(USER_ID);
+
+            // then: 더티 체킹 대상 — user 엔티티 필드가 직접 바뀌었는지 확인
+            assertThat(user.isDeleted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("정상_탈퇴하면_deletedAt에_값이_설정된다")
+        void 정상_탈퇴하면_deletedAt에_값이_설정된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when
+            userService.withdraw(USER_ID);
+
+            // then
+            assertThat(user.getDeletedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("정상_탈퇴_시_Redis의_refreshToken이_삭제된다")
+        void 정상_탈퇴_시_Redis의_refreshToken이_삭제된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when
+            userService.withdraw(USER_ID);
+
+            // then: AUTH-04 로그아웃과 동일하게 refresh:{userId} 삭제 — userId는 String으로 전달
+            verify(refreshTokenService).delete("1");
+        }
+    }
+
+    @Nested
+    @DisplayName("회원 탈퇴 실패")
+    class WithdrawFailure {
+
+        @Test
+        @DisplayName("존재하지_않는_userId로_탈퇴하면_USER_NOT_FOUND_예외가_발생한다")
+        void 존재하지_않는_userId로_탈퇴하면_USER_NOT_FOUND_예외가_발생한다() {
+            // given
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> userService.withdraw(999L))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("이미_탈퇴한_계정을_다시_탈퇴하면_ALREADY_DELETED_USER_예외가_발생한다")
+        void 이미_탈퇴한_계정을_다시_탈퇴하면_ALREADY_DELETED_USER_예외가_발생한다() {
+            // given
+            User user = buildAlreadyDeletedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when & then
+            assertThatThrownBy(() -> userService.withdraw(USER_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.ALREADY_DELETED_USER);
+        }
+
+        @Test
+        @DisplayName("이미_탈퇴한_계정_재요청_시_deletedAt이_변경되지_않는다")
+        void 이미_탈퇴한_계정_재요청_시_deletedAt이_변경되지_않는다() {
+            // given
+            User user = buildAlreadyDeletedUser();
+            OffsetDateTime originalDeletedAt = user.getDeletedAt();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when
+            assertThatThrownBy(() -> userService.withdraw(USER_ID))
+                    .isInstanceOf(CustomException.class);
+
+            // then: withdraw()가 다시 호출되지 않았으니 deletedAt은 최초 탈퇴 시점 그대로다
+            assertThat(user.getDeletedAt()).isEqualTo(originalDeletedAt);
+        }
+
+        @Test
+        @DisplayName("이미_탈퇴한_계정_재요청_시_Redis_delete가_다시_호출되지_않는다")
+        void 이미_탈퇴한_계정_재요청_시_Redis_delete가_다시_호출되지_않는다() {
+            // given
+            User user = buildAlreadyDeletedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            // when
+            assertThatThrownBy(() -> userService.withdraw(USER_ID))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(refreshTokenService, never()).delete(anyString());
         }
     }
 }
