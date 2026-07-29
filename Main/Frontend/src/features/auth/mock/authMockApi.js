@@ -5,9 +5,19 @@ import { authMockDatabase } from './authMockDatabase'
 export const authMockApi = {
   login: credentials => {
     const user = { ...userMockDatabase.profile, email: credentials.email }
-    const session = { userId: user.id, accessToken: 'mock-token' }
+    const session = {
+      userId: user.id,
+      accessToken: 'mock-access-token',
+      refreshToken: 'mock-refresh-token'
+    }
     authMockDatabase.sessions.push(session)
-    return mockResponse({ user, accessToken: session.accessToken })
+    return mockResponse({
+      tokenType: 'Bearer',
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      userId: session.userId,
+      onboarded: Boolean(user.gender && user.ageGroup)
+    })
   },
   signup: form => {
     const user = {
@@ -17,8 +27,14 @@ export const authMockApi = {
     }
     authMockDatabase.users.push(user)
     Object.assign(userMockDatabase.profile, user)
-    return mockResponse({ user })
+    return mockResponse({
+      userId: user.id,
+      email: user.email,
+      createdAt: new Date().toISOString()
+    })
   },
+  refreshAccessToken: () =>
+    mockResponse({ tokenType: 'Bearer', accessToken: 'mock-access-token-refreshed' }),
   logout: () => {
     authMockDatabase.sessions.splice(0)
     return mockResponse({ success: true })
