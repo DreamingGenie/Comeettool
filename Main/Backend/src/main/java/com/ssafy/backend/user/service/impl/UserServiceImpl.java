@@ -46,6 +46,11 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
+        // 로그인 후 Access Token(30분)이 만료되기 전에 탈퇴 처리된 경우를 방어 — 탈퇴 계정은 더 이상 수정할 수 없다.
+        if (user.isDeleted()) {
+            throw new CustomException(ErrorCode.ALREADY_DELETED_USER);
+        }
+
         // user는 영속 상태 엔티티라 필드 변경만으로 트랜잭션 커밋 시 UPDATE가 나간다(더티 체킹) — save() 호출 불필요.
         user.updateProfile(
                 request.nickname(), request.phone(), request.sex(), request.age(),
