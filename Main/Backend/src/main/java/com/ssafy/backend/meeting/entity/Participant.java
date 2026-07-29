@@ -37,6 +37,9 @@ public class Participant {
     @Column(name = "participants_role", nullable = false, length = 50)
     private String participantRole;
 
+    @Column(name = "is_in_meeting", nullable = false)
+    private String isInMeeting = "Y";
+
     @Builder
     private Participant(Long meetingRoomId, Long memberId, String participantRole) {
         this.meetingRoomId = meetingRoomId;
