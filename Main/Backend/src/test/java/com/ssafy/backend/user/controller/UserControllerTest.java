@@ -31,13 +31,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * UserController 단위(standalone MockMvc) 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile). Spring 컨텍스트를 띄우지 않고 컨트롤러
+ * UserController 단위(standalone MockMvc) 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword,
+ * AUTH-08 withdraw). Spring 컨텍스트를 띄우지 않고 컨트롤러
  * 하나만 MockMvc에 등록한다 — SecurityConfig·DB·Redis 전부 불필요. (@WebMvcTest는 앱의 실제 SecurityConfig까지 함께 로드해 JwtProvider 등 연쇄적인 빈이
  * 필요해져 이 방식을 택함) standalone 모드엔 시큐리티 필터 체인이 없어 SecurityMockMvcRequestPostProcessors.authentication()이 먹지 않으므로,
  * SecurityContextHolder에 직접 Authentication을 심어 @AuthenticationPrincipal을 채운다. UserService는 Mock — 요청/응답
@@ -380,6 +382,71 @@ class UserControllerTest {
             mockMvc.perform(patch("/api/v1/users/me/password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/v1/users/me 성공")
+    class WithdrawSuccess {
+
+        @Test
+        @DisplayName("인증된_사용자가_요청하면_200과_SUCCESS를_반환한다")
+        void 인증된_사용자가_요청하면_200과_SUCCESS를_반환한다() throws Exception {
+            // given: withdraw()는 void라 별도 스텁 없이도 기본적으로 아무 예외 없이 통과한다.
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(delete("/api/v1/users/me"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("인증_principal의_문자열_userId를_Long으로_변환해_서비스에_전달한다")
+        void 인증_principal의_문자열_userId를_Long으로_변환해_서비스에_전달한다() throws Exception {
+            // given
+            authenticateAs("42");
+
+            // when
+            mockMvc.perform(delete("/api/v1/users/me"))
+                    .andExpect(status().isOk());
+
+            // then
+            verify(userService).withdraw(42L);
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/v1/users/me 실패")
+    class WithdrawFailure {
+
+        @Test
+        @DisplayName("이미_탈퇴한_계정이면_409_ALREADY_DELETED_USER를_반환한다")
+        void 이미_탈퇴한_계정이면_409_ALREADY_DELETED_USER를_반환한다() throws Exception {
+            // given
+            org.mockito.Mockito.doThrow(new CustomException(ErrorCode.ALREADY_DELETED_USER))
+                    .when(userService).withdraw(1L);
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(delete("/api/v1/users/me"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("ALREADY_DELETED_USER"));
+        }
+
+        @Test
+        @DisplayName("서비스에서_USER_NOT_FOUND가_발생하면_404를_반환한다")
+        void 서비스에서_USER_NOT_FOUND가_발생하면_404를_반환한다() throws Exception {
+            // given
+            org.mockito.Mockito.doThrow(new CustomException(ErrorCode.USER_NOT_FOUND))
+                    .when(userService).withdraw(1L);
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(delete("/api/v1/users/me"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
         }

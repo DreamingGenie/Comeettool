@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -86,6 +87,14 @@ class JwtAuthenticationFilterTest {
     @DisplayName("AUTH-06 내 프로필 수정 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
     void modifyMyProfileWithoutTokenReturns401Unauthorized() throws Exception {
         mockMvc.perform(patch("/api/v1/users/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
+    }
+
+    @Test
+    @DisplayName("AUTH-08 회원 탈퇴 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
+    void withdrawWithoutTokenReturns401Unauthorized() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
     }

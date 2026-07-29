@@ -27,7 +27,8 @@ public enum ErrorCode {
     SPACE_OWNER_CANNOT_LEAVE(HttpStatus.CONFLICT, "SPACE_OWNER_CANNOT_LEAVE",
             "소유자는 스페이스를 나갈 수 없습니다. 소유권을 위임하거나 스페이스를 삭제해 주세요."),
 
-    PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다.");
+    PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
+    ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다.");
 
     private final HttpStatus status;
     private final String code;
