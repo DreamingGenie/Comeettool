@@ -1,8 +1,8 @@
 <template>
-  <TeamLayout :active-section="section">
+  <TeamLayout :active-section="section" :retry="reloadBoard">
     <header class="page-heading archive-heading">
       <div>
-        <span class="eyebrow">MEETING ARCHIVE</span>
+        <span class="eyebrow">{{ eyebrow }}</span>
         <h1>{{ info.name }}</h1>
         <p>{{ info.description }}</p>
       </div>
@@ -35,13 +35,21 @@
         </select>
       </div>
       <div class="archive-list">
-        <article v-for="row in visibleRows" :key="`${row[0]}-${row[3]}`" class="archive-row">
+        <article
+          v-for="row in visibleRows"
+          :key="`${row[0]}-${row[3]}`"
+          class="archive-row"
+          role="button"
+          tabindex="0"
+          @click="openPreview(row)"
+          @keydown.enter="openPreview(row)"
+        >
           <i class="archive-icon" :class="section">{{ info.icon }}</i>
           <div class="archive-title"><b>{{ row[0] }}</b><span>{{ row[1] }}</span></div>
           <div><small>{{ section === 'documents' ? '편집자' : '회의 정보' }}</small><b>{{ row[2] }}</b></div>
           <div><small>업데이트</small><b>{{ row[3] }}</b></div>
           <em>{{ row[4] }}</em>
-          <button type="button" @click="notify(`${row[0]} 항목을 열었습니다.`)">열기 →</button>
+          <button type="button" @click.stop="openPreview(row)">열기 →</button>
         </article>
       </div>
       <footer class="archive-footer">
@@ -49,18 +57,32 @@
         <div><button disabled>‹</button><button class="active">1</button><button disabled>›</button></div>
       </footer>
     </section>
+    <DocumentPreviewModal
+      :row="selectedRow"
+      :section="section"
+      :info="{ ...info, eyebrow }"
+      @close="selectedRow = null"
+      @open-original="openOriginal"
+    />
   </TeamLayout>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { useToast } from '../../../shared/composables/useToast'
+import DocumentPreviewModal from '../components/DocumentPreviewModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
 
 const props = defineProps({
   section: { type: String, default: 'documents' }
 })
+const archiveEyebrows = {
+  documents: 'SHARED DOCUMENTS',
+  minutes: 'MEETING MINUTES',
+  summary: 'AI SUMMARY',
+  feedback: 'AI FEEDBACK'
+}
 const archiveInfo = {
   documents: { name: '공유 문서', icon: '▤', description: '팀원과 함께 작성 중인 문서를 확인하고 편집하세요.' },
   minutes: { name: '회의록', icon: '▤', description: '회의별 발언과 결정사항이 정리된 회의록입니다.' },
@@ -77,12 +99,17 @@ const fallbackStats = {
   tertiaryValue: '-',
   tertiaryDetail: ''
 }
-const { boardState } = useBoardPage()
+const { boardState, reloadBoard } = useBoardPage({
+  resources: ['workspaces', 'team', 'archive'],
+  section: () => props.section
+})
 const { notify } = useToast()
 const tabs = ['전체', '최근 열어본', '내 문서']
 const activeTab = ref('전체')
 const query = ref('')
 const sort = ref('recent')
+const selectedRow = ref(null)
+const eyebrow = computed(() => archiveEyebrows[props.section] || archiveEyebrows.documents)
 const info = computed(() => archiveInfo[props.section] || archiveInfo.documents)
 const rows = computed(() => boardState.archives[props.section] || [])
 const stats = computed(() => boardState.archiveStats[props.section] || { ...fallbackStats, total: rows.value.length })
@@ -93,4 +120,13 @@ const visibleRows = computed(() => {
     ? [...filtered].sort((a, b) => a[0].localeCompare(b[0]))
     : filtered
 })
+
+function openPreview(row) {
+  selectedRow.value = row
+}
+
+function openOriginal() {
+  if (!selectedRow.value) return
+  notify(`${selectedRow.value[0]} 원문 열기는 API 연결 후 제공됩니다.`)
+}
 </script>

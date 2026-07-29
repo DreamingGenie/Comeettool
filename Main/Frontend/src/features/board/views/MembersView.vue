@@ -1,5 +1,5 @@
 <template>
-  <TeamLayout active-section="members">
+  <TeamLayout active-section="members" :retry="reloadBoard">
     <header class="page-heading">
       <div>
         <span class="eyebrow">TEAM MEMBER</span>
@@ -30,8 +30,29 @@
         </span>
         <span>{{ member[5] }}</span>
       </article>
-      <footer class="table-foot">
-        Showing {{ visibleMembers.length }} of {{ boardState.team.memberCount }} members
+      <footer class="table-foot member-pagination">
+        <span>
+          Showing {{ rangeStart }}–{{ rangeEnd }} of {{ filteredMembers.length }} members
+        </span>
+        <nav v-if="totalPages > 1" aria-label="멤버 목록 페이지">
+          <button
+            type="button"
+            aria-label="이전 페이지"
+            :disabled="currentPage === 1"
+            @click="currentPage -= 1"
+          >
+            ‹
+          </button>
+          <b>{{ currentPage }} / {{ totalPages }}</b>
+          <button
+            type="button"
+            aria-label="다음 페이지"
+            :disabled="currentPage === totalPages"
+            @click="currentPage += 1"
+          >
+            ›
+          </button>
+        </nav>
       </footer>
     </section>
   </TeamLayout>
@@ -44,20 +65,86 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useToast } from '../../../shared/composables/useToast'
 import InviteModal from '../components/InviteModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
 
-const { boardState, teamId } = useBoardPage()
+const { boardState, teamId, reloadBoard } = useBoardPage({
+  resources: ['workspaces', 'team', 'members', 'inviteMembers']
+})
 const { notify } = useToast()
 const query = ref('')
 const reverse = ref(false)
 const showInvite = ref(false)
-const visibleMembers = computed(() => {
+const currentPage = ref(1)
+const pageSize = 4
+const filteredMembers = computed(() => {
   const keyword = query.value.toLowerCase()
   const rows = boardState.members.filter(row => row.join(' ').toLowerCase().includes(keyword))
   return reverse.value ? [...rows].reverse() : rows
 })
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredMembers.value.length / pageSize)))
+const visibleMembers = computed(() => {
+  const offset = (currentPage.value - 1) * pageSize
+  return filteredMembers.value.slice(offset, offset + pageSize)
+})
+const rangeStart = computed(() => filteredMembers.value.length ? (currentPage.value - 1) * pageSize + 1 : 0)
+const rangeEnd = computed(() => Math.min(currentPage.value * pageSize, filteredMembers.value.length))
+
+watch([query, reverse], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, pages => {
+  if (currentPage.value > pages) currentPage.value = pages
+})
 </script>
+
+<style scoped>
+.member-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.member-pagination nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-pagination nav button {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d7dce7;
+  border-radius: 7px;
+  background: #fff;
+  color: #35405a;
+  font-size: 19px;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.member-pagination nav button:not(:disabled):hover {
+  border-color: var(--blue);
+  background: #eef1ff;
+  color: var(--blue);
+  transform: translateY(-1px);
+}
+
+.member-pagination nav button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.member-pagination nav b {
+  min-width: 36px;
+  color: #697287;
+  text-align: center;
+  font-size: 11px;
+}
+</style>

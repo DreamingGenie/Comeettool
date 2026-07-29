@@ -10,11 +10,16 @@
       <label class="field">
         <span class="field-line">
           비밀번호
-          <button type="button">비밀번호를 잊으셨나요?</button>
+          <button type="button" @click="openPasswordReset">
+            비밀번호를 잊으셨나요?
+          </button>
         </span>
         <div class="password-box">
           <input v-model="form.password" :type="showPassword ? 'text' : 'password'" required />
-          <button type="button" aria-label="비밀번호 표시 전환" @click="showPassword = !showPassword">◉</button>
+          <PasswordVisibilityButton
+            :visible="showPassword"
+            @toggle="showPassword = !showPassword"
+          />
         </div>
       </label>
       <button class="primary block" :disabled="submitting">로그인 →</button>
@@ -30,24 +35,33 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppLogo from '../../../shared/components/AppLogo.vue'
+import PasswordVisibilityButton from '../../../shared/components/PasswordVisibilityButton.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../stores/authStore'
-import { userStore } from '../../user/stores/userStore'
 
+const route = useRoute()
 const router = useRouter()
 const { notify } = useToast()
 const form = reactive({ email: '', password: '' })
 const showPassword = ref(false)
 const submitting = ref(false)
 
+function openPasswordReset() {
+  router.push({
+    name: 'password-reset',
+    query: form.email ? { email: form.email } : {}
+  })
+}
+
 async function submit() {
   submitting.value = true
   try {
     const result = await authStore.login(form)
-    userStore.setProfile(result.user)
-    await router.push('/onboarding')
+    const redirect =
+      typeof route.query.redirect === 'string' ? route.query.redirect : '/home'
+    await router.push(result.onboarded ? redirect : '/onboarding')
   } catch (error) {
     notify(error?.message || '로그인하지 못했습니다.')
   } finally {

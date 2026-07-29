@@ -1,5 +1,5 @@
 <template>
-  <TeamLayout active-section="schedule">
+  <TeamLayout active-section="schedule" :retry="reloadBoard">
     <header class="page-heading">
       <div>
         <span class="eyebrow">TEAM SCHEDULE</span>
@@ -26,7 +26,7 @@
         <i>＋</i><b>새 회의 만들기</b><span>팀원들과 바로 회의를 시작하세요.</span>
       </button>
     </div>
-    <AppCalendar :calendar="boardState.calendar" @change-month="changeMonth" />
+    <BoardCalendar :calendar="boardState.calendar" @change-month="changeMonth" />
   </TeamLayout>
   <InviteModal
     v-if="showInvite"
@@ -44,13 +44,21 @@
 
 <script setup>
 import { ref } from 'vue'
-import AppCalendar from '../../../shared/components/AppCalendar.vue'
+import BoardCalendar from '../components/BoardCalendar.vue'
 import InviteModal from '../components/InviteModal.vue'
 import NewMeetingModal from '../components/NewMeetingModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
 
-const { boardState, teamId, meetingId, changeMonth } = useBoardPage()
+const { boardState, teamId, meetingId, changeMonth, reloadBoard } = useBoardPage({
+  resources: [
+    'workspaces',
+    'team',
+    'activeMeeting',
+    'calendar',
+    'inviteMembers'
+  ]
+})
 const showInvite = ref(false)
 const showMeeting = ref(false)
 </script>

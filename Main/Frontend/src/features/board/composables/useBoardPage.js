@@ -1,18 +1,28 @@
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, unref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { boardStore } from '../stores/boardStore'
 
-export function useBoardPage() {
+export function useBoardPage(options = {}) {
   const route = useRoute()
+  const resources = options.resources || []
   const teamId = computed(() => String(route.params.teamId || 'a707'))
   const meetingId = computed(() =>
     String(route.params.meetingId || boardStore.state.activeMeeting.id || 'be-team-meeting')
   )
+  const archiveSection = computed(() => {
+    const section = typeof options.section === 'function'
+      ? options.section()
+      : unref(options.section)
+    return section || 'documents'
+  })
 
   const load = () =>
-    boardStore.load({
+    boardStore.loadResources(resources, {
       teamId: teamId.value,
-      meetingId: meetingId.value
+      meetingId: meetingId.value,
+      year: boardStore.state.calendar.year,
+      month: boardStore.state.calendar.month,
+      section: archiveSection.value
     })
   const loadSafely = () => load().catch(() => undefined)
 
@@ -31,7 +41,9 @@ export function useBoardPage() {
   }
 
   onMounted(loadSafely)
-  watch([teamId, meetingId], loadSafely)
+  watch(teamId, loadSafely)
+  if (resources.includes('meetingRoom')) watch(meetingId, loadSafely)
+  if (resources.includes('archive')) watch(archiveSection, loadSafely)
 
   return {
     boardState: boardStore.state,

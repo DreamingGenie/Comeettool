@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { dataSource } from '../../../shared/api/dataSource'
+import { toCalendarViewModel } from '../mappers/calendarMapper'
 
 const emptyTeam = {
   id: '',
@@ -26,14 +27,7 @@ const emptyMeeting = {
   avatars: []
 }
 
-const emptyCalendar = {
-  year: new Date().getFullYear(),
-  month: new Date().getMonth() + 1,
-  leadingBlankDays: 0,
-  totalDays: 31,
-  weekdays: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
-  events: []
-}
+const emptyCalendar = toCalendarViewModel()
 
 const emptyMeetingRoom = {
   totalParticipants: 0,
@@ -43,7 +37,7 @@ const emptyMeetingRoom = {
 }
 
 const state = reactive({
-  loaded: false,
+  pendingRequests: 0,
   loading: false,
   error: '',
   currentTeamId: '',
@@ -69,89 +63,160 @@ const state = reactive({
   inviteMembers: []
 })
 
-const archiveSections = ['documents', 'minutes', 'summary', 'feedback']
+function resetState() {
+  state.pendingRequests = 0
+  state.loading = false
+  state.error = ''
+  state.currentTeamId = ''
+  state.currentMeetingId = ''
+  state.workspaces = []
+  state.team = { ...emptyTeam }
+  state.members = []
+  state.activeMeeting = { ...emptyMeeting }
+  state.calendar = toCalendarViewModel()
+  state.archives = {
+    documents: [],
+    minutes: [],
+    summary: [],
+    feedback: []
+  }
+  state.archiveStats = {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  }
+  state.meetingRoom = {
+    ...emptyMeetingRoom,
+    participants: [],
+    chatMessages: [],
+    directContacts: []
+  }
+  state.inviteMembers = []
+}
+
+const withLoading = async request => {
+  state.pendingRequests += 1
+  state.loading = true
+  state.error = ''
+
+  try {
+    return await request()
+  } catch (error) {
+    state.error = error?.message || '데이터를 불러오지 못했습니다.'
+    throw error
+  } finally {
+    state.pendingRequests = Math.max(0, state.pendingRequests - 1)
+    state.loading = state.pendingRequests > 0
+  }
+}
 
 export const boardStore = {
   state,
-  async load({
-    teamId = 'a707',
-    meetingId = 'be-team-meeting',
-    year = state.calendar.year,
-    month = state.calendar.month
-  } = {}) {
-    if (
-      state.loaded &&
-      state.currentTeamId === teamId &&
-      state.currentMeetingId === meetingId
-    ) {
-      return state
+  async loadResources(resources = [], context = {}) {
+    const {
+      teamId = 'a707',
+      meetingId = 'be-team-meeting',
+      year = state.calendar.year,
+      month = state.calendar.month,
+      section = 'documents'
+    } = context
+    const loaders = {
+      workspaces: () => boardStore.loadWorkspaces(),
+      team: () => boardStore.loadTeam(teamId),
+      members: () => boardStore.loadMembers(teamId),
+      activeMeeting: () => boardStore.loadActiveMeeting(teamId),
+      calendar: () => boardStore.loadCalendar(teamId, year, month),
+      meetingRoom: () => boardStore.loadMeetingRoom(meetingId),
+      inviteMembers: () => boardStore.loadInviteMembers(teamId),
+      archive: () => boardStore.loadArchive(teamId, section)
     }
-    state.loading = true
-    state.error = ''
-    try {
-      const [
-      dashboard,
-      team,
-      loadedMembers,
-      activeMeeting,
-      calendar,
-      meetingRoom,
-      participants,
-      messages,
-      inviteMembers,
-      ...loadedArchives
-      ] = await Promise.all([
-        dataSource.board.getDashboard(),
-        dataSource.board.getTeam(teamId),
-        dataSource.board.getMembers(teamId),
-        dataSource.board.getActiveMeeting(teamId),
-        dataSource.board.getEvents(teamId, year, month),
-        dataSource.board.getMeetingRoom(meetingId),
-        dataSource.board.getParticipants(meetingId),
-        dataSource.board.getMessages(meetingId),
-        dataSource.board.getInviteMembers(teamId),
-        ...archiveSections.map(async section => [
-          section,
-          await dataSource.board.getArchive(teamId, section)
-        ])
-      ])
+    const uniqueResources = [...new Set(resources)]
+    const unknownResource = uniqueResources.find(resource => !loaders[resource])
 
-      state.workspaces = dashboard?.workspaces || []
-      state.team = team || { ...emptyTeam }
-      state.members = loadedMembers || []
-      state.activeMeeting = activeMeeting || { ...emptyMeeting }
-      state.calendar = calendar || { ...emptyCalendar }
-      state.meetingRoom = {
-        ...(meetingRoom || emptyMeetingRoom),
-        participants: participants || meetingRoom?.participants || [],
-        chatMessages: messages || meetingRoom?.chatMessages || []
-      }
-      state.inviteMembers = inviteMembers || []
-
-      loadedArchives.forEach(([section, result]) => {
-        state.archives[section] = result?.rows || result || []
-        state.archiveStats[section] = result?.stats || null
-      })
-
-      state.currentTeamId = teamId
-      state.currentMeetingId = meetingId
-      state.loaded = true
-      return state
-    } catch (error) {
-      state.error = error?.message || '데이터를 불러오지 못했습니다.'
-      throw error
-    } finally {
-      state.loading = false
+    if (unknownResource) {
+      throw new Error(`지원하지 않는 board resource입니다: ${unknownResource}`)
     }
+
+    await Promise.all(uniqueResources.map(resource => loaders[resource]()))
+    return state
+  },
+  async loadWorkspaces() {
+    const dashboard = await withLoading(() => dataSource.board.getDashboard())
+    state.workspaces = dashboard?.workspaces || []
+    return state.workspaces
+  },
+  async loadTeam(teamId) {
+    const team = await withLoading(() => dataSource.board.getTeam(teamId))
+    state.team = team || { ...emptyTeam }
+    state.currentTeamId = teamId
+    return state.team
+  },
+  async loadMembers(teamId) {
+    const members = await withLoading(() => dataSource.board.getMembers(teamId))
+    state.members = members || []
+    return state.members
+  },
+  async loadActiveMeeting(teamId) {
+    const meeting = await withLoading(() =>
+      dataSource.board.getActiveMeeting(teamId)
+    )
+    state.activeMeeting = meeting || { ...emptyMeeting }
+    return state.activeMeeting
   },
   async loadCalendar(teamId, year, month) {
-    state.calendar = await dataSource.board.getEvents(teamId, year, month)
+    const response = await withLoading(() =>
+      dataSource.board.getEvents(teamId, year, month)
+    )
+    state.calendar = toCalendarViewModel(response, { year, month })
     return state.calendar
+  },
+  async loadMeetingRoom(meetingId) {
+    const [meetingRoom, participants, messages] = await withLoading(() =>
+      Promise.all([
+        dataSource.board.getMeetingRoom(meetingId),
+        dataSource.board.getParticipants(meetingId),
+        dataSource.board.getMessages(meetingId)
+      ])
+    )
+    state.meetingRoom = {
+      ...(meetingRoom || emptyMeetingRoom),
+      participants: participants || meetingRoom?.participants || [],
+      chatMessages: messages || meetingRoom?.chatMessages || []
+    }
+    state.currentMeetingId = meetingId
+    return state.meetingRoom
+  },
+  async loadInviteMembers(teamId) {
+    const members = await withLoading(() =>
+      dataSource.board.getInviteMembers(teamId)
+    )
+    state.inviteMembers = members || []
+    return state.inviteMembers
+  },
+  async loadArchive(teamId, section) {
+    const result = await withLoading(() =>
+      dataSource.board.getArchive(teamId, section)
+    )
+    state.archives[section] = result?.rows || result || []
+    state.archiveStats[section] = result?.stats || null
+    return state.archives[section]
   },
   async createWorkspace(data) {
     const workspace = await dataSource.board.createWorkspace(data)
     state.workspaces.push(workspace)
     return workspace
+  },
+  async leaveWorkspace(spaceId) {
+    await dataSource.board.leaveWorkspace(spaceId)
+    state.workspaces = state.workspaces.filter(
+      workspace => String(workspace.id) !== String(spaceId)
+    )
+    if (String(state.currentTeamId) === String(spaceId)) {
+      state.currentTeamId = ''
+      state.team = { ...emptyTeam }
+      state.members = []
+    }
   },
   async createMeeting(data) {
     const meeting = await dataSource.board.createMeeting(data)
@@ -207,5 +272,8 @@ export const boardStore = {
     )
     if (index >= 0) state.meetingRoom.participants[index] = participant
     return participant
+  },
+  reset() {
+    resetState()
   }
 }
