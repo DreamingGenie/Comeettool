@@ -18,6 +18,7 @@ const jwksPort = Number(process.env.TEST_JWKS_PORT || port + 1)
 const jwksUrl = `http://127.0.0.1:${jwksPort}/.well-known/jwks.json`
 const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
 const serverFile = process.env.TEST_SERVER_FILE || 'CrdtServer.js'
+const internalApiToken = 'e2e-internal-token'
 const timeout = 10_000
 const {Pool} = pg
 const pool = new Pool({connectionString: databaseUrl, max: 2})
@@ -71,6 +72,7 @@ async function startServer() {
             SPRING_JWKS_URL: jwksUrl,
             JWT_ISSUER: 'a707-api',
             JWT_YJS_AUDIENCE: 'a707-yjs',
+            YJS_INTERNAL_TOKEN: internalApiToken,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
@@ -289,11 +291,13 @@ async function main() {
     })
 
     await check('3. 문서와 초기 Yjs 상태를 트랜잭션으로 생성', async () => {
-        const response = await fetch(`${httpUrl}/api/documents`, {
+        const response = await fetch(`${httpUrl}/internal/documents`, {
             method: 'POST',
-            headers: {'content-type': 'application/json'},
+            headers: {
+                'content-type': 'application/json',
+                'x-internal-token': internalApiToken,
+            },
             body: JSON.stringify({
-                title: `E2E test ${new Date().toISOString()}`,
                 teamId,
             }),
         })
