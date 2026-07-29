@@ -169,6 +169,8 @@ function requireInternalToken(request, response, next) {
     next()
 }
 
+app.use('/internal', requireInternalToken)
+
 app.get('/health', async (_request, response) => {
     try {
         await pool.query('SELECT 1')
@@ -186,7 +188,7 @@ app.get('/health', async (_request, response) => {
     }
 })
 
-app.get('/api/documents', async (request, response, next) => {
+app.get('/internal/documents', async (request, response, next) => {
     try {
         const values = []
         let teamFilter = ''
@@ -212,7 +214,7 @@ app.get('/api/documents', async (request, response, next) => {
     }
 })
 
-app.get('/api/documents/:id', async (request, response, next) => {
+app.get('/internal/documents/:id', async (request, response, next) => {
     try {
         const document = await getActiveDocument(request.params.id)
 
@@ -226,7 +228,7 @@ app.get('/api/documents/:id', async (request, response, next) => {
     }
 })
 
-app.post('/internal/documents', requireInternalToken, async (request, response, next) => {
+app.post('/internal/documents', async (request, response, next) => {
     const teamId = Number(request.body.teamId)
 
     if (!Number.isSafeInteger(teamId) || teamId <= 0) {
@@ -275,7 +277,7 @@ app.post('/internal/documents', requireInternalToken, async (request, response, 
     }
 })
 
-app.delete('/api/documents/:id', async (request, response, next) => {
+app.delete('/internal/documents/:id', async (request, response, next) => {
     try {
         const result = await pool.query(
             `UPDATE documents
@@ -301,7 +303,7 @@ app.delete('/api/documents/:id', async (request, response, next) => {
     }
 })
 
-app.get('/api/documents/:id/versions', async (request, response, next) => {
+app.get('/internal/documents/:id/versions', async (request, response, next) => {
     try {
         const document = await getActiveDocument(request.params.id)
 
@@ -323,7 +325,7 @@ app.get('/api/documents/:id/versions', async (request, response, next) => {
     }
 })
 
-app.post('/api/documents/:id/versions', async (request, response, next) => {
+app.post('/internal/documents/:id/versions', async (request, response, next) => {
     const triggerType = typeof request.body.triggerType === 'string'
         ? request.body.triggerType.trim()
         : 'manual'
@@ -420,7 +422,7 @@ app.post('/api/documents/:id/versions', async (request, response, next) => {
 })
 
 app.post(
-    '/api/documents/:id/versions/:versionId/restore',
+    '/internal/documents/:id/versions/:versionId/restore',
     async (request, response, next) => {
         const documentName = `document:${request.params.id}:epoch:1`
         const activeDocument = hocuspocus.documents.get(documentName)

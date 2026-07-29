@@ -369,10 +369,13 @@ async function main() {
 
     await check('7. 현재 상태를 documents_version에 저장', async () => {
         const response = await fetch(
-            `${httpUrl}/api/documents/${createdDocument.id}/versions`,
+            `${httpUrl}/internal/documents/${createdDocument.id}/versions`,
             {
                 method: 'POST',
-                headers: {'content-type': 'application/json'},
+                headers: {
+                    'content-type': 'application/json',
+                    'x-internal-token': internalApiToken,
+                },
                 body: JSON.stringify({
                     triggerType: 'manual',
                     editorJson: {type: 'doc', content: []},
@@ -399,11 +402,14 @@ async function main() {
         destroyProvider(changedProvider)
 
         const response = await fetch(
-            `${httpUrl}/api/documents/${createdDocument.id}`
+            `${httpUrl}/internal/documents/${createdDocument.id}`
             + `/versions/${version.id}/restore`,
             {
                 method: 'POST',
-                headers: {'content-type': 'application/json'},
+                headers: {
+                    'content-type': 'application/json',
+                    'x-internal-token': internalApiToken,
+                },
                 body: '{}',
             },
         )
@@ -420,8 +426,11 @@ async function main() {
 
     await check('9. 문서를 PostgreSQL에서 소프트 삭제', async () => {
         const response = await fetch(
-            `${httpUrl}/api/documents/${createdDocument.id}`,
-            {method: 'DELETE'},
+            `${httpUrl}/internal/documents/${createdDocument.id}`,
+            {
+                method: 'DELETE',
+                headers: {'x-internal-token': internalApiToken},
+            },
         )
         assert.equal(response.status, 204)
 
