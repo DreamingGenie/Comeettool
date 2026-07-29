@@ -103,6 +103,7 @@ import HelpSupportModal from '../../../shared/components/HelpSupportModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../../auth/stores/authStore'
 import { useUserPage } from '../../user/composables/useUserPage'
+import { userStore } from '../../user/stores/userStore'
 import BoardCalendar from '../components/BoardCalendar.vue'
 import NewMeetingModal from '../components/NewMeetingModal.vue'
 import NewTeamModal from '../components/NewTeamModal.vue'
@@ -128,7 +129,8 @@ const enterMeeting = () => router.push(`/meetings/${meetingId.value}`)
 async function logout() {
   try {
     await authStore.logout()
-    await router.push('/')
+    userStore.reset()
+    await router.push('/login')
   } catch (error) {
     notify(error?.message || '로그아웃하지 못했습니다.')
   }

@@ -63,10 +63,10 @@
           <label class="field profile-bio">
             <span class="field-label-with-meta">
               자기소개
-              <small>{{ form.bio.length }}/{{ bioMaxLength }}</small>
+              <small>{{ form.userDescription.length }}/{{ bioMaxLength }}</small>
             </span>
             <textarea
-              v-model.trim="form.bio"
+              v-model.trim="form.userDescription"
               :maxlength="bioMaxLength"
               placeholder="팀원들에게 나를 소개해 보세요."
             ></textarea>
@@ -74,7 +74,7 @@
           <fieldset class="profile-color-field">
             <legend>사용자 색상</legend>
             <small>프로필과 팀원 목록에서 표시할 색상을 선택해 주세요.</small>
-            <AppColorPicker v-model="form.color" :options="colorOptions" />
+            <AppColorPicker v-model="form.userColor" :options="colorOptions" />
           </fieldset>
           <div class="form-section-title role-title">
             <b>직무 및 프로필</b>
@@ -87,31 +87,35 @@
                 v-for="gender in userState.profileOptions.genders"
                 :key="gender.value"
                 class="radio-card"
-                :class="{ active: form.gender === gender.value }"
+                :class="{ active: form.sex === gender.value }"
               >
-                <input v-model="form.gender" type="radio" :value="gender.value" />
+                <input v-model="form.sex" type="radio" :value="gender.value" />
                 {{ gender.label }}
               </label>
             </fieldset>
             <label class="field">
               연령대
-              <select v-model="form.ageGroup">
-                <option v-for="option in userState.profileOptions.ageGroups" :key="option">
-                  {{ option }}
+              <select v-model.number="form.age">
+                <option
+                  v-for="option in userState.profileOptions.ageGroups"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
                 </option>
               </select>
             </label>
             <label class="field">
               직군
-              <select v-model="form.jobGroup" @change="onJobGroupChange">
-                <option v-for="option in userState.profileOptions.jobGroups" :key="option">
+              <select v-model="form.jobFamily" @change="onJobFamilyChange">
+                <option v-for="option in userState.profileOptions.jobFamilies" :key="option">
                   {{ option }}
                 </option>
               </select>
             </label>
             <label class="field">
               세부 직무
-              <select v-model="form.job">
+              <select v-model="form.jobRole">
                 <option v-for="option in availableJobRoles" :key="option">
                   {{ option }}
                 </option>
@@ -143,20 +147,23 @@ const saving = ref(false)
 const form = reactive({
   nickname: '',
   phone: '',
-  bio: '',
-  color: '',
-  gender: '',
-  ageGroup: '',
-  jobGroup: '',
-  job: ''
+  userDescription: '',
+  userColor: '',
+  sex: '',
+  age: '',
+  jobFamily: '',
+  jobRole: ''
 })
 
 const colorOptions = computed(() => userState.profileOptions.colors || [])
 const availableJobRoles = computed(
-  () => userState.profileOptions.jobRolesByGroup?.[form.jobGroup] || []
+  () =>
+    userState.profileOptions.jobRolesByFamily?.[form.jobFamily] ||
+    userState.profileOptions.jobRoles ||
+    []
 )
 const selectedColor = computed(
-  () => form.color || colorOptions.value[0]?.value || '#496FBD'
+  () => form.userColor || colorOptions.value[0]?.value || '#496FBD'
 )
 const avatarPreview = computed(
   () =>
@@ -170,8 +177,8 @@ watch(
   ([profile, colors]) => {
     if (!profile) return
     Object.assign(form, profile)
-    form.bio = profile.bio || ''
-    if (!form.color && colors.length) form.color = colors[0].value
+    form.userDescription = profile.userDescription || ''
+    if (!form.userColor && colors.length) form.userColor = colors[0].value
   },
   { immediate: true }
 )
@@ -202,9 +209,9 @@ function onPhoneInput(event) {
   event.target.value = formatted
 }
 
-function onJobGroupChange() {
-  if (!availableJobRoles.value.includes(form.job)) {
-    form.job = ''
+function onJobFamilyChange() {
+  if (!availableJobRoles.value.includes(form.jobRole)) {
+    form.jobRole = ''
   }
 }
 </script>

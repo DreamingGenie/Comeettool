@@ -35,6 +35,9 @@ export const authStore = {
     resetState()
     return result
   },
+  resetPassword(email) {
+    return dataSource.auth.resetPassword(email)
+  },
   async restore() {
     if (state.initialized) return state.authenticated
     state.initialized = true

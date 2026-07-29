@@ -16,7 +16,7 @@ export const authMockApi = {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
       userId: session.userId,
-      onboarded: Boolean(user.gender && user.ageGroup)
+      onboarded: Boolean(user.sex && user.age)
     })
   },
   signup: form => {
@@ -35,6 +35,7 @@ export const authMockApi = {
   },
   refreshAccessToken: () =>
     mockResponse({ tokenType: 'Bearer', accessToken: 'mock-access-token-refreshed' }),
+  resetPassword: email => mockResponse({ email, requested: true }),
   logout: () => {
     authMockDatabase.sessions.splice(0)
     return mockResponse({ success: true })

@@ -57,6 +57,14 @@ export const authSession = {
     const session = readSession()
     writeSession({ ...session, accessToken: accessToken || '' })
   },
+  updateTokens({ accessToken, refreshToken }) {
+    const session = readSession()
+    writeSession({
+      ...session,
+      accessToken: accessToken || session.accessToken,
+      refreshToken: refreshToken || session.refreshToken
+    })
+  },
   updateOnboarded(onboarded) {
     const session = readSession()
     writeSession({ ...session, onboarded: Boolean(onboarded) })

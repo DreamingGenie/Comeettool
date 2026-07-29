@@ -3,23 +3,19 @@ import { userMockDatabase } from './userMockDatabase'
 
 export const userMockApi = {
   getMe: () => mockResponse(userMockDatabase.profile),
-  getProfileOptions: () => mockResponse(userMockDatabase.profileOptions),
-  getOnboardingOptions: () => mockResponse(userMockDatabase.onboarding),
   saveOnboarding: data => {
     userMockDatabase.onboardingAnswers = cloneMockValue(data)
-    userMockDatabase.profile.onboarded = Boolean(data.completed)
-    return mockResponse(userMockDatabase.onboardingAnswers)
+    Object.assign(userMockDatabase.profile, data)
+    return mockResponse(userMockDatabase.profile)
   },
   updateProfile: data => {
     Object.assign(userMockDatabase.profile, data)
     return mockResponse(userMockDatabase.profile)
   },
-  changePassword: () => mockResponse({ success: true }),
-  deleteAccount: () => mockResponse({ success: true }),
-  searchUsers: query =>
-    mockResponse(
-      query
-        ? [{ ...userMockDatabase.profile, email: userMockDatabase.profile.email }]
-        : []
-    )
+  changePassword: () =>
+    mockResponse({
+      tokenType: 'Bearer',
+      accessToken: 'mock-access-token-after-password-change',
+      refreshToken: 'mock-refresh-token-after-password-change'
+    })
 }

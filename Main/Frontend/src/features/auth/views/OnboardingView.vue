@@ -14,8 +14,8 @@
           v-for="option in currentStep.options"
           :key="option"
           type="button"
-          :class="{ active: answers[step] === option }"
-          @click="selectOption(option)"
+          :class="{ active: answers[currentStep.key] === option }"
+          @click="answers[currentStep.key] = option"
         >
           {{ option }}
         </button>
@@ -25,12 +25,12 @@
         <div class="choice-row">
           <button
             v-for="option in currentStep.ageOptions"
-            :key="option"
+            :key="option.value"
             type="button"
-            :class="{ active: answers.age === option }"
-            @click="answers.age = option"
+            :class="{ active: answers.age === option.value }"
+            @click="answers.age = option.value"
           >
-            {{ option }}
+            {{ option.label }}
           </button>
         </div>
         <p class="choice-label">성별</p>
@@ -39,8 +39,8 @@
             v-for="option in currentStep.genderOptions"
             :key="option.value"
             type="button"
-            :class="{ active: answers.gender === option.value }"
-            @click="answers.gender = option.value"
+            :class="{ active: answers.sex === option.value }"
+            @click="answers.sex = option.value"
           >
             {{ option.label }}
           </button>
@@ -79,12 +79,12 @@ const currentStep = computed(() => {
     label: '',
     options: []
   }
-
-  if (step.value !== 1) return current
-
+  if (current.key !== 'jobRole') return current
   return {
     ...current,
-    options: userState.onboarding.jobRolesByGroup?.[answers[0]] || []
+    options:
+      userState.profileOptions.jobRolesByFamily?.[answers.jobFamily] ||
+      current.options
   }
 })
 const isLast = computed(() => step.value >= steps.value.length - 1)
@@ -92,21 +92,22 @@ const progress = computed(() => ((step.value + 1) / Math.max(steps.value.length,
 const paddedStep = computed(() => String(step.value + 1).padStart(2, '0'))
 const paddedTotal = computed(() => String(steps.value.length).padStart(2, '0'))
 
-function selectOption(option) {
-  if (step.value === 0 && answers[0] !== option) {
-    delete answers[1]
-  }
-  answers[step.value] = option
-}
-
 async function next() {
+  if (currentStep.value.options && !answers[currentStep.value.key]) {
+    notify(`${currentStep.value.label} 항목을 선택해 주세요.`)
+    return
+  }
+  if (!currentStep.value.options && (!answers.age || !answers.sex)) {
+    notify('나이와 성별을 모두 선택해 주세요.')
+    return
+  }
   if (!isLast.value) {
     step.value += 1
     return
   }
   submitting.value = true
   try {
-    await userStore.saveOnboarding({ completed: true, answers })
+    await userStore.saveOnboarding({ ...answers })
     authStore.markOnboarded()
     await router.push('/home')
   } catch (error) {

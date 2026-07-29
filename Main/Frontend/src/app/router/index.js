@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { authStore } from '../../features/auth/stores/authStore'
-import { setAuthFailureHandler } from '../../shared/api'
 
 const IntroView = () => import('../../features/auth/views/IntroView.vue')
 const LoginView = () => import('../../features/auth/views/LoginView.vue')
@@ -30,13 +29,13 @@ const routes = [
     path: '/login',
     name: 'login',
     component: LoginView,
-    meta: { publicOnly: true }
+    meta: { guestOnly: true }
   },
   {
     path: '/signup',
     name: 'signup',
     component: SignupView,
-    meta: { publicOnly: true }
+    meta: { guestOnly: true }
   },
   {
     path: '/onboarding',
@@ -72,10 +71,15 @@ const routes = [
     component: TeamSettingsView,
     meta: { requiresAuth: true }
   },
-  { path: '/teams', redirect: '/teams/a707/schedule' },
+  {
+    path: '/teams',
+    redirect: '/teams/a707/schedule',
+    meta: { requiresAuth: true }
+  },
   {
     path: '/teams/:teamId',
-    redirect: to => `/teams/${to.params.teamId}/schedule`
+    redirect: to => `/teams/${to.params.teamId}/schedule`,
+    meta: { requiresAuth: true }
   },
   {
     path: '/meetings/:meetingId',
@@ -104,32 +108,29 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 })
 })
 
-router.beforeEach(to => {
+router.beforeEach(async to => {
+  await authStore.restore()
+
   if (to.meta.requiresAuth && !authStore.state.authenticated) {
     return {
       name: 'login',
       query: { redirect: to.fullPath }
     }
   }
-  if (to.meta.publicOnly && authStore.state.authenticated) {
-    return authStore.getPostLoginPath()
+
+  if (to.meta.guestOnly && authStore.state.authenticated) {
+    return { name: authStore.state.onboarded ? 'home' : 'onboarding' }
   }
+
   if (
     to.name === 'onboarding' &&
-    authStore.state.user?.onboarded === true
+    authStore.state.authenticated &&
+    authStore.state.onboarded
   ) {
-    return '/home'
+    return { name: 'home' }
   }
-  return true
-})
 
-setAuthFailureHandler(() => {
-  if (router.currentRoute.value.name !== 'login') {
-    router.replace({
-      name: 'login',
-      query: { redirect: router.currentRoute.value.fullPath }
-    })
-  }
+  return true
 })
 
 export default router

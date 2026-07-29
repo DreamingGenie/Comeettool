@@ -13,12 +13,17 @@
         <header><i>{{ boardState.team.badge }}</i><div><h2>기본 정보</h2><p>팀 멤버에게 표시되는 정보입니다.</p></div></header>
         <label class="field">팀 스페이스 이름<input v-model.trim="form.name" /></label>
         <label class="field">팀 설명<textarea v-model.trim="form.description"></textarea></label>
-        <label class="field">
-          팀 대표 색상
-          <select v-model="form.color">
-            <option v-for="color in boardState.team.colorOptions" :key="color">{{ color }}</option>
-          </select>
-        </label>
+        <fieldset class="team-color-field">
+          <legend>
+            <b>팀 대표 색상</b><br />
+            <small>팀 아이콘과 포인트 색상에 사용됩니다.</small>
+          </legend>
+          <AppColorPicker
+            v-model="form.color"
+            :options="teamCreateColors"
+            subject="팀"
+          />
+        </fieldset>
       </section>
       <section class="settings-card">
         <header>
@@ -65,9 +70,11 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
+import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { teamCreateColors } from '../constants/teamCreateColors'
 import { boardStore } from '../stores/boardStore'
 
 const { boardState, teamId, reloadBoard } = useBoardPage({
@@ -131,5 +138,27 @@ async function save() {
   object-fit: contain;
   filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%)
     hue-rotate(211deg) brightness(98%) contrast(88%);
+}
+
+.team-color-field {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #e1e5ed;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+
+.team-color-field legend {
+  display: block;
+  width: 100%;
+  padding: 0;
+}
+
+.team-color-field legend small {
+  color: #7a8394;
+  font-size: 10px;
+  font-weight: 400;
 }
 </style>

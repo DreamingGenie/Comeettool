@@ -35,12 +35,13 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppLogo from '../../../shared/components/AppLogo.vue'
 import PasswordVisibilityButton from '../../../shared/components/PasswordVisibilityButton.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../stores/authStore'
 
+const route = useRoute()
 const router = useRouter()
 const { notify } = useToast()
 const form = reactive({ email: '', password: '' })
@@ -68,12 +69,9 @@ async function submit() {
   submitting.value = true
   try {
     const result = await authStore.login(form)
-    const redirect = router.currentRoute.value.query.redirect
-    const postLoginPath =
-      result.onboarded && typeof redirect === 'string'
-        ? redirect
-        : authStore.getPostLoginPath(result.onboarded)
-    await router.push(postLoginPath)
+    const redirect =
+      typeof route.query.redirect === 'string' ? route.query.redirect : '/home'
+    await router.push(result.onboarded ? redirect : '/onboarding')
   } catch (error) {
     notify(error?.message || '로그인하지 못했습니다.')
   } finally {

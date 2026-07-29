@@ -19,5 +19,11 @@ export const authApi = {
       body: JSON.stringify({ refreshToken }),
       auth: false
     }),
-  logout: () => request('/api/v1/auth/logout', { method: 'POST' })
+  logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
+  resetPassword: email =>
+    request('/api/v1/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      auth: false
+    })
 }

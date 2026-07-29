@@ -1,39 +1,32 @@
 import { reactive } from 'vue'
-import { userDataSource } from '../api/userDataSource'
+import { authSession } from '../../../shared/api'
+import {
+  normalizeProfile,
+  toOnboardingPayload,
+  toProfileUpdatePayload
+} from '../api/userMapper'
+import { dataSource } from '../../../shared/api/dataSource'
+import { onboardingOptions, profileOptions } from '../constants/userOptions'
 
 const state = reactive({
   loaded: false,
   loading: false,
   error: '',
   profile: null,
-  profileOptions: {
-    genders: [],
-    ageGroups: [],
-    jobGroups: [],
-    jobs: [],
-    colors: []
-  },
-  onboarding: {
-    steps: [{ title: '', label: '', options: [] }]
-  },
+  profileOptions,
+  onboarding: onboardingOptions,
   onboardingAnswers: {}
 })
 
 export const userStore = {
   state,
-  async load() {
-    if (state.loaded) return state
+  async load(force = false) {
+    if (state.loaded && !force) return state
     state.loading = true
     state.error = ''
     try {
-      const [profile, profileOptions, onboarding] = await Promise.all([
-        state.profile || userDataSource.getMe(),
-        userDataSource.getProfileOptions(),
-        userDataSource.getOnboardingOptions()
-      ])
-      state.profile = profile
-      state.profileOptions = profileOptions
-      state.onboarding = onboarding
+      const profile = await dataSource.user.getMe()
+      state.profile = normalizeProfile(profile)
       state.loaded = true
       return state
     } catch (error) {
@@ -44,20 +37,26 @@ export const userStore = {
     }
   },
   setProfile(profile) {
-    state.profile = profile
+    state.profile = normalizeProfile(profile)
   },
-  async saveOnboarding(data) {
-    state.onboardingAnswers = { ...data }
-    state.profile = await userDataSource.saveOnboarding(data)
+  async saveOnboarding(answers) {
+    const payload = toOnboardingPayload(answers)
+    const profile = await dataSource.user.saveOnboarding(payload)
+    state.onboardingAnswers = payload
+    state.profile = normalizeProfile(profile)
+    state.loaded = true
     return state.profile
   },
   async updateProfile(data) {
-    state.profile = await userDataSource.updateProfile(data)
+    const profile = await dataSource.user.updateProfile(toProfileUpdatePayload(data))
+    state.profile = normalizeProfile(profile)
     return state.profile
   },
-  changePassword: data => userDataSource.changePassword(data),
-  deleteAccount: () => userDataSource.deleteAccount(),
-  searchUsers: query => userDataSource.searchUsers(query),
+  async changePassword(data) {
+    const result = await dataSource.user.changePassword(data)
+    authSession.updateTokens(result)
+    return result
+  },
   reset() {
     state.loaded = false
     state.loading = false
