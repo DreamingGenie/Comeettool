@@ -8,21 +8,27 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
- * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정, AUTH-07 비밀번호 변경, AUTH-08 회원 탈퇴 로직. 이후 AUTH-10, 11도 여기에 추가될 예정.
+ * AUTH-05 내 프로필 조회, AUTH-06 내 프로필 수정, AUTH-07 비밀번호 변경, AUTH-08 회원 탈퇴, AUTH-10 사용자 검색 로직. 이후 AUTH-11도 여기에 추가될 예정.
  */
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
+
+    private static final int SEARCH_RESULT_LIMIT = 7;
 
     private final UserRepository userRepository;
     private final UserProfileMapper userProfileMapper;
@@ -98,5 +104,20 @@ public class UserServiceImpl implements UserService {
 
         // 탈퇴 후에도 남아있는 Refresh Token으로 AUTH-03 재발급이 이어지는 걸 막는다(AUTH-04 로그아웃과 동일 로직).
         refreshTokenService.delete(String.valueOf(userId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResponseUserSearchDto> findUserList(Long userId, String query) {
+        // query가 비어있으면(공백 포함) 사실상 전체 목록 조회가 되어버리므로, 에러 대신 빈 결과로 처리한다.
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+
+        // 검색 목적(멤버 초대 대상 탐색)상 본인은 대상이 될 수 없어 결과에서 제외한다.
+        List<User> users = userRepository.searchByNicknameOrEmail(query.trim(), userId, Limit.of(SEARCH_RESULT_LIMIT));
+        return users.stream()
+                .map(userProfileMapper::toUserSearchResponse)
+                .toList();
     }
 }

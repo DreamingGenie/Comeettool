@@ -8,6 +8,7 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
 import com.ssafy.backend.user.repository.UserRepository;
@@ -21,24 +22,30 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword, AUTH-08 withdraw).
+ * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword, AUTH-08 withdraw,
+ * AUTH-10 findUserList).
  * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서 "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
@@ -627,6 +634,135 @@ class UserServiceImplTest {
 
             // then
             verify(refreshTokenService, never()).delete(anyString());
+        }
+    }
+
+    // =====================================================================
+    // AUTH-10: findUserList() 테스트
+    //
+    // 주의: UserRepository가 Mock이라 닉네임/이메일 매칭·중복 제거·탈퇴 계정 제외·LIMIT 7 같은
+    // 실제 쿼리 동작(WHERE/LIMIT/ORDER)은 여기서 검증할 수 없다 — Mock은 stub한 값을 그대로 돌려줄
+    // 뿐이라, 그런 테스트를 작성해도 "쿼리가 맞다"가 아니라 "Mockito가 stub대로 동작한다"만 증명하게 된다.
+    // 이 테스트는 서비스 자체의 책임(blank 처리, trim, limit=7 위임, Entity→Dto 매핑)만 검증한다.
+    // 쿼리 동작 자체를 검증하려면 실제 DB를 쓰는 리포지토리 테스트가 별도로 필요하다.
+    // =====================================================================
+
+    private User buildSearchResultUser(Long id, String nickname, String email) {
+        User user = User.builder().email(email).password("$2a$10$encoded").build();
+        ReflectionTestUtils.setField(user, "id", id);
+        ReflectionTestUtils.setField(user, "nickname", nickname);
+        return user;
+    }
+
+    @Nested
+    @DisplayName("사용자 검색 성공")
+    class FindUserListSuccess {
+
+        @Test
+        @DisplayName("검색어_앞뒤_공백을_trim해서_리포지토리에_전달하고_limit은_7이다")
+        void 검색어_앞뒤_공백을_trim해서_리포지토리에_전달하고_limit은_7이다() {
+            // given
+            given(userRepository.searchByNicknameOrEmail(eq("asd"), eq(USER_ID), any(Limit.class)))
+                    .willReturn(List.of());
+
+            // when
+            userService.findUserList(USER_ID, "  asd  ");
+
+            // then
+            ArgumentCaptor<Limit> limitCaptor = ArgumentCaptor.forClass(Limit.class);
+            verify(userRepository).searchByNicknameOrEmail(eq("asd"), eq(USER_ID), limitCaptor.capture());
+            assertThat(limitCaptor.getValue().max()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("요청한_본인의_userId를_제외_조건으로_리포지토리에_전달한다")
+        void 요청한_본인의_userId를_제외_조건으로_리포지토리에_전달한다() {
+            // given
+            given(userRepository.searchByNicknameOrEmail(eq("asd"), eq(USER_ID), any(Limit.class)))
+                    .willReturn(List.of());
+
+            // when
+            userService.findUserList(USER_ID, "asd");
+
+            // then
+            verify(userRepository).searchByNicknameOrEmail(eq("asd"), eq(USER_ID), any(Limit.class));
+        }
+
+        @Test
+        @DisplayName("리포지토리가_반환한_유저_목록을_검색_응답DTO로_정확히_매핑한다")
+        void 리포지토리가_반환한_유저_목록을_검색_응답DTO로_정확히_매핑한다() {
+            // given
+            User user1 = buildSearchResultUser(2L, "asd", "asd@naver.com");
+            ReflectionTestUtils.setField(user1, "profileImageUrl", "https://cdn.example.com/1.jpg");
+            User user2 = buildSearchResultUser(3L, "asd1", "qwer@naver.com");
+            given(userRepository.searchByNicknameOrEmail(eq("asd"), eq(USER_ID), any(Limit.class)))
+                    .willReturn(List.of(user1, user2));
+
+            // when
+            List<ResponseUserSearchDto> result = userService.findUserList(USER_ID, "asd");
+
+            // then
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).userId()).isEqualTo(2L);
+            assertThat(result.get(0).nickname()).isEqualTo("asd");
+            assertThat(result.get(0).email()).isEqualTo("asd@naver.com");
+            assertThat(result.get(0).profileImage()).isEqualTo("https://cdn.example.com/1.jpg");
+            assertThat(result.get(1).userId()).isEqualTo(3L);
+            assertThat(result.get(1).nickname()).isEqualTo("asd1");
+            assertThat(result.get(1).email()).isEqualTo("qwer@naver.com");
+            assertThat(result.get(1).profileImage()).isNull();
+        }
+
+        @Test
+        @DisplayName("리포지토리가_빈_목록을_반환하면_빈_배열을_반환한다")
+        void 리포지토리가_빈_목록을_반환하면_빈_배열을_반환한다() {
+            // given
+            given(userRepository.searchByNicknameOrEmail(eq("없는검색어"), eq(USER_ID), any(Limit.class)))
+                    .willReturn(List.of());
+
+            // when
+            List<ResponseUserSearchDto> result = userService.findUserList(USER_ID, "없는검색어");
+
+            // then
+            assertThat(result).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("사용자 검색 - 빈 검색어")
+    class FindUserListBlankQuery {
+
+        @Test
+        @DisplayName("query가_null이면_리포지토리를_호출하지_않고_빈_목록을_반환한다")
+        void query가_null이면_리포지토리를_호출하지_않고_빈_목록을_반환한다() {
+            // when
+            List<ResponseUserSearchDto> result = userService.findUserList(USER_ID, null);
+
+            // then
+            assertThat(result).isEmpty();
+            verify(userRepository, never()).searchByNicknameOrEmail(anyString(), anyLong(), any(Limit.class));
+        }
+
+        @Test
+        @DisplayName("query가_빈_문자열이면_리포지토리를_호출하지_않고_빈_목록을_반환한다")
+        void query가_빈_문자열이면_리포지토리를_호출하지_않고_빈_목록을_반환한다() {
+            // when
+            List<ResponseUserSearchDto> result = userService.findUserList(USER_ID, "");
+
+            // then
+            assertThat(result).isEmpty();
+            verify(userRepository, never()).searchByNicknameOrEmail(anyString(), anyLong(), any(Limit.class));
+        }
+
+        @Test
+        @DisplayName("query가_공백만_있으면_리포지토리를_호출하지_않고_빈_목록을_반환한다")
+        void query가_공백만_있으면_리포지토리를_호출하지_않고_빈_목록을_반환한다() {
+            // when
+            List<ResponseUserSearchDto> result = userService.findUserList(USER_ID, "   ");
+
+            // then
+            assertThat(result).isEmpty();
+            verify(userRepository, never()).searchByNicknameOrEmail(anyString(), anyLong(), any(Limit.class));
         }
     }
 }

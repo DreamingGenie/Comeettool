@@ -8,6 +8,7 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Collections;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,12 +41,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * UserController 단위(standalone MockMvc) 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword,
- * AUTH-08 withdraw). Spring 컨텍스트를 띄우지 않고 컨트롤러
- * 하나만 MockMvc에 등록한다 — SecurityConfig·DB·Redis 전부 불필요. (@WebMvcTest는 앱의 실제 SecurityConfig까지 함께 로드해 JwtProvider 등 연쇄적인 빈이
- * 필요해져 이 방식을 택함) standalone 모드엔 시큐리티 필터 체인이 없어 SecurityMockMvcRequestPostProcessors.authentication()이 먹지 않으므로,
- * SecurityContextHolder에 직접 Authentication을 심어 @AuthenticationPrincipal을 채운다. UserService는 Mock — 요청/응답
- * 매핑·principal(userId) 처리·예외→상태코드 변환만 검증한다. 토큰 자체가 없는 401 케이스는 실제 필터 체인이 필요해
- * JwtAuthenticationFilterTest(@SpringBootTest)에서 검증한다.
+ * AUTH-08 withdraw, AUTH-10 findUserList). Spring 컨텍스트를 띄우지 않고 컨트롤러 하나만 MockMvc에 등록한다 — SecurityConfig·DB·Redis 전부 불필요.
+ * (@WebMvcTest는 앱의 실제 SecurityConfig까지 함께 로드해 JwtProvider 등 연쇄적인 빈이 필요해져 이 방식을 택함) standalone 모드엔 시큐리티 필터 체인이 없어
+ * SecurityMockMvcRequestPostProcessors.authentication()이 먹지 않으므로, SecurityContextHolder에 직접 Authentication을 심어
+ * @AuthenticationPrincipal을 채운다. UserService는 Mock — 요청/응답 매핑·principal(userId) 처리·예외→상태코드 변환만 검증한다. 토큰 자체가 없는 401 케이스는
+ * 실제 필터 체인이 필요해 JwtAuthenticationFilterTest(@SpringBootTest)에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserController 단위 테스트")
@@ -449,6 +450,80 @@ class UserControllerTest {
             mockMvc.perform(delete("/api/v1/users/me"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/users 검색 성공")
+    class SearchUsersSuccess {
+
+        @Test
+        @DisplayName("query로_검색하면_200과_검색_결과_목록을_반환한다")
+        void query로_검색하면_200과_검색_결과_목록을_반환한다() throws Exception {
+            // given
+            authenticateAs(USER_ID);
+            List<ResponseUserSearchDto> response = List.of(
+                    new ResponseUserSearchDto(2L, "asd", "asd@naver.com", "https://cdn.example.com/1.jpg"),
+                    new ResponseUserSearchDto(3L, "asd1", "qwer@naver.com", null)
+            );
+            given(userService.findUserList(1L, "asd")).willReturn(response);
+
+            // when & then
+            mockMvc.perform(get("/api/v1/users").param("query", "asd"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.length()").value(2))
+                    .andExpect(jsonPath("$.data[0].userId").value(2))
+                    .andExpect(jsonPath("$.data[0].nickname").value("asd"))
+                    .andExpect(jsonPath("$.data[0].email").value("asd@naver.com"))
+                    .andExpect(jsonPath("$.data[0].profileImage").value("https://cdn.example.com/1.jpg"))
+                    .andExpect(jsonPath("$.data[1].profileImage").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("검색_결과가_없으면_빈_배열과_200을_반환한다")
+        void 검색_결과가_없으면_빈_배열과_200을_반환한다() throws Exception {
+            // given
+            authenticateAs(USER_ID);
+            given(userService.findUserList(1L, "없음")).willReturn(List.of());
+
+            // when & then
+            mockMvc.perform(get("/api/v1/users").param("query", "없음"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.length()").value(0));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/users 검색 - query 파라미터 처리")
+    class SearchUsersQueryParamHandling {
+
+        @Test
+        @DisplayName("query_파라미터가_아예_없어도_400이_아니라_빈_문자열로_서비스를_호출하고_200을_반환한다")
+        void query_파라미터가_아예_없어도_400이_아니라_빈_문자열로_서비스를_호출하고_200을_반환한다() throws Exception {
+            // given: 컨트롤러에서 defaultValue = ""로 처리 — 파라미터 자체를 안 보내도 400/500이 나지 않아야 한다.
+            authenticateAs(USER_ID);
+            given(userService.findUserList(1L, "")).willReturn(List.of());
+
+            // when & then
+            mockMvc.perform(get("/api/v1/users"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.length()").value(0));
+            verify(userService).findUserList(1L, "");
+        }
+
+        @Test
+        @DisplayName("query가_빈_문자열이어도_200과_빈_배열을_반환한다")
+        void query가_빈_문자열이어도_200과_빈_배열을_반환한다() throws Exception {
+            // given
+            authenticateAs(USER_ID);
+            given(userService.findUserList(1L, "")).willReturn(List.of());
+
+            // when & then
+            mockMvc.perform(get("/api/v1/users").param("query", ""))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.length()").value(0));
         }
     }
 }

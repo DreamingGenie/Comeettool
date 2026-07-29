@@ -1,6 +1,8 @@
 package com.ssafy.backend.user.mapper;
 
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.entity.User;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +25,15 @@ public class UserProfileMapper {
                 user.getJobRole(),
                 user.getDescription(),
                 user.getDisplayColor()
+        );
+    }
+
+    public ResponseUserSearchDto toUserSearchResponse(User user) {
+        return new ResponseUserSearchDto(
+                user.getId(),
+                user.getNickname(),
+                user.getEmail(),
+                user.getProfileImageUrl()
         );
     }
 }
