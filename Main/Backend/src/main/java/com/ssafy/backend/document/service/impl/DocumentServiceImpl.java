@@ -3,6 +3,8 @@ package com.ssafy.backend.document.service.impl;
 import com.ssafy.backend.document.authorization.DocumentAccess;
 import com.ssafy.backend.document.authorization.DocumentAuthorizationService;
 import com.ssafy.backend.document.authorization.DocumentPermissionReader;
+import com.ssafy.backend.document.client.DocumentClient;
+import com.ssafy.backend.document.dto.RequestCreateDocumentDto;
 import com.ssafy.backend.document.dto.ResponseCollaborationTokenDto;
 import com.ssafy.backend.document.dto.ResponseDocumentDetailDto;
 import com.ssafy.backend.document.dto.ResponseDocumentSummaryDto;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
 
+    private final DocumentClient documentClient;
     private final DocumentRepository documentRepository;
     private final DocumentAuthorizationService documentAuthorizationService;
     private final DocumentMapper documentMapper;
@@ -72,6 +75,13 @@ public class DocumentServiceImpl implements DocumentService {
                 .plusSeconds(jwtProvider.getCollaborationExpirationSeconds());
 
         return new ResponseCollaborationTokenDto(token, expiresAt, permission);
+    }
+
+    @Override
+    public ResponseDocumentDetailDto addDocument(RequestCreateDocumentDto request, String userId) {
+        Long parsedUserId = parseUserId(userId);
+        documentAuthorizationService.requireCreatePermission(request.teamId(), parsedUserId);
+        return documentClient.addDocument(request.teamId());
     }
 
     private Long parseUserId(String userId) {

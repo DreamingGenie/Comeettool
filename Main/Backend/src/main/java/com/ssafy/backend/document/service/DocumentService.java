@@ -1,5 +1,6 @@
 package com.ssafy.backend.document.service;
 
+import com.ssafy.backend.document.dto.RequestCreateDocumentDto;
 import com.ssafy.backend.document.dto.ResponseCollaborationTokenDto;
 
 import com.ssafy.backend.document.dto.ResponseDocumentDetailDto;
@@ -14,4 +15,6 @@ public interface DocumentService {
     ResponseDocumentDetailDto findDocumentDetails(UUID documentId, String userId);
 
     ResponseCollaborationTokenDto issueCollaborationToken(UUID documentId, String userId);
+
+    ResponseDocumentDetailDto addDocument(RequestCreateDocumentDto request, String userId);
 }
