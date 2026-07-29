@@ -20,16 +20,44 @@
       </div>
 
       <form class="invite-form" @submit.prevent="invite">
-        <label class="invite-email">
-          <span>이메일 주소</span>
+        <div class="invite-email">
+          <label for="invite-email-input">이름 또는 이메일</label>
           <input
+            id="invite-email-input"
             v-model.trim="email"
             type="email"
             placeholder="email@example.com"
             autocomplete="email"
             required
+            @focus="scheduleSearch"
+            @input="scheduleSearch"
           />
-        </label>
+          <div
+            v-if="showSearchResults"
+            class="invite-search-results"
+            aria-live="polite"
+          >
+            <p v-if="userSearch.loading">사용자를 검색하고 있습니다.</p>
+            <p v-else-if="userSearch.error" class="error">{{ userSearch.error }}</p>
+            <template v-else-if="visibleSearchResults.length">
+              <button
+                v-for="user in visibleSearchResults"
+                :key="user.userId || user.email"
+                type="button"
+                @click="selectUser(user)"
+              >
+                <i :style="{ backgroundColor: user.userColor }">
+                  {{ user.avatarText }}
+                </i>
+                <span>
+                  <b>{{ user.nickname || '이름 없음' }}</b>
+                  <small>{{ user.email }}</small>
+                </span>
+              </button>
+            </template>
+            <p v-else>일치하는 사용자가 없습니다.</p>
+          </div>
+        </div>
         <label class="invite-permission">
           <span>권한</span>
           <select v-model="permission">
@@ -84,9 +112,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
+import { userStore } from '../../user/stores/userStore'
 import { boardStore } from '../stores/boardStore'
 
 const props = defineProps({
@@ -101,7 +130,32 @@ const email = ref('')
 const permission = ref('MEMBER')
 const submitting = ref(false)
 const copied = ref(false)
+const searchOpen = ref(false)
+const userSearch = userStore.state.search
+const visibleSearchResults = computed(() => {
+  const existingUsers = new Set(
+    props.members.flatMap(member => [
+      member.userId,
+      member.id,
+      member.email?.toLowerCase()
+    ])
+  )
+  return userSearch.results.filter(
+    user =>
+      !existingUsers.has(user.userId) &&
+      !existingUsers.has(user.email?.toLowerCase())
+  )
+})
+const showSearchResults = computed(
+  () =>
+    searchOpen.value &&
+    email.value.length >= 2 &&
+    (userSearch.loading ||
+      Boolean(userSearch.error) ||
+      userSearch.query === email.value)
+)
 let copiedTimer
+let searchTimer
 
 const roleLabel = role => (role === 'OWNER' ? 'OWNER' : role === 'GUEST' ? 'GUEST' : 'MEMBER')
 
@@ -116,11 +170,33 @@ async function invite() {
     })
     notify(`${email.value} 주소로 초대를 보냈습니다.`)
     email.value = ''
+    searchOpen.value = false
+    userStore.clearSearch()
   } catch (error) {
     notify(error?.message || '초대를 보내지 못했습니다.')
   } finally {
     submitting.value = false
   }
+}
+
+function scheduleSearch() {
+  window.clearTimeout(searchTimer)
+  searchOpen.value = true
+
+  if (email.value.length < 2) {
+    userStore.clearSearch()
+    return
+  }
+
+  searchTimer = window.setTimeout(() => {
+    userStore.searchUsers(email.value).catch(() => undefined)
+  }, 300)
+}
+
+function selectUser(user) {
+  email.value = user.email
+  searchOpen.value = false
+  userStore.clearSearch()
 }
 
 async function copyLink() {
@@ -138,6 +214,12 @@ async function copyLink() {
     notify('초대 링크를 복사하지 못했습니다.')
   }
 }
+
+onBeforeUnmount(() => {
+  window.clearTimeout(copiedTimer)
+  window.clearTimeout(searchTimer)
+  userStore.clearSearch()
+})
 </script>
 
 <style scoped>
@@ -275,6 +357,18 @@ async function copyLink() {
   font-weight: 700;
 }
 
+.invite-email {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
+.invite-email > label {
+  color: #4f586a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .invite-form input,
 .invite-form select {
   width: 100%;
@@ -291,6 +385,81 @@ async function copyLink() {
 .invite-form select:focus {
   border-color: #7184ed;
   box-shadow: 0 0 0 3px #6175e61f;
+}
+
+.invite-search-results {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  z-index: 8;
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #d9deea;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 34px #1d2c4d29;
+}
+
+.invite-search-results > p {
+  margin: 0;
+  padding: 12px 10px;
+  color: #778095;
+  font-size: 10px;
+  text-align: center;
+}
+
+.invite-search-results > p.error {
+  color: #b42332;
+}
+
+.invite-search-results > button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+}
+
+.invite-search-results > button:hover {
+  background: #f3f5fc;
+}
+
+.invite-search-results > button > i {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.invite-search-results > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.invite-search-results b {
+  font-size: 10px;
+}
+
+.invite-search-results small {
+  overflow: hidden;
+  color: #788194;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .invite-submit {

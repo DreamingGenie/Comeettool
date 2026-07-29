@@ -50,3 +50,17 @@ export function toOnboardingPayload(answers = {}) {
     sex: answers.sex || null
   }
 }
+
+export function normalizeUserSummary(user = {}) {
+  const nickname = user.nickname || user.name || ''
+  const email = user.email || ''
+
+  return {
+    userId: user.userId ?? user.id ?? null,
+    nickname,
+    email,
+    profileImage: user.profileImage || '',
+    userColor: user.userColor || '#5f6fe5',
+    avatarText: (nickname || email || '?').slice(0, 1)
+  }
+}

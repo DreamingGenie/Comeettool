@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { authSession } from '../../../shared/api'
 import {
   normalizeProfile,
+  normalizeUserSummary,
   toOnboardingPayload,
   toProfileUpdatePayload
 } from '../api/userMapper'
@@ -15,8 +16,16 @@ const state = reactive({
   profile: null,
   profileOptions,
   onboarding: onboardingOptions,
-  onboardingAnswers: {}
+  onboardingAnswers: {},
+  search: {
+    query: '',
+    loading: false,
+    error: '',
+    results: []
+  }
 })
+
+let latestSearchId = 0
 
 export const userStore = {
   state,
@@ -62,11 +71,60 @@ export const userStore = {
     userStore.reset()
     return result
   },
+  async searchUsers(query) {
+    const normalizedQuery = query.trim()
+    const searchId = ++latestSearchId
+
+    state.search.query = normalizedQuery
+    state.search.error = ''
+
+    if (normalizedQuery.length < 2) {
+      state.search.loading = false
+      state.search.results = []
+      return []
+    }
+
+    state.search.loading = true
+    try {
+      const response = await dataSource.user.searchUsers(normalizedQuery)
+      const users = Array.isArray(response)
+        ? response
+        : response?.users || response?.content || []
+      const results = users.map(normalizeUserSummary)
+
+      if (searchId === latestSearchId) {
+        state.search.results = results
+      }
+      return results
+    } catch (error) {
+      if (searchId === latestSearchId) {
+        state.search.error = error?.message || '사용자를 검색하지 못했습니다.'
+        state.search.results = []
+      }
+      throw error
+    } finally {
+      if (searchId === latestSearchId) {
+        state.search.loading = false
+      }
+    }
+  },
+  clearSearch() {
+    latestSearchId += 1
+    state.search.query = ''
+    state.search.loading = false
+    state.search.error = ''
+    state.search.results = []
+  },
   reset() {
+    latestSearchId += 1
     state.loaded = false
     state.loading = false
     state.error = ''
     state.profile = null
     state.onboardingAnswers = {}
+    state.search.query = ''
+    state.search.loading = false
+    state.search.error = ''
+    state.search.results = []
   }
 }

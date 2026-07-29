@@ -20,5 +20,7 @@ export const userApi = {
   withdraw: () =>
     request('/api/v1/users/me', {
       method: 'DELETE'
-    })
+    }),
+  searchUsers: query =>
+    request(`/api/v1/users?query=${encodeURIComponent(query)}`)
 }

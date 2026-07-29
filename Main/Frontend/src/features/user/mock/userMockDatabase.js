@@ -17,5 +17,29 @@ export const mockUserProfile = {
 export const userMockDatabase = {
   profile: cloneMockValue(mockUserProfile),
   onboardingAnswers: {},
-  withdrawn: false
+  withdrawn: false,
+  users: [
+    cloneMockValue(mockUserProfile),
+    {
+      userId: 2,
+      nickname: '이지은',
+      email: 'jieun.lee@committool.com',
+      profileImage: '',
+      userColor: '#496FBD'
+    },
+    {
+      userId: 3,
+      nickname: '김민수',
+      email: 'minsu.kim@committool.com',
+      profileImage: '',
+      userColor: '#6E56CF'
+    },
+    {
+      userId: 4,
+      nickname: '박서준',
+      email: 'seojun.park@committool.com',
+      profileImage: '',
+      userColor: '#0E9F6E'
+    }
+  ]
 }

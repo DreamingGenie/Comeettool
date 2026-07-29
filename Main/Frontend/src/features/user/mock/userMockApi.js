@@ -21,5 +21,14 @@ export const userMockApi = {
   withdraw: () => {
     userMockDatabase.withdrawn = true
     return mockResponse({ success: true })
+  },
+  searchUsers: query => {
+    const normalizedQuery = query.trim().toLowerCase()
+    const matches = userMockDatabase.users.filter(user => {
+      const nickname = user.nickname?.toLowerCase() || ''
+      const email = user.email?.toLowerCase() || ''
+      return nickname.includes(normalizedQuery) || email.includes(normalizedQuery)
+    })
+    return mockResponse(matches)
   }
 }
