@@ -42,7 +42,10 @@ public enum ErrorCode {
     DOCUMENT_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_DELETE_FORBIDDEN", "문서를 삭제할 권한이 없습니다."),
 
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
-    ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다.");
+    ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
+
+    PROFILE_IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_TOO_LARGE", "프로필 사진은 5MB 이하만 업로드할 수 있습니다."),
+    PROFILE_IMAGE_INVALID_TYPE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_INVALID_TYPE", "jpg, jpeg, png 형식만 업로드할 수 있습니다.");
 
     private final HttpStatus status;
     private final String code;

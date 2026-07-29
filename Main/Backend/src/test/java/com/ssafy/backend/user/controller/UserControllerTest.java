@@ -8,6 +8,7 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseProfileImageDto;
 import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +27,8 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import org.springframework.mock.web.MockMultipartFile;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -35,6 +38,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -524,6 +528,110 @@ class UserControllerTest {
             mockMvc.perform(get("/api/v1/users").param("query", ""))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.length()").value(0));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me/profile-image 성공")
+    class ChangeProfileImageSuccess {
+
+        @Test
+        @DisplayName("유효한_파일이면_200과_새_이미지_URL을_반환한다")
+        void 유효한_파일이면_200과_새_이미지_URL을_반환한다() throws Exception {
+            // given
+            MockMultipartFile file = new MockMultipartFile(
+                    "profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
+            given(userService.changeProfileImage(eq(1L), any()))
+                    .willReturn(new ResponseProfileImageDto("http://localhost:8080/files/profile-images/new.jpg"));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(multipart("/api/v1/users/me/profile-image")
+                            .file(file)
+                            .with(request -> { request.setMethod("PATCH"); return request; }))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.profileImage")
+                            .value("http://localhost:8080/files/profile-images/new.jpg"));
+        }
+
+        @Test
+        @DisplayName("principal의_userId가_Long으로_변환되어_서비스에_전달된다")
+        void principal의_userId가_Long으로_변환되어_서비스에_전달된다() throws Exception {
+            // given
+            MockMultipartFile file = new MockMultipartFile(
+                    "profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
+            given(userService.changeProfileImage(eq(1L), any()))
+                    .willReturn(new ResponseProfileImageDto("http://localhost:8080/files/profile-images/new.jpg"));
+            authenticateAs(USER_ID);
+
+            // when
+            mockMvc.perform(multipart("/api/v1/users/me/profile-image")
+                            .file(file)
+                            .with(request -> { request.setMethod("PATCH"); return request; }))
+                    .andExpect(status().isOk());
+
+            // then
+            verify(userService).changeProfileImage(eq(1L), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/v1/users/me/profile-image 실패")
+    class ChangeProfileImageFailure {
+
+        @Test
+        @DisplayName("5MB_초과_시_서비스가_400_PROFILE_IMAGE_TOO_LARGE를_던지면_그대로_응답한다")
+        void MB_초과_시_서비스가_400_PROFILE_IMAGE_TOO_LARGE를_던지면_그대로_응답한다() throws Exception {
+            // given: 크기 검증은 서비스 계층 — 컨트롤러가 예외를 올바른 상태코드로 배선하는지만 확인
+            MockMultipartFile file = new MockMultipartFile(
+                    "profileImage", "big.jpg", "image/jpeg", new byte[1024]);
+            given(userService.changeProfileImage(eq(1L), any()))
+                    .willThrow(new CustomException(ErrorCode.PROFILE_IMAGE_TOO_LARGE));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(multipart("/api/v1/users/me/profile-image")
+                            .file(file)
+                            .with(request -> { request.setMethod("PATCH"); return request; }))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("PROFILE_IMAGE_TOO_LARGE"));
+        }
+
+        @Test
+        @DisplayName("허용되지_않은_확장자면_400_PROFILE_IMAGE_INVALID_TYPE을_반환한다")
+        void 허용되지_않은_확장자면_400_PROFILE_IMAGE_INVALID_TYPE을_반환한다() throws Exception {
+            // given
+            MockMultipartFile file = new MockMultipartFile(
+                    "profileImage", "photo.gif", "image/gif", new byte[1024]);
+            given(userService.changeProfileImage(eq(1L), any()))
+                    .willThrow(new CustomException(ErrorCode.PROFILE_IMAGE_INVALID_TYPE));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(multipart("/api/v1/users/me/profile-image")
+                            .file(file)
+                            .with(request -> { request.setMethod("PATCH"); return request; }))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("PROFILE_IMAGE_INVALID_TYPE"));
+        }
+
+        @Test
+        @DisplayName("USER_NOT_FOUND_시_404를_반환한다")
+        void USER_NOT_FOUND_시_404를_반환한다() throws Exception {
+            // given
+            MockMultipartFile file = new MockMultipartFile(
+                    "profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
+            given(userService.changeProfileImage(eq(1L), any()))
+                    .willThrow(new CustomException(ErrorCode.USER_NOT_FOUND));
+            authenticateAs(USER_ID);
+
+            // when & then
+            mockMvc.perform(multipart("/api/v1/users/me/profile-image")
+                            .file(file)
+                            .with(request -> { request.setMethod("PATCH"); return request; }))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
         }
     }
 }

@@ -9,6 +9,10 @@ spring:
         factory: simple
   profiles:
     active: local
+  servlet:
+    multipart:
+      max-file-size: 10MB    # 서비스 계층에서 5MB 제한을 강제 — Spring 레벨은 여유 있게 설정
+      max-request-size: 10MB
 
 # actuator: 헬스체크만 노출 (스캐폴딩 동작 확인용)
 management:
@@ -35,6 +39,18 @@ jwt:
 yjs:
   internal-base-url: ${YJS_INTERNAL_BASE_URL:http://localhost:3000}
   internal-token: ${YJS_INTERNAL_TOKEN:local-yjs-internal-token}
+
+# 파일 스토리지 — PROFILE_IMG=FILE(기본) 또는 S3로 구현체 전환
+profile-img: ${PROFILE_IMG:FILE}
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:/uploads}
+  base-url: ${FILE_BASE_URL:http://localhost:8080}
+
+# S3 (PROFILE_IMG=S3일 때 사용 — 배포 시 환경변수로 주입)
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    region: ${AWS_S3_REGION:ap-northeast-2}
 
 ---
 # ===== local (개인 로컬 개발) =====
