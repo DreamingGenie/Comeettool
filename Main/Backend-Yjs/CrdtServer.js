@@ -18,6 +18,8 @@ const springJwksUrl = process.env.SPRING_JWKS_URL
     || 'http://localhost:8080/.well-known/jwks.json'
 const jwtIssuer = process.env.JWT_ISSUER || 'a707-api'
 const jwtYjsAudience = process.env.JWT_YJS_AUDIENCE || 'a707-yjs'
+const internalApiToken = process.env.YJS_INTERNAL_TOKEN
+    || 'local-yjs-internal-token'
 
 if (!databaseUrl) {
     throw new Error('DATABASE_URL 환경변수가 필요합니다.')
@@ -152,6 +154,21 @@ const app = express()
 app.disable('x-powered-by')
 app.use(express.json({limit: '1mb'}))
 
+function requireInternalToken(request, response, next) {
+    const providedToken = request.get('X-Internal-Token') || ''
+    const expected = Buffer.from(internalApiToken)
+    const provided = Buffer.from(providedToken)
+
+    if (
+        expected.length !== provided.length
+        || !crypto.timingSafeEqual(expected, provided)
+    ) {
+        return response.status(401).json({message: '내부 API 인증에 실패했습니다.'})
+    }
+
+    next()
+}
+
 app.get('/health', async (_request, response) => {
     try {
         await pool.query('SELECT 1')
@@ -209,15 +226,8 @@ app.get('/api/documents/:id', async (request, response, next) => {
     }
 })
 
-app.post('/api/documents', async (request, response, next) => {
-    const title = typeof request.body.title === 'string'
-        ? request.body.title.trim()
-        : ''
+app.post('/internal/documents', requireInternalToken, async (request, response, next) => {
     const teamId = Number(request.body.teamId)
-
-    if (!title || title.length > 120) {
-        return response.status(400).json({message: '제목은 1~120자로 입력해주세요.'})
-    }
 
     if (!Number.isSafeInteger(teamId) || teamId <= 0) {
         return response.status(400).json({message: '올바른 teamId가 필요합니다.'})
@@ -232,10 +242,9 @@ app.post('/api/documents', async (request, response, next) => {
         const emptyState = createEmptyYjsState()
         const inserted = await client.query(
             `INSERT INTO documents (document_id,
-                                    team_id,
-                                    document_title)
-             VALUES ($1, $2, $3) RETURNING *`,
-            [documentId, teamId, title],
+                                    team_id)
+             VALUES ($1, $2) RETURNING *`,
+            [documentId, teamId],
         )
 
         await client.query(
