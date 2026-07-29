@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 /**
  * participants 테이블 매핑 엔티티.
  * participantRole은 BE·FE·서기처럼 화면에 표시하는 프로필 역할이며, 회의 권한과 무관하다.
+ * Host 권한은 Participant에 중복 저장하지 않고 MeetingRoom.hostId에서만 관리한다.
  */
 @Entity
 @Table(name = "participants")
@@ -36,23 +37,14 @@ public class Participant {
     @Column(name = "participants_role", nullable = false, length = 50)
     private String participantRole;
 
-    @Column(name = "is_host", nullable = false)
-    private boolean host;
+    @Column(name = "is_in_meeting", nullable = false)
+    private String isInMeeting = "Y";
 
     @Builder
-    private Participant(Long meetingRoomId, Long memberId, String participantRole, boolean host) {
+    private Participant(Long meetingRoomId, Long memberId, String participantRole) {
         this.meetingRoomId = meetingRoomId;
         this.memberId = memberId;
         this.participantRole = participantRole;
-        this.host = host;
-    }
-
-    public void grantHostAuthority() {
-        this.host = true;
-    }
-
-    public void revokeHostAuthority() {
-        this.host = false;
     }
 
     public void updateParticipantRole(String participantRole) {
