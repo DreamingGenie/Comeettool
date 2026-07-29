@@ -17,7 +17,7 @@ public class JpaDocumentPermissionReader implements DocumentPermissionReader {
     @Override
     public Optional<DocumentAccess> findByDocumentIdAndUserId(UUID documentId, Long userId) {
         List<?> rows = entityManager.createNativeQuery("""
-                        SELECT d.team_id, m.role
+                        SELECT d.team_id, m.authority
                         FROM documents d
                         JOIN members m ON m.team_id = d.team_id
                         WHERE d.document_id = :documentId
@@ -40,9 +40,9 @@ public class JpaDocumentPermissionReader implements DocumentPermissionReader {
     private Optional<DocumentAccess> toDocumentAccess(Object row) {
         Object[] columns = (Object[]) row;
         Long teamId = ((Number) columns[0]).longValue();
-        String role = String.valueOf(columns[1]).toUpperCase(Locale.ROOT);
+        String authority = String.valueOf(columns[1]).toUpperCase(Locale.ROOT);
 
-        return switch (role) {
+        return switch (authority) {
             case "OWNER", "MEMBER" -> Optional.of(new DocumentAccess(teamId, CollaborationPermission.WRITE));
             case "GUEST" -> Optional.of(new DocumentAccess(teamId, CollaborationPermission.READ));
             default -> Optional.empty();
