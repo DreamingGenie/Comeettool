@@ -10,7 +10,7 @@
       <label class="field">
         <span class="field-line">
           비밀번호
-          <button type="button" :disabled="resetting" @click="resetPassword">
+          <button type="button" @click="openPasswordReset">
             비밀번호를 잊으셨나요?
           </button>
         </span>
@@ -47,22 +47,12 @@ const { notify } = useToast()
 const form = reactive({ email: '', password: '' })
 const showPassword = ref(false)
 const submitting = ref(false)
-const resetting = ref(false)
 
-async function resetPassword() {
-  if (!form.email) {
-    notify('비밀번호를 재설정할 이메일을 먼저 입력해 주세요.')
-    return
-  }
-  resetting.value = true
-  try {
-    await authStore.resetPassword(form.email)
-    notify('비밀번호 재설정 안내를 이메일로 전송했습니다.')
-  } catch (error) {
-    notify(error?.message || '비밀번호 재설정을 요청하지 못했습니다.')
-  } finally {
-    resetting.value = false
-  }
+function openPasswordReset() {
+  router.push({
+    name: 'password-reset',
+    query: form.email ? { email: form.email } : {}
+  })
 }
 
 async function submit() {

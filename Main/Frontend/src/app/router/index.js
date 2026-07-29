@@ -5,6 +5,8 @@ const IntroView = () => import('../../features/auth/views/IntroView.vue')
 const LoginView = () => import('../../features/auth/views/LoginView.vue')
 const SignupView = () => import('../../features/auth/views/SignupView.vue')
 const OnboardingView = () => import('../../features/auth/views/OnboardingView.vue')
+const PasswordResetView = () =>
+  import('../../features/auth/views/PasswordResetView.vue')
 const HomeView = () => import('../../features/board/views/HomeView.vue')
 const TeamSpaceView = () => import('../../features/board/views/TeamSpaceView.vue')
 const MembersView = () => import('../../features/board/views/MembersView.vue')
@@ -36,6 +38,12 @@ const routes = [
     path: '/signup',
     name: 'signup',
     component: SignupView,
+    meta: { guestOnly: true }
+  },
+  {
+    path: '/password/reset',
+    name: 'password-reset',
+    component: PasswordResetView,
     meta: { guestOnly: true }
   },
   {
