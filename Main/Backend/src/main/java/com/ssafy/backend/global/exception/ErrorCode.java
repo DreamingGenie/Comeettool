@@ -27,6 +27,7 @@ public enum ErrorCode {
     SPACE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SPACE_ACCESS_DENIED", "해당 스페이스에 접근할 권한이 없습니다."),
     SPACE_OWNER_CANNOT_LEAVE(HttpStatus.CONFLICT, "SPACE_OWNER_CANNOT_LEAVE",
             "소유자는 스페이스를 나갈 수 없습니다. 소유권을 위임하거나 스페이스를 삭제해 주세요."),
+    SPACE_OWNER_ONLY(HttpStatus.FORBIDDEN, "SPACE_OWNER_ONLY", "소유자만 수행할 수 있는 작업입니다."),
 
     MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
     MEETING_HOST_REQUIRED(HttpStatus.FORBIDDEN, "MEETING_HOST_REQUIRED", "회의 호스트 권한이 필요합니다."),

@@ -68,4 +68,13 @@ public class SpaceController {
         spaceService.removeMyMembership(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success("스페이스에서 나갔습니다.", null));
     }
+
+    // SPACE-11: 스페이스 삭제(Owner 전용). 하위 데이터까지 전파 soft delete(정책 SP-2).
+    @DeleteMapping("/{spaceId}")
+    public ResponseEntity<ApiResponse<Void>> removeSpace(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId) {
+        spaceService.removeSpace(Long.parseLong(userId), spaceId);
+        return ResponseEntity.ok(ApiResponse.success("스페이스가 삭제되었습니다.", null));
+    }
 }

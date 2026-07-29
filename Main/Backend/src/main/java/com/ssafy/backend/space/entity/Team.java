@@ -71,4 +71,10 @@ public class Team {
         this.color = (color != null && !color.isBlank()) ? color : DEFAULT_COLOR;
         this.isDeleted = false;
     }
+
+    // SPACE-11: 스페이스 soft delete. is_deleted=true + 삭제 시각 기록(정책 SP-2).
+    public void softDelete(OffsetDateTime deletedAt) {
+        this.isDeleted = true;
+        this.deletedAt = deletedAt;
+    }
 }

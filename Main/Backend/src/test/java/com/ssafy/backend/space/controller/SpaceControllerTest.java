@@ -228,4 +228,41 @@ class SpaceControllerTest {
                     .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
         }
     }
+
+    @Nested
+    @DisplayName("SPACE-11 DELETE /api/v1/spaces/{spaceId}")
+    class RemoveSpace {
+
+        @Test
+        @DisplayName("삭제에 성공하면 200 SUCCESS를 반환한다")
+        void removeSpace_returns200() throws Exception {
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}", 10L))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+            verify(spaceService).removeSpace(7L, 10L);
+        }
+
+        @Test
+        @DisplayName("소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void removeSpace_returns403ForNonOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY))
+                    .when(spaceService).removeSpace(7L, 10L);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}", 10L))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void removeSpace_returns404WhenAbsent() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(spaceService).removeSpace(7L, 99L);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}", 99L))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+    }
 }
