@@ -15,7 +15,7 @@
           :key="option"
           type="button"
           :class="{ active: answers[step] === option }"
-          @click="answers[step] = option"
+          @click="selectOption(option)"
         >
           {{ option }}
         </button>
@@ -64,6 +64,7 @@ import AppLogo from '../../../shared/components/AppLogo.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { useUserPage } from '../../user/composables/useUserPage'
 import { userStore } from '../../user/stores/userStore'
+import { authStore } from '../stores/authStore'
 
 const router = useRouter()
 const { notify } = useToast()
@@ -72,11 +73,31 @@ const step = ref(0)
 const submitting = ref(false)
 const answers = reactive({})
 const steps = computed(() => userState.onboarding.steps)
-const currentStep = computed(() => steps.value[step.value] || { title: '', label: '', options: [] })
+const currentStep = computed(() => {
+  const current = steps.value[step.value] || {
+    title: '',
+    label: '',
+    options: []
+  }
+
+  if (step.value !== 1) return current
+
+  return {
+    ...current,
+    options: userState.onboarding.jobRolesByGroup?.[answers[0]] || []
+  }
+})
 const isLast = computed(() => step.value >= steps.value.length - 1)
 const progress = computed(() => ((step.value + 1) / Math.max(steps.value.length, 1)) * 100)
 const paddedStep = computed(() => String(step.value + 1).padStart(2, '0'))
 const paddedTotal = computed(() => String(steps.value.length).padStart(2, '0'))
+
+function selectOption(option) {
+  if (step.value === 0 && answers[0] !== option) {
+    delete answers[1]
+  }
+  answers[step.value] = option
+}
 
 async function next() {
   if (!isLast.value) {
@@ -86,6 +107,7 @@ async function next() {
   submitting.value = true
   try {
     await userStore.saveOnboarding({ completed: true, answers })
+    authStore.markOnboarded()
     await router.push('/home')
   } catch (error) {
     notify(error?.message || '온보딩 정보를 저장하지 못했습니다.')

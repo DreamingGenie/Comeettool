@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { authStore } from '../../features/auth/stores/authStore'
+import { setAuthFailureHandler } from '../../shared/api'
 
 const IntroView = () => import('../../features/auth/views/IntroView.vue')
 const LoginView = () => import('../../features/auth/views/LoginView.vue')
@@ -18,24 +20,47 @@ const archiveRoute = (section, name) => ({
   path: `/teams/:teamId/${section}`,
   name,
   component: DocumentsView,
-  props: { section }
+  props: { section },
+  meta: { requiresAuth: true }
 })
 
 const routes = [
   { path: '/', name: 'intro', component: IntroView },
-  { path: '/login', name: 'login', component: LoginView },
-  { path: '/signup', name: 'signup', component: SignupView },
-  { path: '/onboarding', name: 'onboarding', component: OnboardingView },
-  { path: '/home', name: 'home', component: HomeView },
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginView,
+    meta: { publicOnly: true }
+  },
+  {
+    path: '/signup',
+    name: 'signup',
+    component: SignupView,
+    meta: { publicOnly: true }
+  },
+  {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: OnboardingView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/home',
+    name: 'home',
+    component: HomeView,
+    meta: { requiresAuth: true }
+  },
   {
     path: '/teams/:teamId/schedule',
     name: 'team-schedule',
-    component: TeamSpaceView
+    component: TeamSpaceView,
+    meta: { requiresAuth: true }
   },
   {
     path: '/teams/:teamId/members',
     name: 'team-members',
-    component: MembersView
+    component: MembersView,
+    meta: { requiresAuth: true }
   },
   archiveRoute('documents', 'team-documents'),
   archiveRoute('minutes', 'team-minutes'),
@@ -44,7 +69,8 @@ const routes = [
   {
     path: '/teams/:teamId/settings',
     name: 'team-settings',
-    component: TeamSettingsView
+    component: TeamSettingsView,
+    meta: { requiresAuth: true }
   },
   { path: '/teams', redirect: '/teams/a707/schedule' },
   {
@@ -54,15 +80,56 @@ const routes = [
   {
     path: '/meetings/:meetingId',
     name: 'meeting',
-    component: MeetingView
+    component: MeetingView,
+    meta: { requiresAuth: true }
   },
-  { path: '/profile', name: 'profile', component: ProfileView },
-  { path: '/password', name: 'password', component: PasswordView },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfileView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/password',
+    name: 'password',
+    component: PasswordView,
+    meta: { requiresAuth: true }
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 })
 })
+
+router.beforeEach(to => {
+  if (to.meta.requiresAuth && !authStore.state.authenticated) {
+    return {
+      name: 'login',
+      query: { redirect: to.fullPath }
+    }
+  }
+  if (to.meta.publicOnly && authStore.state.authenticated) {
+    return authStore.getPostLoginPath()
+  }
+  if (
+    to.name === 'onboarding' &&
+    authStore.state.user?.onboarded === true
+  ) {
+    return '/home'
+  }
+  return true
+})
+
+setAuthFailureHandler(() => {
+  if (router.currentRoute.value.name !== 'login') {
+    router.replace({
+      name: 'login',
+      query: { redirect: router.currentRoute.value.fullPath }
+    })
+  }
+})
+
+export default router

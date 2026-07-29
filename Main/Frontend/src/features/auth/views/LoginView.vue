@@ -10,11 +10,16 @@
       <label class="field">
         <span class="field-line">
           비밀번호
-          <button type="button">비밀번호를 잊으셨나요?</button>
+          <button type="button" :disabled="resetting" @click="resetPassword">
+            비밀번호를 잊으셨나요?
+          </button>
         </span>
         <div class="password-box">
           <input v-model="form.password" :type="showPassword ? 'text' : 'password'" required />
-          <button type="button" aria-label="비밀번호 표시 전환" @click="showPassword = !showPassword">◉</button>
+          <PasswordVisibilityButton
+            :visible="showPassword"
+            @toggle="showPassword = !showPassword"
+          />
         </div>
       </label>
       <button class="primary block" :disabled="submitting">로그인 →</button>
@@ -32,22 +37,43 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLogo from '../../../shared/components/AppLogo.vue'
+import PasswordVisibilityButton from '../../../shared/components/PasswordVisibilityButton.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { authStore } from '../stores/authStore'
-import { userStore } from '../../user/stores/userStore'
 
 const router = useRouter()
 const { notify } = useToast()
 const form = reactive({ email: '', password: '' })
 const showPassword = ref(false)
 const submitting = ref(false)
+const resetting = ref(false)
+
+async function resetPassword() {
+  if (!form.email) {
+    notify('비밀번호를 재설정할 이메일을 먼저 입력해 주세요.')
+    return
+  }
+  resetting.value = true
+  try {
+    await authStore.resetPassword(form.email)
+    notify('비밀번호 재설정 안내를 이메일로 전송했습니다.')
+  } catch (error) {
+    notify(error?.message || '비밀번호 재설정을 요청하지 못했습니다.')
+  } finally {
+    resetting.value = false
+  }
+}
 
 async function submit() {
   submitting.value = true
   try {
     const result = await authStore.login(form)
-    userStore.setProfile(result.user)
-    await router.push('/onboarding')
+    const redirect = router.currentRoute.value.query.redirect
+    const postLoginPath =
+      result.onboarded && typeof redirect === 'string'
+        ? redirect
+        : authStore.getPostLoginPath(result.onboarded)
+    await router.push(postLoginPath)
   } catch (error) {
     notify(error?.message || '로그인하지 못했습니다.')
   } finally {

@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { dataSource } from '../../../shared/api/dataSource'
+import { userDataSource } from '../api/userDataSource'
 
 const state = reactive({
   loaded: false,
@@ -10,7 +10,8 @@ const state = reactive({
     genders: [],
     ageGroups: [],
     jobGroups: [],
-    jobs: []
+    jobs: [],
+    colors: []
   },
   onboarding: {
     steps: [{ title: '', label: '', options: [] }]
@@ -26,9 +27,9 @@ export const userStore = {
     state.error = ''
     try {
       const [profile, profileOptions, onboarding] = await Promise.all([
-        state.profile || dataSource.user.getMe(),
-        dataSource.user.getProfileOptions(),
-        dataSource.user.getOnboardingOptions()
+        state.profile || userDataSource.getMe(),
+        userDataSource.getProfileOptions(),
+        userDataSource.getOnboardingOptions()
       ])
       state.profile = profile
       state.profileOptions = profileOptions
@@ -46,12 +47,22 @@ export const userStore = {
     state.profile = profile
   },
   async saveOnboarding(data) {
-    state.onboardingAnswers = await dataSource.user.saveOnboarding(data)
-    return state.onboardingAnswers
-  },
-  async updateProfile(data) {
-    state.profile = await dataSource.user.updateProfile(data)
+    state.onboardingAnswers = { ...data }
+    state.profile = await userDataSource.saveOnboarding(data)
     return state.profile
   },
-  changePassword: data => dataSource.user.changePassword(data)
+  async updateProfile(data) {
+    state.profile = await userDataSource.updateProfile(data)
+    return state.profile
+  },
+  changePassword: data => userDataSource.changePassword(data),
+  deleteAccount: () => userDataSource.deleteAccount(),
+  searchUsers: query => userDataSource.searchUsers(query),
+  reset() {
+    state.loaded = false
+    state.loading = false
+    state.error = ''
+    state.profile = null
+    state.onboardingAnswers = {}
+  }
 }

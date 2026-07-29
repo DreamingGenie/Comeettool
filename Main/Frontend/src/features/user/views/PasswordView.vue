@@ -16,7 +16,11 @@
           현재 비밀번호
           <div class="password-box">
             <input v-model="form.currentPassword" :type="visible.current ? 'text' : 'password'" required />
-            <button type="button" @click="visible.current = !visible.current">◉</button>
+            <PasswordVisibilityButton
+              label="현재 비밀번호"
+              :visible="visible.current"
+              @toggle="visible.current = !visible.current"
+            />
           </div>
         </label>
         <hr />
@@ -24,7 +28,11 @@
           새로운 비밀번호
           <div class="password-box">
             <input v-model="form.newPassword" :type="visible.next ? 'text' : 'password'" required />
-            <button type="button" @click="visible.next = !visible.next">◉</button>
+            <PasswordVisibilityButton
+              label="새로운 비밀번호"
+              :visible="visible.next"
+              @toggle="visible.next = !visible.next"
+            />
           </div>
         </label>
         <div class="strength-label">
@@ -37,7 +45,11 @@
           새로운 비밀번호 확인
           <div class="password-box">
             <input v-model="form.newPasswordConfirm" :type="visible.confirm ? 'text' : 'password'" required />
-            <button type="button" @click="visible.confirm = !visible.confirm">◉</button>
+            <PasswordVisibilityButton
+              label="새로운 비밀번호 확인"
+              :visible="visible.confirm"
+              @toggle="visible.confirm = !visible.confirm"
+            />
           </div>
         </label>
         <div class="password-actions">
@@ -62,7 +74,8 @@
 import { computed, reactive, ref } from 'vue'
 import AppShell from '../../../shared/components/AppShell.vue'
 import AsyncState from '../../../shared/components/AsyncState.vue'
-import SettingsSidebar from '../../../shared/components/SettingsSidebar.vue'
+import PasswordVisibilityButton from '../../../shared/components/PasswordVisibilityButton.vue'
+import SettingsSidebar from '../components/SettingsSidebar.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { useUserPage } from '../composables/useUserPage'
 import { userStore } from '../stores/userStore'

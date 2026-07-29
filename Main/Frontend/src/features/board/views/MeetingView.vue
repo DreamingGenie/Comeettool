@@ -87,7 +87,8 @@
             </button>
             <hr />
             <button type="button" @click="notify('회의 설정 화면을 준비했습니다.')">
-              <i>⚙</i><span><b>회의 설정</b><small>오디오와 비디오 장치 설정</small></span><em>→</em>
+              <i><img src="/assets/icons/settings.svg?v=20260728-1301" alt="" aria-hidden="true" /></i>
+              <span><b>회의 설정</b><small>오디오와 비디오 장치 설정</small></span><em>→</em>
             </button>
           </section>
         </footer>
@@ -189,7 +190,9 @@ import { meetingControls } from '../constants/meetingControls'
 import { useBoardPage } from '../composables/useBoardPage'
 import { boardStore } from '../stores/boardStore'
 
-const { boardState, meetingId } = useBoardPage()
+const { boardState, meetingId } = useBoardPage({
+  resources: ['activeMeeting', 'meetingRoom']
+})
 const { userState } = useUserPage()
 const { notify } = useToast()
 const visibleParticipants = computed(() => boardState.meetingRoom.participants.slice(0, 4))
@@ -296,3 +299,23 @@ async function send() {
   }
 }
 </script>
+
+<style scoped>
+.meeting-room,
+.meeting-room :where(button, input, textarea, select, label, small, b, strong, em),
+:deep(.meeting-info-modal),
+:deep(.meeting-info-modal :where(button, input, textarea, select, label, small, b, strong, em)) {
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.meeting-room {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.meeting-more-menu > button > i img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+</style>

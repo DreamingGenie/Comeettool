@@ -1,7 +1,7 @@
 <template>
   <main class="intro-page">
     <header class="intro-header">
-      <AppLogo />
+      <AppLogo variant="blue" />
       <nav>
         <button class="primary" type="button" @click="$router.push('/login')">무료 시작하기</button>
       </nav>
