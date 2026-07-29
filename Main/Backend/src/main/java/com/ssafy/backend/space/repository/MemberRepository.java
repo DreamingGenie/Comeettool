@@ -7,11 +7,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
     // SPACE-05: 요청자가 해당 스페이스의 멤버인지 인가 검사.
     boolean existsByTeamIdAndUserId(Long teamId, Long userId);
+
+    // SPACE-07: 나가기 대상 멤버 행 조회(멤버 여부 검사 겸용).
+    Optional<Member> findByTeamIdAndUserId(Long teamId, Long userId);
 
     // SPACE-05: 스페이스 참여자(멤버) 목록 조회.
     List<Member> findByTeamId(Long teamId);

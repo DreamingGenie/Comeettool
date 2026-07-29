@@ -242,4 +242,73 @@ class SpaceServiceImplTest {
             verify(memberRepository, never()).findByTeamId(TEAM_ID);
         }
     }
+
+    @Nested
+    @DisplayName("SPACE-07 스페이스 나가기")
+    class RemoveMyMembership {
+
+        private Member memberOf(Long teamId, Long userId) {
+            Member member = Member.builder()
+                    .userId(userId).teamId(teamId).authority(MemberAuthority.MEMBER).nickname("진").build();
+            return member;
+        }
+
+        @Test
+        @DisplayName("일반 멤버면 members 행을 삭제한다")
+        void removeMyMembership_deletesMemberRow() {
+            // given — owner는 다른 사용자(99L), 요청자는 일반 멤버.
+            Team team = teamWithId(TEAM_ID, 99L);
+            Member member = memberOf(TEAM_ID, USER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(member));
+
+            // when
+            spaceService.removeMyMembership(USER_ID, TEAM_ID);
+
+            // then
+            verify(memberRepository).delete(member);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
+        void removeMyMembership_throwsNotFoundWhenAbsent() {
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verify(memberRepository, never()).delete(any(Member.class));
+        }
+
+        @Test
+        @DisplayName("멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 삭제하지 않는다")
+        void removeMyMembership_throwsAccessDeniedForNonMember() {
+            Team team = teamWithId(TEAM_ID, 99L);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verify(memberRepository, never()).delete(any(Member.class));
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자면 SPACE_OWNER_CANNOT_LEAVE 예외가 발생하고 삭제하지 않는다(정책 SP-1)")
+        void removeMyMembership_throwsWhenOwner() {
+            // given — 요청자가 team_owner_id.
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            Member owner = memberOf(TEAM_ID, USER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(owner));
+
+            assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
+            verify(memberRepository, never()).delete(any(Member.class));
+        }
+    }
 }

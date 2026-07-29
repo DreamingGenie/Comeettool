@@ -99,6 +99,24 @@ public class SpaceServiceImpl implements SpaceService {
         return spaceMapper.toDetailResponse(team, members);
     }
 
+    @Override
+    @Transactional
+    public void removeMyMembership(Long userId, Long spaceId) {
+        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        // 요청자의 멤버 행을 조회하며 멤버 여부를 검사한다.
+        Member member = memberRepository.findByTeamIdAndUserId(spaceId, userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+        // 정책 SP-1: 소유자는 소유권 위임 또는 스페이스 삭제(SPACE-11) 후에만 퇴장할 수 있다.
+        if (team.getOwnerId().equals(userId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
+        }
+
+        memberRepository.delete(member);
+    }
+
     // members.nickname(NOT NULL) 용 표시 이름 — 유저 닉네임 우선, 없으면 이메일 로컬파트.
     private String resolveNickname(User user) {
         if (user.getNickname() != null && !user.getNickname().isBlank()) {

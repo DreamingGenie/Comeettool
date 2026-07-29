@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,5 +58,14 @@ public class SpaceController {
             @PathVariable Long spaceId) {
         ResponseSpaceDetailDto response = spaceService.findSpaceDetails(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // SPACE-07: 스페이스 나가기(요청자 본인). Owner는 소유권 위임 후에만 가능(정책 SP-1).
+    @DeleteMapping("/{spaceId}/members/me")
+    public ResponseEntity<ApiResponse<Void>> removeMyMembership(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId) {
+        spaceService.removeMyMembership(Long.parseLong(userId), spaceId);
+        return ResponseEntity.ok(ApiResponse.success("스페이스에서 나갔습니다.", null));
     }
 }
