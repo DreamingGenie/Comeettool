@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,5 +47,11 @@ public class UserController {
             @Valid @RequestBody RequestChangePasswordDto request) {
         ResponseChangePasswordDto response = userService.changePassword(Long.parseLong(userId), request);
         return ResponseEntity.ok(ApiResponse.success("비밀번호 변경 성공", response));
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<ApiResponse<Void>> withdraw(@AuthenticationPrincipal String userId) {
+        userService.withdraw(Long.parseLong(userId));
+        return ResponseEntity.ok(ApiResponse.<Void>success("회원 탈퇴 성공", null));
     }
 }
