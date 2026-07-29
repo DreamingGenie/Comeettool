@@ -1,7 +1,8 @@
 package com.ssafy.backend.global.exception;
 
-import lombok.Getter;
 import org.springframework.http.HttpStatus;
+
+import lombok.Getter;
 
 /**
  * 공통 에러 코드 (에러 카탈로그). 인증 규약(auth-jwt-contract §4)의 코드 포함.
@@ -33,6 +34,11 @@ public enum ErrorCode {
             "회의 참여자를 찾을 수 없습니다."),
     MEETING_HOST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "MEETING_HOST_ALREADY_ASSIGNED",
             "이미 해당 회의의 호스트입니다."),
+            
+    DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
+    DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "해당 문서에 접근할 권한이 없습니다."),
+    DOCUMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_CREATE_FORBIDDEN", "문서를 생성할 권한이 없습니다."),
+    DOCUMENT_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_DELETE_FORBIDDEN", "문서를 삭제할 권한이 없습니다."),
 
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다.");
