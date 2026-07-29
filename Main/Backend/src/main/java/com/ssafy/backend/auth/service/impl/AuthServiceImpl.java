@@ -58,8 +58,8 @@ public class AuthServiceImpl implements AuthService {
     public ResponseLoginDto login(RequestLoginDto request) {
         String normalizedEmail = normalizeEmail(request.email());
 
-        // 이메일·비밀번호 불일치 모두 AUTH_LOGIN_FAILED로 통일 (보안상 구분하지 않음)
-        User user = userRepository.findByEmail(normalizedEmail)
+        // 이메일 없음·탈퇴 계정·비밀번호 불일치 모두 AUTH_LOGIN_FAILED로 통일 (보안상 구분하지 않음)
+        User user = userRepository.findByEmailAndIsDeletedFalse(normalizedEmail)
                 .orElseThrow(() -> new CustomException(ErrorCode.AUTH_LOGIN_FAILED));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
@@ -102,7 +102,8 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void validateEmailNotDuplicated(String email) {
-        if (userRepository.existsByEmail(email)) {
+        // 탈퇴한 계정과 같은 이메일은 중복으로 취급하지 않는다(탈퇴 이메일 재가입 허용 정책).
+        if (userRepository.existsByEmailAndIsDeletedFalse(email)) {
             throw new CustomException(ErrorCode.AUTH_EMAIL_DUPLICATED);
         }
     }
