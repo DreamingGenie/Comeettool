@@ -84,6 +84,21 @@ class UserRepositoryTest {
         }
 
         @Test
+        @DisplayName("닉네임과_이메일_모두에_검색어가_포함돼도_중복없이_1건만_반환한다")
+        void 닉네임과_이메일_모두에_검색어가_포함돼도_중복없이_1건만_반환한다() {
+            // given: OR 조건 양쪽을 동시에 만족하는 유저 — 조인이 없는 단일 테이블 쿼리라 원래 중복될 수 없지만,
+            // 쿼리가 바뀌어도 이 전제가 깨지지 않는지 회귀 방지 차원에서 명시적으로 검증한다.
+            String t = token();
+            User target = persistUser("match-" + t + "@test.com", "match-" + t);
+
+            // when
+            List<User> result = userRepository.searchByNicknameOrEmail("match-" + t, NO_EXCLUSION, Limit.of(7));
+
+            // then
+            assertThat(result).extracting(User::getId).containsExactly(target.getId());
+        }
+
+        @Test
         @DisplayName("탈퇴한_계정은_결과에서_제외된다")
         void 탈퇴한_계정은_결과에서_제외된다() {
             // given
