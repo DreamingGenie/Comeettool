@@ -5,6 +5,7 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +16,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * USER 도메인 REST 컨트롤러 (inventory.md §1 /users/*). SecurityConfig 기본 규칙으로 전부 인증 필요.
+ * AUTH-05 조회, AUTH-06 수정, AUTH-07 비밀번호 변경, AUTH-08 탈퇴, AUTH-10 사용자 검색.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -53,5 +58,13 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> withdraw(@AuthenticationPrincipal String userId) {
         userService.withdraw(Long.parseLong(userId));
         return ResponseEntity.ok(ApiResponse.<Void>success("회원 탈퇴 성공", null));
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ResponseUserSearchDto>>> findUserList(
+            @AuthenticationPrincipal String userId,
+            @RequestParam(required = false, defaultValue = "") String query) {
+        List<ResponseUserSearchDto> response = userService.findUserList(Long.parseLong(userId), query);
+        return ResponseEntity.ok(ApiResponse.success("사용자 검색 성공", response));
     }
 }

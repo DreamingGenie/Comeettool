@@ -4,6 +4,9 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseUserSearchDto;
+
+import java.util.List;
 
 public interface UserService {
 
@@ -18,4 +21,7 @@ public interface UserService {
 
     // AUTH-08: soft delete 처리 후 Redis의 refresh token 삭제.
     void withdraw(Long userId);
+
+    // AUTH-10: 닉네임/이메일에 검색어가 포함된 활성 계정 목록 조회 (최대 7건, 페이지네이션 없음, 요청한 본인은 결과에서 제외).
+    List<ResponseUserSearchDto> findUserList(Long userId, String query);
 }
