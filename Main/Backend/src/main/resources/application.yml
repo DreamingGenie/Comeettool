@@ -28,6 +28,10 @@ jwt:
   refresh-expiration-seconds: 1209600  # 14일
   collaboration-expiration-seconds: 300 # 5분
 
+yjs:
+  internal-base-url: ${YJS_INTERNAL_BASE_URL:http://localhost:3000}
+  internal-token: ${YJS_INTERNAL_TOKEN:local-yjs-internal-token}
+
 ---
 # ===== local (개인 로컬 개발) =====
 spring:
