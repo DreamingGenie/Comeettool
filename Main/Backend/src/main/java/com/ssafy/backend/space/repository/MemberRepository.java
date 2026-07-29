@@ -12,8 +12,6 @@ import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
-    Optional<Member> findByTeamIdAndUserId(Long teamId, Long userId);
-
     // SPACE-05: 요청자가 해당 스페이스의 멤버인지 인가 검사.
     boolean existsByTeamIdAndUserId(Long teamId, Long userId);
 
