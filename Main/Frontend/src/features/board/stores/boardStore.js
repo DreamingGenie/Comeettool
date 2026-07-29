@@ -63,6 +63,38 @@ const state = reactive({
   inviteMembers: []
 })
 
+function resetState() {
+  state.pendingRequests = 0
+  state.loading = false
+  state.error = ''
+  state.currentTeamId = ''
+  state.currentMeetingId = ''
+  state.workspaces = []
+  state.team = { ...emptyTeam }
+  state.members = []
+  state.activeMeeting = { ...emptyMeeting }
+  state.calendar = toCalendarViewModel()
+  state.archives = {
+    documents: [],
+    minutes: [],
+    summary: [],
+    feedback: []
+  }
+  state.archiveStats = {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  }
+  state.meetingRoom = {
+    ...emptyMeetingRoom,
+    participants: [],
+    chatMessages: [],
+    directContacts: []
+  }
+  state.inviteMembers = []
+}
+
 const withLoading = async request => {
   state.pendingRequests += 1
   state.loading = true
@@ -229,5 +261,8 @@ export const boardStore = {
     )
     if (index >= 0) state.meetingRoom.participants[index] = participant
     return participant
+  },
+  reset() {
+    resetState()
   }
 }

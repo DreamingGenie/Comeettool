@@ -57,6 +57,11 @@ export const userStore = {
     authSession.updateTokens(result)
     return result
   },
+  async withdraw() {
+    const result = await dataSource.user.withdraw()
+    userStore.reset()
+    return result
+  },
   reset() {
     state.loaded = false
     state.loading = false

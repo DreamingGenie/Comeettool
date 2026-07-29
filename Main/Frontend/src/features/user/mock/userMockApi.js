@@ -17,5 +17,9 @@ export const userMockApi = {
       tokenType: 'Bearer',
       accessToken: 'mock-access-token-after-password-change',
       refreshToken: 'mock-refresh-token-after-password-change'
-    })
+    }),
+  withdraw: () => {
+    userMockDatabase.withdrawn = true
+    return mockResponse({ success: true })
+  }
 }

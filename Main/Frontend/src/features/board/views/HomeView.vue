@@ -108,6 +108,7 @@ import BoardCalendar from '../components/BoardCalendar.vue'
 import NewMeetingModal from '../components/NewMeetingModal.vue'
 import NewTeamModal from '../components/NewTeamModal.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { boardStore } from '../stores/boardStore'
 
 const router = useRouter()
 const { notify } = useToast()
@@ -129,10 +130,12 @@ const enterMeeting = () => router.push(`/meetings/${meetingId.value}`)
 async function logout() {
   try {
     await authStore.logout()
-    userStore.reset()
-    await router.push('/login')
   } catch (error) {
     notify(error?.message || '로그아웃하지 못했습니다.')
+  } finally {
+    boardStore.reset()
+    userStore.reset()
+    await router.replace('/login')
   }
 }
 </script>

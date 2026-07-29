@@ -14,6 +14,7 @@ const TeamSettingsView = () =>
 const MeetingView = () => import('../../features/board/views/MeetingView.vue')
 const ProfileView = () => import('../../features/user/views/ProfileView.vue')
 const PasswordView = () => import('../../features/user/views/PasswordView.vue')
+const AccountView = () => import('../../features/user/views/AccountView.vue')
 
 const archiveRoute = (section, name) => ({
   path: `/teams/:teamId/${section}`,
@@ -97,6 +98,12 @@ const routes = [
     path: '/password',
     name: 'password',
     component: PasswordView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/account',
+    name: 'account',
+    component: AccountView,
     meta: { requiresAuth: true }
   },
   { path: '/:pathMatch(.*)*', redirect: '/' }

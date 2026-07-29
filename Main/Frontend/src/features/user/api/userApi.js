@@ -16,5 +16,9 @@ export const userApi = {
     request('/api/v1/users/me/password', {
       method: 'PATCH',
       body: JSON.stringify({ currentPassword, newPassword })
+    }),
+  withdraw: () =>
+    request('/api/v1/users/me', {
+      method: 'DELETE'
     })
 }

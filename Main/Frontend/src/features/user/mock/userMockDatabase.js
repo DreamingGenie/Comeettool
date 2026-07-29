@@ -16,5 +16,6 @@ export const mockUserProfile = {
 
 export const userMockDatabase = {
   profile: cloneMockValue(mockUserProfile),
-  onboardingAnswers: {}
+  onboardingAnswers: {},
+  withdrawn: false
 }
