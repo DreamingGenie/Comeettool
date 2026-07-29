@@ -3,6 +3,10 @@ spring:
     name: backend
   config:
     import: optional:file:.env[.properties]
+  http:
+    clients:
+      imperative:
+        factory: simple
   profiles:
     active: local
 
