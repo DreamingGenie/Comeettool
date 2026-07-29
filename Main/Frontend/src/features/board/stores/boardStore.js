@@ -207,6 +207,17 @@ export const boardStore = {
     state.workspaces.push(workspace)
     return workspace
   },
+  async leaveWorkspace(spaceId) {
+    await dataSource.board.leaveWorkspace(spaceId)
+    state.workspaces = state.workspaces.filter(
+      workspace => String(workspace.id) !== String(spaceId)
+    )
+    if (String(state.currentTeamId) === String(spaceId)) {
+      state.currentTeamId = ''
+      state.team = { ...emptyTeam }
+      state.members = []
+    }
+  },
   async createMeeting(data) {
     const meeting = await dataSource.board.createMeeting(data)
     state.activeMeeting = { ...state.activeMeeting, ...meeting }

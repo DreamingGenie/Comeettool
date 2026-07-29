@@ -82,7 +82,7 @@ const routes = [
   },
   {
     path: '/teams',
-    redirect: '/teams/a707/schedule',
+    redirect: '/home',
     meta: { requiresAuth: true }
   },
   {

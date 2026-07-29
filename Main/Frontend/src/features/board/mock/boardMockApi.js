@@ -112,6 +112,15 @@ export const boardMockApi = {
     ]
     return mockResponse(workspace)
   },
+  leaveWorkspace: teamId => {
+    const workspaceIndex = boardMockDatabase.workspaces.findIndex(
+      workspace => workspace.id === teamId
+    )
+    if (workspaceIndex >= 0) {
+      boardMockDatabase.workspaces.splice(workspaceIndex, 1)
+    }
+    return mockResponse(null)
+  },
   createMeeting: data => {
     const meeting = {
       id: createId('meeting'),
