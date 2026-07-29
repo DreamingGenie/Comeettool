@@ -2,6 +2,7 @@ package com.ssafy.backend.space.repository;
 
 import com.ssafy.backend.space.entity.Member;
 import com.ssafy.backend.space.entity.Team;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,8 +26,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     List<Object[]> countMembersByTeamIds(@Param("teamIds") List<Long> teamIds);
 
     /**
-     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 권한.
-     * Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team, MemberAuthority] 배열이다.
+     * SPACE-02: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 권한. Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team,
+     * MemberAuthority] 배열이다.
      */
     @Query("""
             select t, m.authority

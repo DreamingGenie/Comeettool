@@ -48,5 +48,5 @@ public class Document {
     private OffsetDateTime deletedAt;
 
     @Column(name = "is_deleted", nullable = false)
-    private boolean deleted;
+    private boolean isDeleted;
 }
