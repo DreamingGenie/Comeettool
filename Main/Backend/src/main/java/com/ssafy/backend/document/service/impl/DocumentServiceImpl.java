@@ -1,5 +1,6 @@
 package com.ssafy.backend.document.service.impl;
 
+import com.ssafy.backend.document.authorization.CollaborationPermission;
 import com.ssafy.backend.document.authorization.DocumentAccess;
 import com.ssafy.backend.document.authorization.DocumentAuthorizationService;
 import com.ssafy.backend.document.authorization.DocumentPermissionReader;
@@ -60,15 +61,19 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional(readOnly = true)
     public ResponseCollaborationTokenDto issueCollaborationToken(UUID documentId, String userId) {
         Long parsedUserId = parseUserId(userId);
-        DocumentAccess access = documentPermissionReader
-                .findByDocumentIdAndUserId(documentId, parsedUserId)
-                .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
+        Document document = documentRepository.findByIdAndIsDeletedFalse(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        CollaborationPermission collaborationPermission =
+                documentAuthorizationService.requireCollaborationPermission(
+                        document.getTeamId(),
+                        parsedUserId
+                );
 
-        String permission = access.permission().name();
+        String permission = collaborationPermission.name();
         String token = jwtProvider.createCollaborationToken(
                 userId,
                 documentId,
-                access.teamId(),
+                document.getTeamId(),
                 permission
         );
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC)
@@ -82,6 +87,19 @@ public class DocumentServiceImpl implements DocumentService {
         Long parsedUserId = parseUserId(userId);
         documentAuthorizationService.requireCreatePermission(request.teamId(), parsedUserId);
         return documentClient.addDocument(request.teamId());
+    }
+
+    @Override
+    public void deleteDocument(UUID documentId, String userId) {
+        Long parsedUserId = parseUserId(userId);
+        Document document = documentRepository.findByIdAndIsDeletedFalse(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        documentAuthorizationService.requireDeletePermission(
+                document.getTeamId(),
+                parsedUserId
+        );
+        documentClient.deleteDocument(documentId);
     }
 
     private Long parseUserId(String userId) {

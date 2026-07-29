@@ -46,6 +46,13 @@ public class DocumentClient {
         );
     }
 
+    public void deleteDocument(UUID documentId) {
+        restClient.delete()
+                .uri("/internal/documents/{documentId}", documentId)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     private record YjsCreateDocumentRequest(Long teamId) {
     }
 

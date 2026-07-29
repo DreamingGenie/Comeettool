@@ -43,6 +43,10 @@ public class DocumentAuthorizationService {
         return findAuthority(teamId, userId).map(this::toCollaborationPermission);
     }
 
+    public CollaborationPermission requireCollaborationPermission(Long teamId, Long userId) {
+        return toCollaborationPermission(requireTeamMember(teamId, userId));
+    }
+
     private CollaborationPermission toCollaborationPermission(MemberAuthority authority) {
         return authority == MemberAuthority.GUEST
                 ? CollaborationPermission.READ

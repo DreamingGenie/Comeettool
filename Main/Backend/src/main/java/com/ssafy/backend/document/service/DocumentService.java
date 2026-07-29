@@ -17,4 +17,6 @@ public interface DocumentService {
     ResponseCollaborationTokenDto issueCollaborationToken(UUID documentId, String userId);
 
     ResponseDocumentDetailDto addDocument(RequestCreateDocumentDto request, String userId);
+
+    void deleteDocument(UUID documentId, String userId);
 }
