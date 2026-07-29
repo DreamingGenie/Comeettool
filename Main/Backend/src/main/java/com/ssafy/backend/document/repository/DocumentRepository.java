@@ -12,5 +12,5 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
 
     Optional<Document> findByIdAndIsDeletedFalse(UUID id);
 
-    List<Document> findAllByTeamIdAndIsDeletedFalse(Long teamId);
+    List<Document> findAllByTeamIdAndIsDeletedFalseOrderByUpdatedAtDesc(Long teamId);
 }
