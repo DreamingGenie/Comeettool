@@ -1,5 +1,9 @@
 package com.ssafy.backend.meeting.entity;
 
+import java.time.OffsetDateTime;
+
+import org.hibernate.annotations.CreationTimestamp;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -10,13 +14,10 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.OffsetDateTime;
 
 /**
  * meeting_rooms 테이블 매핑 엔티티.
- * 회의 Host 권한은 host_id를 단일 기준으로 판단한다.
+ * 회의 Host 권한은 users.user_id를 저장하는 host_id를 단일 기준으로 판단한다.
  */
 @Entity
 @Table(name = "meeting_rooms")
@@ -59,15 +60,15 @@ public class MeetingRoom {
         this.isDeleted = false;
     }
 
-    public boolean isHost(Long requesterId) {
-        return hostId.equals(requesterId);
+    public boolean isHost(Long requesterUserId) {
+        return hostId.equals(requesterUserId);
     }
 
-    // MEET-06: 대상 검증은 Service에서 완료하고, 엔티티는 Host 식별자만 변경한다.
-    public void changeHost(Long nextHostId) {
-        if (nextHostId == null) {
-            throw new IllegalArgumentException("다음 호스트 ID는 필수입니다.");
+    // MEET-06: 참여자·팀 검증은 Service에서 완료하고, 엔티티는 Host userId만 변경한다.
+    public void changeHost(Long nextHostUserId) {
+        if (nextHostUserId == null) {
+            throw new IllegalArgumentException("새 호스트 ID는 필수입니다.");
         }
-        this.hostId = nextHostId;
+        this.hostId = nextHostUserId;
     }
 }

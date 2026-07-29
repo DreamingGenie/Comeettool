@@ -27,6 +27,13 @@ public enum ErrorCode {
     SPACE_OWNER_CANNOT_LEAVE(HttpStatus.CONFLICT, "SPACE_OWNER_CANNOT_LEAVE",
             "소유자는 스페이스를 나갈 수 없습니다. 소유권을 위임하거나 스페이스를 삭제해 주세요."),
 
+    MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
+    MEETING_HOST_REQUIRED(HttpStatus.FORBIDDEN, "MEETING_HOST_REQUIRED", "회의 호스트 권한이 필요합니다."),
+    MEETING_PARTICIPANT_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_PARTICIPANT_NOT_FOUND",
+            "회의 참여자를 찾을 수 없습니다."),
+    MEETING_HOST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "MEETING_HOST_ALREADY_ASSIGNED",
+            "이미 해당 회의의 호스트입니다."),
+
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다.");
 
