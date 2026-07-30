@@ -59,7 +59,7 @@
             <h2>{{ currentDocument.title }}</h2>
           </div>
           <div class="editor-state">
-            <i :class="{ dirty: localDirty }"></i>
+            <i :class="connectionIndicatorClass"></i>
             <span>{{ editorStateLabel }}</span>
           </div>
         </div>
@@ -179,16 +179,14 @@
 
         <div v-else class="readonly-notice">
           <strong>읽기 전용 문서</strong>
-          <span>Guest 권한은 문서 내용을 수정할 수 없습니다.</span>
+          <span>서버에서 READ 권한이 확인되어 문서 내용을 수정할 수 없습니다.</span>
         </div>
 
         <EditorContent v-if="editor" class="editor-content" :editor="editor" />
 
         <footer class="editor-footer">
           <span>State epoch {{ currentDocument.stateEpoch }}</span>
-          <span>
-            실시간 저장과 다른 사용자와의 동기화는 4단계에서 연결됩니다.
-          </span>
+          <span>{{ collaborationDescription }}</span>
         </footer>
       </section>
     </template>
@@ -197,8 +195,11 @@
 
 <script setup>
 import { Editor, EditorContent } from '@tiptap/vue-3'
+import Collaboration from '@tiptap/extension-collaboration'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
+import { HocuspocusProvider } from '@hocuspocus/provider'
+import * as Y from 'yjs'
 import {
   computed,
   onBeforeUnmount,
@@ -218,8 +219,18 @@ const router = useRouter()
 const documentState = documentStore.state
 const editor = shallowRef(null)
 const editorRevision = ref(0)
-const localDirty = ref(false)
-let editorBaseline = ''
+const collaborationPermission = ref('')
+const collaborationStatus = ref('idle')
+const collaborationSynced = ref(false)
+const collaborationError = ref('')
+let collaborationProvider = null
+let collaborationDocument = null
+let connectionGeneration = 0
+let currentCollaboration = null
+
+const collaborationUrl =
+  import.meta.env.VITE_YJS_WEBSOCKET_URL ||
+  'ws://127.0.0.1:3000/collaboration'
 
 const documentId = computed(() => String(route.params.documentId || ''))
 const { boardState, teamId, reloadBoard } = useBoardPage({
@@ -237,19 +248,61 @@ const documentTitle = computed(
 const authority = computed(() =>
   String(boardState.team.role || '').toUpperCase()
 )
-const canEdit = computed(
-  () => authority.value === 'OWNER' || authority.value === 'MEMBER'
-)
+const canEdit = computed(() => collaborationPermission.value === 'WRITE')
 const permissionLabel = computed(() => {
-  if (authority.value === 'OWNER') return 'Owner · 편집 가능'
-  if (authority.value === 'MEMBER') return 'Member · 편집 가능'
-  if (authority.value === 'GUEST') return 'Guest · 읽기 전용'
-  return '권한 확인 중'
+  const role =
+    authority.value === 'OWNER'
+      ? 'Owner'
+      : authority.value === 'MEMBER'
+        ? 'Member'
+        : authority.value === 'GUEST'
+          ? 'Guest'
+          : '팀 구성원'
+
+  if (collaborationPermission.value === 'WRITE') {
+    return `${role} · 편집 가능`
+  }
+  if (collaborationPermission.value === 'READ') {
+    return `${role} · 읽기 전용`
+  }
+  return `${role} · 권한 확인 중`
 })
 const editorStateLabel = computed(() => {
-  if (!canEdit.value) return '읽기 전용'
-  if (localDirty.value) return '로컬 변경사항 · 아직 저장되지 않음'
-  return '편집기 준비됨 · 실시간 저장 대기'
+  if (collaborationError.value) return collaborationError.value
+  if (collaborationStatus.value === 'connecting') {
+    return '실시간 서버 연결 중'
+  }
+  if (collaborationStatus.value === 'disconnected') {
+    return '연결 끊김 · 자동 재연결 중'
+  }
+  if (
+    collaborationStatus.value === 'connected' &&
+    !collaborationSynced.value
+  ) {
+    return '문서 동기화 중'
+  }
+  if (collaborationSynced.value && !canEdit.value) {
+    return '실시간 동기화됨 · 읽기 전용'
+  }
+  if (collaborationSynced.value) return '실시간 동기화됨'
+  return '협업 연결 준비 중'
+})
+const connectionIndicatorClass = computed(() => ({
+  connected: collaborationSynced.value,
+  connecting: collaborationStatus.value === 'connecting',
+  disconnected: collaborationStatus.value === 'disconnected',
+  error: Boolean(collaborationError.value)
+}))
+const collaborationDescription = computed(() => {
+  if (collaborationError.value) {
+    return '협업 서버 연결을 확인한 뒤 문서를 다시 불러오세요.'
+  }
+  if (!collaborationSynced.value) {
+    return 'Yjs 문서의 초기 상태를 동기화하고 있습니다.'
+  }
+  return canEdit.value
+    ? '변경사항은 Yjs 서버를 통해 실시간으로 저장·동기화됩니다.'
+    : '다른 사용자의 변경사항을 실시간으로 받아봅니다.'
 })
 const canUndo = computed(() => {
   editorRevision.value
@@ -271,30 +324,105 @@ function touchEditorState() {
 }
 
 function destroyEditor() {
+  connectionGeneration += 1
   editor.value?.destroy()
   editor.value = null
-  editorBaseline = ''
+
+  collaborationProvider?.destroy()
+  collaborationProvider = null
+
+  collaborationDocument?.destroy()
+  collaborationDocument = null
+
+  currentCollaboration = null
+  collaborationPermission.value = ''
+  collaborationStatus.value = 'idle'
+  collaborationSynced.value = false
+  collaborationError.value = ''
 }
 
-function createEditor() {
-  destroyEditor()
-  localDirty.value = false
+function isTokenUsable(collaboration) {
+  if (!collaboration?.token) return false
+
+  const expiresAt = new Date(collaboration.expiresAt).getTime()
+  return Number.isFinite(expiresAt) && expiresAt - Date.now() > 30_000
+}
+
+async function resolveCollaborationToken(documentId, generation) {
+  if (!isTokenUsable(currentCollaboration)) {
+    const collaboration =
+      await documentStore.issueCollaborationToken(documentId)
+
+    if (generation !== connectionGeneration) {
+      throw new Error('종료된 문서 연결입니다.')
+    }
+
+    currentCollaboration = collaboration
+    collaborationPermission.value = collaboration.permission
+    editor.value?.setEditable(collaboration.permission === 'WRITE')
+    touchEditorState()
+  }
+
+  return currentCollaboration.token
+}
+
+async function createCollaborativeEditor(document, generation) {
+  const collaboration =
+    await documentStore.issueCollaborationToken(document.documentId)
+
+  if (generation !== connectionGeneration) return
+
+  currentCollaboration = collaboration
+  collaborationPermission.value = currentCollaboration.permission
+  collaborationDocument = new Y.Doc()
+  collaborationStatus.value = 'connecting'
+
+  collaborationProvider = new HocuspocusProvider({
+    url: collaborationUrl,
+    name: `document:${document.documentId}:epoch:${document.stateEpoch}`,
+    document: collaborationDocument,
+    token: () =>
+      resolveCollaborationToken(document.documentId, generation),
+    onStatus: ({ status }) => {
+      if (generation !== connectionGeneration) return
+      collaborationStatus.value = status
+      if (status !== 'connected') collaborationSynced.value = false
+    },
+    onSynced: ({ state }) => {
+      if (generation !== connectionGeneration) return
+      collaborationSynced.value = state !== false
+      collaborationError.value = ''
+    },
+    onAuthenticationFailed: ({ reason }) => {
+      if (generation !== connectionGeneration) return
+      collaborationStatus.value = 'error'
+      collaborationSynced.value = false
+      collaborationError.value =
+        reason || '실시간 편집 인증에 실패했습니다.'
+    },
+    onDisconnect: () => {
+      if (generation !== connectionGeneration) return
+      collaborationStatus.value = 'disconnected'
+      collaborationSynced.value = false
+    }
+  })
 
   editor.value = new Editor({
     extensions: [
       StarterKit.configure({
+        undoRedo: false,
         heading: {
           levels: [1, 2, 3]
         }
+      }),
+      Collaboration.configure({
+        document: collaborationDocument,
+        field: 'default'
       }),
       Placeholder.configure({
         placeholder: '문서 내용을 입력하세요.'
       })
     ],
-    content: {
-      type: 'doc',
-      content: [{ type: 'paragraph' }]
-    },
     editable: canEdit.value,
     editorProps: {
       attributes: {
@@ -302,19 +430,10 @@ function createEditor() {
         'aria-label': '문서 내용 편집 영역'
       }
     },
-    onCreate: ({ editor: instance }) => {
-      editorBaseline = JSON.stringify(instance.getJSON())
-      localDirty.value = false
-      touchEditorState()
-    },
+    onCreate: touchEditorState,
     onSelectionUpdate: touchEditorState,
     onTransaction: touchEditorState,
-    onUpdate: ({ editor: instance }) => {
-      const currentContent = JSON.stringify(instance.getJSON())
-      if (!editorBaseline) editorBaseline = currentContent
-      localDirty.value = currentContent !== editorBaseline
-      touchEditorState()
-    }
+    onUpdate: touchEditorState
   })
 }
 
@@ -346,13 +465,22 @@ function formatDate(value) {
 
 async function loadDocument() {
   destroyEditor()
-  localDirty.value = false
 
   if (!documentId.value) return
+  const generation = connectionGeneration
+  const requestedDocumentId = documentId.value
 
   try {
-    await documentStore.loadDocument(documentId.value)
-    createEditor()
+    const document = await documentStore.loadDocument(requestedDocumentId)
+
+    if (
+      generation !== connectionGeneration ||
+      requestedDocumentId !== documentId.value
+    ) {
+      return
+    }
+
+    await createCollaborativeEditor(document, generation)
   } catch {
     // 오류 문구와 재시도 동작은 AsyncState에서 처리한다.
   }
@@ -482,9 +610,20 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 4px #eef1f7;
 }
 
-.editor-state i.dirty {
+.editor-state i.connecting,
+.editor-state i.disconnected {
   background: #e5962f;
   box-shadow: 0 0 0 4px #fff2df;
+}
+
+.editor-state i.connected {
+  background: #35a765;
+  box-shadow: 0 0 0 4px #e5f7ec;
+}
+
+.editor-state i.error {
+  background: #d65050;
+  box-shadow: 0 0 0 4px #fde8e8;
 }
 
 .editor-toolbar {

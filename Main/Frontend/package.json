@@ -8,12 +8,15 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@hocuspocus/provider": "^4.4.0",
+    "@tiptap/extension-collaboration": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.29.2",
     "@tiptap/pm": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
     "@tiptap/vue-3": "^3.29.2",
     "vue": "3.2.47",
-    "vue-router": "4.1.6"
+    "vue-router": "4.1.6",
+    "yjs": "^13.6.31"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "2.3.4",
