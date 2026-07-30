@@ -4,7 +4,7 @@ import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseSpaceMemberDto;
-import com.ssafy.backend.space.entity.Member;
+import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.space.entity.Team;
 import org.springframework.stereotype.Component;
 
