@@ -19,8 +19,12 @@ public interface MeetingRoomRepository extends JpaRepository<MeetingRoom, Long> 
     @Query("update MeetingRoom m set m.isDeleted = true, m.deletedAt = :deletedAt "
             + "where m.teamId = :teamId and m.isDeleted = false")
     int softDeleteByTeamId(@Param("teamId") Long teamId, @Param("deletedAt") OffsetDateTime deletedAt);
-    
-        /**
+
+
+    // MEET-01: 팀 스페이스에서 현재 진행 중인 회의 수를 조회한다.
+    long countByTeamIdAndIsDeletedFalse(Long teamId);
+
+    /**
      * MEET-06 호스트 양도용 활성 회의 조회.
      * 동시에 여러 양도 요청이 들어와도 하나씩 처리하도록 비관적 쓰기 잠금을 건다.
      */

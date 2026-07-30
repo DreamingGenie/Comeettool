@@ -2,6 +2,7 @@ package com.ssafy.backend.meeting.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,8 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
+import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.service.MeetingService;
 
@@ -24,16 +27,35 @@ import lombok.RequiredArgsConstructor;
  * 회의 기능 API.
  */
 @RestController
-@RequestMapping("/api/v1/meetings")
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class MeetingController {
 
     private final MeetingService meetingService;
 
     /**
+     * MEET-01: 팀 스페이스에 회의를 생성하고 생성자를 최초 참여자로 등록한다.
+     */
+    @PostMapping("/spaces/{spaceId}/meetings")
+    public ResponseEntity<ApiResponse<ResponseCreateMeetingDto>> addMeeting(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @Valid @RequestBody RequestCreateMeetingDto request
+    ) {
+        ResponseCreateMeetingDto response = meetingService.addMeeting(
+                Long.parseLong(userId),
+                spaceId,
+                request
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("회의 생성 성공", response));
+    }
+
+    /**
      * MEET-06: 현재 호스트가 회의 참여자에게 호스트 권한을 양도한다.
      */
-    @PostMapping("/{meetingId}/grant")
+    @PostMapping("/meetings/{meetingId}/grant")
     public ResponseEntity<ApiResponse<ResponseTransferHostDto>> transferHost(
             @AuthenticationPrincipal String userId,
             @PathVariable Long meetingId,

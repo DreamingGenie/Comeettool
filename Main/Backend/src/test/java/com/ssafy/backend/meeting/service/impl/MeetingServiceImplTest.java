@@ -4,16 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,11 +24,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
+import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.user.entity.User;
@@ -33,6 +40,8 @@ import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.space.entity.Team;
+import com.ssafy.backend.space.repository.TeamRepository;
 
 /**
  * MEET-06 호스트 양도 및 MEET-07 참여자 조회 서비스 단위 테스트.
@@ -45,9 +54,12 @@ class MeetingServiceImplTest {
     private static final Long MEETING_ID = 100L;
     private static final Long TEAM_ID = 10L;
     private static final Long CURRENT_HOST_USER_ID = 1L;
+    private static final Long CURRENT_HOST_MEMBER_ID = 11L;
     private static final Long NEXT_HOST_PARTICIPANT_ID = 30L;
     private static final Long NEXT_HOST_MEMBER_ID = 20L;
     private static final Long NEXT_HOST_USER_ID = 2L;
+    private static final OffsetDateTime CREATED_AT =
+            OffsetDateTime.parse("2026-07-30T12:00:00+09:00");
 
     @Mock
     private MeetingRoomRepository meetingRoomRepository;
@@ -60,6 +72,12 @@ class MeetingServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
+    private MeetingMapper meetingMapper;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -75,6 +93,158 @@ class MeetingServiceImplTest {
         nextHostParticipant = createParticipant(NEXT_HOST_MEMBER_ID);
         nextHostMember = createMember(NEXT_HOST_USER_ID, TEAM_ID);
         request = new RequestTransferHostDto(NEXT_HOST_PARTICIPANT_ID);
+    }
+
+    @Test
+    @DisplayName("활성 회의가 2개이면 회의와 미접속 Host Participant를 생성한다")
+    void addMeeting_createsMeetingAndDisconnectedHostParticipant() {
+        Team team = createTeam();
+        Member hostMember = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                50L
+        );
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        ResponseCreateMeetingDto expectedResponse = createCreateMeetingResponse();
+
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.of(team));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(hostMember));
+        given(meetingRoomRepository.countByTeamIdAndIsDeletedFalse(TEAM_ID))
+                .willReturn(2L);
+        given(meetingRoomRepository.save(any(MeetingRoom.class)))
+                .willReturn(savedMeetingRoom);
+        given(memberRepository.findTeamRoleNameByMemberId(CURRENT_HOST_MEMBER_ID))
+                .willReturn(Optional.of("BE"));
+        given(meetingMapper.toCreateResponse(
+                savedMeetingRoom,
+                CURRENT_HOST_USER_ID,
+                1
+        )).willReturn(expectedResponse);
+
+        ResponseCreateMeetingDto response =
+                meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest);
+
+        ArgumentCaptor<MeetingRoom> meetingRoomCaptor =
+                ArgumentCaptor.forClass(MeetingRoom.class);
+        ArgumentCaptor<Participant> participantCaptor =
+                ArgumentCaptor.forClass(Participant.class);
+        verify(meetingRoomRepository).save(meetingRoomCaptor.capture());
+        verify(participantRepository).save(participantCaptor.capture());
+
+        MeetingRoom createdMeetingRoom = meetingRoomCaptor.getValue();
+        assertThat(createdMeetingRoom.getTeamId()).isEqualTo(TEAM_ID);
+        assertThat(createdMeetingRoom.getHostId()).isEqualTo(CURRENT_HOST_USER_ID);
+        assertThat(createdMeetingRoom.getName()).isEqualTo("데일리 미팅");
+        assertThat(createdMeetingRoom.isDeleted()).isFalse();
+
+        Participant createdParticipant = participantCaptor.getValue();
+        assertThat(createdParticipant.getMeetingRoomId()).isEqualTo(MEETING_ID);
+        assertThat(createdParticipant.getMemberId()).isEqualTo(CURRENT_HOST_MEMBER_ID);
+        assertThat(createdParticipant.getParticipantRole()).isEqualTo("BE");
+        assertThat(createdParticipant.isInMeeting()).isFalse();
+        assertThat(response).isEqualTo(expectedResponse);
+    }
+
+    @Test
+    @DisplayName("팀 역할이 없는 Host는 역할을 null로 저장한다")
+    void addMeeting_savesNullParticipantRoleWhenHostHasNoTeamRole() {
+        Team team = createTeam();
+        Member hostMember = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                null
+        );
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        ResponseCreateMeetingDto expectedResponse = createCreateMeetingResponse();
+
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.of(team));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(hostMember));
+        given(meetingRoomRepository.countByTeamIdAndIsDeletedFalse(TEAM_ID))
+                .willReturn(0L);
+        given(meetingRoomRepository.save(any(MeetingRoom.class)))
+                .willReturn(savedMeetingRoom);
+        given(memberRepository.findTeamRoleNameByMemberId(CURRENT_HOST_MEMBER_ID))
+                .willReturn(Optional.empty());
+        given(meetingMapper.toCreateResponse(
+                savedMeetingRoom,
+                CURRENT_HOST_USER_ID,
+                1
+        )).willReturn(expectedResponse);
+
+        meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest);
+
+        ArgumentCaptor<Participant> participantCaptor =
+                ArgumentCaptor.forClass(Participant.class);
+        verify(participantRepository).save(participantCaptor.capture());
+        assertThat(participantCaptor.getValue().getParticipantRole()).isNull();
+    }
+
+    @Test
+    @DisplayName("스페이스가 없으면 SPACE_NOT_FOUND 예외가 발생한다")
+    void addMeeting_rejectsMissingSpace() {
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest),
+                ErrorCode.SPACE_NOT_FOUND
+        );
+        verifyNoInteractions(
+                memberRepository,
+                meetingRoomRepository,
+                participantRepository,
+                meetingMapper
+        );
+    }
+
+    @Test
+    @DisplayName("스페이스 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생한다")
+    void addMeeting_rejectsRequesterOutsideSpace() {
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.of(createTeam()));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest),
+                ErrorCode.SPACE_ACCESS_DENIED
+        );
+        verifyNoInteractions(meetingRoomRepository, participantRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("활성 회의가 3개이면 MEETING_ROOM_LIMIT_EXCEEDED 예외가 발생한다")
+    void addMeeting_rejectsWhenActiveMeetingRoomLimitIsExceeded() {
+        Member hostMember = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                null
+        );
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.of(createTeam()));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(hostMember));
+        given(meetingRoomRepository.countByTeamIdAndIsDeletedFalse(TEAM_ID))
+                .willReturn(3L);
+
+        assertErrorCode(
+                () -> meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest),
+                ErrorCode.MEETING_ROOM_LIMIT_EXCEEDED
+        );
+        verify(meetingRoomRepository, never()).save(any(MeetingRoom.class));
+        verifyNoInteractions(participantRepository, meetingMapper);
     }
 
     @Test
@@ -308,6 +478,49 @@ class MeetingServiceImplTest {
                 .hostId(hostUserId)
                 .name("데일리 미팅")
                 .build();
+    }
+
+    private MeetingRoom createSavedMeetingRoom() {
+        MeetingRoom savedMeetingRoom = createMeetingRoom(CURRENT_HOST_USER_ID);
+        ReflectionTestUtils.setField(savedMeetingRoom, "id", MEETING_ID);
+        ReflectionTestUtils.setField(savedMeetingRoom, "createdAt", CREATED_AT);
+        return savedMeetingRoom;
+    }
+
+    private ResponseCreateMeetingDto createCreateMeetingResponse() {
+        return new ResponseCreateMeetingDto(
+                MEETING_ID,
+                TEAM_ID,
+                new ResponseMeetingHostDto(CURRENT_HOST_USER_ID),
+                CREATED_AT,
+                1
+        );
+    }
+
+    private Team createTeam() {
+        Team team = Team.builder()
+                .name("프로젝트 팀")
+                .ownerId(CURRENT_HOST_USER_ID)
+                .build();
+        ReflectionTestUtils.setField(team, "id", TEAM_ID);
+        return team;
+    }
+
+    private Member createMemberWithId(
+            Long memberId,
+            Long userId,
+            Long teamId,
+            Long teamRoleId
+    ) {
+        Member member = Member.builder()
+                .userId(userId)
+                .teamId(teamId)
+                .authority(MemberAuthority.MEMBER)
+                .teamRoleId(teamRoleId)
+                .nickname("참여자")
+                .build();
+        ReflectionTestUtils.setField(member, "id", memberId);
+        return member;
     }
 
     private Participant createParticipant(Long memberId) {

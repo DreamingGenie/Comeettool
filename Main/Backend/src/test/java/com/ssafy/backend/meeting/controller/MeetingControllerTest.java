@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -28,8 +29,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
+import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.service.MeetingService;
 
@@ -42,7 +46,10 @@ import com.ssafy.backend.meeting.service.MeetingService;
 class MeetingControllerTest {
 
     private static final String HOST_USER_ID = "1";
+    private static final Long SPACE_ID = 10L;
     private static final Long MEETING_ID = 100L;
+    private static final OffsetDateTime CREATED_AT =
+            OffsetDateTime.parse("2026-07-30T12:00:00+09:00");
 
     @Mock
     private MeetingService meetingService;
@@ -61,6 +68,86 @@ class MeetingControllerTest {
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(HOST_USER_ID, null, List.of()));
+    }
+
+    @Test
+    @DisplayName("회의 생성에 성공하면 201과 생성 결과를 반환한다")
+    void addMeeting_returns201WithCreatedMeeting() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
+        ResponseCreateMeetingDto response = new ResponseCreateMeetingDto(
+                MEETING_ID,
+                SPACE_ID,
+                new ResponseMeetingHostDto(1L),
+                CREATED_AT,
+                1
+        );
+        given(meetingService.addMeeting(eq(1L), eq(SPACE_ID), any(RequestCreateMeetingDto.class)))
+                .willReturn(response);
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("회의 생성 성공"))
+                .andExpect(jsonPath("$.data.meetingRoomId").value(100))
+                .andExpect(jsonPath("$.data.teamId").value(10))
+                .andExpect(jsonPath("$.data.host.userId").value(1))
+                .andExpect(jsonPath("$.data.participantCount").value(1));
+    }
+
+    @Test
+    @DisplayName("회의방 이름이 공백이면 400을 반환한다")
+    void addMeeting_returns400WhenMeetingRoomNameIsBlank() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("   ");
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("스페이스가 없으면 404를 반환한다")
+    void addMeeting_returns404WhenSpaceIsMissing() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
+        given(meetingService.addMeeting(eq(1L), eq(SPACE_ID), any(RequestCreateMeetingDto.class)))
+                .willThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("스페이스 멤버가 아니면 403을 반환한다")
+    void addMeeting_returns403WhenRequesterIsNotSpaceMember() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
+        given(meetingService.addMeeting(eq(1L), eq(SPACE_ID), any(RequestCreateMeetingDto.class)))
+                .willThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+    }
+
+    @Test
+    @DisplayName("활성 회의가 3개이면 409를 반환한다")
+    void addMeeting_returns409WhenActiveMeetingRoomLimitIsExceeded() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
+        given(meetingService.addMeeting(eq(1L), eq(SPACE_ID), any(RequestCreateMeetingDto.class)))
+                .willThrow(new CustomException(ErrorCode.MEETING_ROOM_LIMIT_EXCEEDED));
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEETING_ROOM_LIMIT_EXCEEDED"));
     }
 
     @Test

@@ -10,4 +10,5 @@ public record ResponseCreateMeetingDto(
         OffsetDateTime createdAt,
         int participantCount
 
-){}
+) {
+}
