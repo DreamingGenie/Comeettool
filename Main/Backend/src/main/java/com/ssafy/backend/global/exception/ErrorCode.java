@@ -36,6 +36,8 @@ public enum ErrorCode {
             "게스트에게는 소유권을 위임할 수 없습니다."),
 
     MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
+    MEETING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MEETING_ACCESS_DENIED",
+            "해당 회의에 접근할 권한이 없습니다."),
     MEETING_HOST_REQUIRED(HttpStatus.FORBIDDEN, "MEETING_HOST_REQUIRED", "회의 호스트 권한이 필요합니다."),
     MEETING_PARTICIPANT_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_PARTICIPANT_NOT_FOUND",
             "회의 참여자를 찾을 수 없습니다."),
