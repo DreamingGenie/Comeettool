@@ -31,6 +31,9 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    // users.nickname 컬럼 제약(CK_USERS_NICKNAME_LENGTH)과 동일한 최대 길이.
+    private static final int NICKNAME_MAX_LENGTH = 20;
+
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
@@ -47,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
         User user = User.builder()
                 .email(normalizedEmail)
                 .password(passwordEncoder.encode(request.password()))
+                .nickname(extractDefaultNickname(normalizedEmail))
                 .build();
         User saved = userRepository.save(user);
 
@@ -99,6 +103,14 @@ public class AuthServiceImpl implements AuthService {
 
     private String normalizeEmail(String email) {
         return email.toLowerCase(Locale.ROOT);
+    }
+
+    // nickname 컬럼 제약(CK_USERS_NICKNAME_LENGTH, 최대 20자)에 맞춰 이메일 로컬파트를 그대로(별도 필터링 없이) 잘라 기본값으로 쓴다.
+    private String extractDefaultNickname(String email) {
+        String localPart = email.substring(0, email.indexOf('@'));
+        return localPart.length() > NICKNAME_MAX_LENGTH
+                ? localPart.substring(0, NICKNAME_MAX_LENGTH)
+                : localPart;
     }
 
     private void validateEmailNotDuplicated(String email) {

@@ -192,6 +192,77 @@ class AuthServiceImplTest {
     }
 
     @Nested
+    @DisplayName("회원가입 시 닉네임 기본값 설정")
+    class DefaultNicknameOnSignup {
+
+        @Test
+        @DisplayName("이메일_로컬파트가_그대로_닉네임_기본값으로_설정된다")
+        void 이메일_로컬파트가_그대로_닉네임_기본값으로_설정된다() {
+            // given
+            String email = "asd1234@naver.com";
+            RequestSignupDto request = new RequestSignupDto(email, RAW_PASSWORD);
+            given(userRepository.existsByEmailAndIsDeletedFalse(email)).willReturn(false);
+            given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
+            given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(userMapper.toSignupResponse(any(User.class)))
+                    .willReturn(new ResponseSignupDto(1L, email, OffsetDateTime.now()));
+
+            // when
+            authService.signup(request);
+
+            // then
+            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(userCaptor.capture());
+            assertThat(userCaptor.getValue().getNickname()).isEqualTo("asd1234");
+        }
+
+        @Test
+        @DisplayName("이메일_로컬파트가_20자를_초과하면_닉네임은_앞_20자로_잘려서_저장된다")
+        void 이메일_로컬파트가_20자를_초과하면_닉네임은_앞_20자로_잘려서_저장된다() {
+            // given: 로컬파트 25자 → 앞 20자만 닉네임으로 사용
+            String localPart = "abcdefghijklmnopqrstuvwxy";
+            String email = localPart + "@example.com";
+            RequestSignupDto request = new RequestSignupDto(email, RAW_PASSWORD);
+            given(userRepository.existsByEmailAndIsDeletedFalse(email)).willReturn(false);
+            given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
+            given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(userMapper.toSignupResponse(any(User.class)))
+                    .willReturn(new ResponseSignupDto(1L, email, OffsetDateTime.now()));
+
+            // when
+            authService.signup(request);
+
+            // then
+            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(userCaptor.capture());
+            assertThat(userCaptor.getValue().getNickname())
+                    .hasSize(20)
+                    .isEqualTo(localPart.substring(0, 20));
+        }
+
+        @Test
+        @DisplayName("이메일_로컬파트에_마침표_밑줄_더하기_대시가_포함되면_그대로_닉네임에_반영된다")
+        void 이메일_로컬파트에_마침표_밑줄_더하기_대시가_포함되면_그대로_닉네임에_반영된다() {
+            // given
+            String email = "a.b_c+d-e@example.com";
+            RequestSignupDto request = new RequestSignupDto(email, RAW_PASSWORD);
+            given(userRepository.existsByEmailAndIsDeletedFalse(email)).willReturn(false);
+            given(passwordEncoder.encode(RAW_PASSWORD)).willReturn(ENCODED_PASSWORD);
+            given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(userMapper.toSignupResponse(any(User.class)))
+                    .willReturn(new ResponseSignupDto(1L, email, OffsetDateTime.now()));
+
+            // when
+            authService.signup(request);
+
+            // then
+            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(userCaptor.capture());
+            assertThat(userCaptor.getValue().getNickname()).isEqualTo("a.b_c+d-e");
+        }
+    }
+
+    @Nested
     @DisplayName("이메일 대소문자 정규화")
     class EmailCaseNormalization {
 
