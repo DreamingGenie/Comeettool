@@ -4,10 +4,12 @@ import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
+import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseProfileImageDto;
 import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
@@ -26,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -66,6 +69,9 @@ class UserServiceImplTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private FileStorageService fileStorageService;
+
     private final UserProfileMapper userProfileMapper = new UserProfileMapper();
 
     private UserServiceImpl userService;
@@ -73,7 +79,7 @@ class UserServiceImplTest {
     @BeforeEach
     void setUp() {
         userService = new UserServiceImpl(userRepository, userProfileMapper, passwordEncoder, jwtProvider,
-                refreshTokenService);
+                refreshTokenService, fileStorageService);
     }
 
     private User buildUser() {
@@ -763,6 +769,218 @@ class UserServiceImplTest {
             // then
             assertThat(result).isEmpty();
             verify(userRepository, never()).searchByNicknameOrEmail(anyString(), anyLong(), any(Limit.class));
+        }
+    }
+
+    // =====================================================================
+    // AUTH-11: changeProfileImage() 테스트
+    // =====================================================================
+
+    private MockMultipartFile validImageFile() {
+        return new MockMultipartFile("profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
+    }
+
+    @Nested
+    @DisplayName("프로필 사진 변경 성공")
+    class ChangeProfileImageSuccess {
+
+        @Test
+        @DisplayName("정상_업로드하면_새_URL이_반환되고_user_profileImageUrl이_갱신된다")
+        void 정상_업로드하면_새_URL이_반환되고_user_profileImageUrl이_갱신된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), eq("profile-images")))
+                    .willReturn("http://localhost:8080/files/profile-images/new.jpg");
+
+            // when
+            ResponseProfileImageDto result = userService.changeProfileImage(USER_ID, validImageFile());
+
+            // then
+            assertThat(result.profileImage()).isEqualTo("http://localhost:8080/files/profile-images/new.jpg");
+            assertThat(user.getProfileImageUrl()).isEqualTo("http://localhost:8080/files/profile-images/new.jpg");
+        }
+
+        @Test
+        @DisplayName("기존_사진이_있으면_delete가_기존_URL로_호출된다")
+        void 기존_사진이_있으면_delete가_기존_URL로_호출된다() {
+            // given
+            User user = buildUser();
+            ReflectionTestUtils.setField(user, "profileImageUrl", "http://localhost:8080/files/profile-images/old.jpg");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString()))
+                    .willReturn("http://localhost:8080/files/profile-images/new.jpg");
+
+            // when
+            userService.changeProfileImage(USER_ID, validImageFile());
+
+            // then
+            verify(fileStorageService).delete("http://localhost:8080/files/profile-images/old.jpg");
+        }
+
+        @Test
+        @DisplayName("기존_사진이_없으면_delete가_호출되지_않는다")
+        void 기존_사진이_없으면_delete가_호출되지_않는다() {
+            // given: profileImageUrl = null (온보딩 전 상태)
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString()))
+                    .willReturn("http://localhost:8080/files/profile-images/new.jpg");
+
+            // when
+            userService.changeProfileImage(USER_ID, validImageFile());
+
+            // then
+            verify(fileStorageService, never()).delete(anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("프로필 사진 변경 실패")
+    class ChangeProfileImageFailure {
+
+        @Test
+        @DisplayName("5MB_초과_파일은_PROFILE_IMAGE_TOO_LARGE_예외가_발생한다")
+        void MB_초과_파일은_PROFILE_IMAGE_TOO_LARGE_예외가_발생한다() {
+            // given: 5MB + 1byte
+            MockMultipartFile oversized = new MockMultipartFile(
+                    "profileImage", "big.jpg", "image/jpeg", new byte[5 * 1024 * 1024 + 1]);
+
+            // when & then
+            assertThatThrownBy(() -> userService.changeProfileImage(USER_ID, oversized))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PROFILE_IMAGE_TOO_LARGE);
+        }
+
+        @Test
+        @DisplayName("5MB_초과_시_upload와_profileImageUrl_갱신이_수행되지_않는다")
+        void MB_초과_시_upload와_profileImageUrl_갱신이_수행되지_않는다() {
+            // given
+            User user = buildUser();
+            MockMultipartFile oversized = new MockMultipartFile(
+                    "profileImage", "big.jpg", "image/jpeg", new byte[5 * 1024 * 1024 + 1]);
+
+            // when
+            assertThatThrownBy(() -> userService.changeProfileImage(USER_ID, oversized))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(fileStorageService, never()).upload(any(), anyString());
+            assertThat(user.getProfileImageUrl()).isNull();
+        }
+
+        @Test
+        @DisplayName("존재하지_않는_userId면_USER_NOT_FOUND_예외가_발생한다")
+        void 존재하지_않는_userId면_USER_NOT_FOUND_예외가_발생한다() {
+            // given
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> userService.changeProfileImage(999L, validImageFile()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("허용되지_않은_확장자면_PROFILE_IMAGE_INVALID_TYPE_예외가_발생한다")
+        void 허용되지_않은_확장자면_PROFILE_IMAGE_INVALID_TYPE_예외가_발생한다() {
+            // given: gif 확장자
+            MockMultipartFile gifFile = new MockMultipartFile(
+                    "profileImage", "photo.gif", "image/gif", new byte[1024]);
+
+            // when & then
+            assertThatThrownBy(() -> userService.changeProfileImage(USER_ID, gifFile))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+        }
+
+        @Test
+        @DisplayName("확장자가_없으면_PROFILE_IMAGE_INVALID_TYPE_예외가_발생한다")
+        void 확장자가_없으면_PROFILE_IMAGE_INVALID_TYPE_예외가_발생한다() {
+            // given
+            MockMultipartFile noExtFile = new MockMultipartFile(
+                    "profileImage", "photo", "application/octet-stream", new byte[1024]);
+
+            // when & then
+            assertThatThrownBy(() -> userService.changeProfileImage(USER_ID, noExtFile))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+        }
+
+        @Test
+        @DisplayName("확장자_검증_실패_시_upload와_profileImageUrl_갱신이_수행되지_않는다")
+        void 확장자_검증_실패_시_upload와_profileImageUrl_갱신이_수행되지_않는다() {
+            // given
+            MockMultipartFile gifFile = new MockMultipartFile(
+                    "profileImage", "photo.gif", "image/gif", new byte[1024]);
+
+            // when
+            assertThatThrownBy(() -> userService.changeProfileImage(USER_ID, gifFile))
+                    .isInstanceOf(CustomException.class);
+
+            // then
+            verify(fileStorageService, never()).upload(any(), anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("프로필 사진 변경 - 허용 확장자")
+    class ChangeProfileImageAllowedExtensions {
+
+        @Test
+        @DisplayName("jpg_확장자는_업로드가_허용된다")
+        void jpg_확장자는_업로드가_허용된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpg");
+            MockMultipartFile file = new MockMultipartFile("profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
+
+            // when & then: 예외 없이 통과
+            assertThat(userService.changeProfileImage(USER_ID, file).profileImage()).contains("a.jpg");
+        }
+
+        @Test
+        @DisplayName("jpeg_확장자는_업로드가_허용된다")
+        void jpeg_확장자는_업로드가_허용된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpeg");
+            MockMultipartFile file = new MockMultipartFile("profileImage", "photo.jpeg", "image/jpeg", new byte[1024]);
+
+            // when & then
+            assertThat(userService.changeProfileImage(USER_ID, file).profileImage()).contains("a.jpeg");
+        }
+
+        @Test
+        @DisplayName("png_확장자는_업로드가_허용된다")
+        void png_확장자는_업로드가_허용된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.png");
+            MockMultipartFile file = new MockMultipartFile("profileImage", "photo.png", "image/png", new byte[1024]);
+
+            // when & then
+            assertThat(userService.changeProfileImage(USER_ID, file).profileImage()).contains("a.png");
+        }
+
+        @Test
+        @DisplayName("대문자_JPG_확장자도_허용된다")
+        void 대문자_JPG_확장자도_허용된다() {
+            // given
+            User user = buildUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpg");
+            MockMultipartFile file = new MockMultipartFile("profileImage", "photo.JPG", "image/jpeg", new byte[1024]);
+
+            // when & then: toLowerCase()로 정규화되어 통과
+            assertThat(userService.changeProfileImage(USER_ID, file).profileImage()).isNotNull();
         }
     }
 }

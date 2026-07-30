@@ -5,10 +5,12 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseProfileImageDto;
 import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,13 +19,15 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 /**
  * USER 도메인 REST 컨트롤러 (inventory.md §1 /users/*). SecurityConfig 기본 규칙으로 전부 인증 필요.
- * AUTH-05 조회, AUTH-06 수정, AUTH-07 비밀번호 변경, AUTH-08 탈퇴, AUTH-10 사용자 검색.
+ * AUTH-05 조회, AUTH-06 수정, AUTH-07 비밀번호 변경, AUTH-08 탈퇴, AUTH-10 사용자 검색, AUTH-11 프로필 사진 변경.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -52,6 +56,14 @@ public class UserController {
             @Valid @RequestBody RequestChangePasswordDto request) {
         ResponseChangePasswordDto response = userService.changePassword(Long.parseLong(userId), request);
         return ResponseEntity.ok(ApiResponse.success("비밀번호 변경 성공", response));
+    }
+
+    @PatchMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ResponseProfileImageDto>> changeProfileImage(
+            @AuthenticationPrincipal String userId,
+            @RequestPart("profileImage") MultipartFile file) {
+        ResponseProfileImageDto response = userService.changeProfileImage(Long.parseLong(userId), file);
+        return ResponseEntity.ok(ApiResponse.success("프로필 사진 변경 성공", response));
     }
 
     @DeleteMapping("/me")

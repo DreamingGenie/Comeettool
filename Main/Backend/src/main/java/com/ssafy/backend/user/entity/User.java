@@ -69,11 +69,12 @@ public class User {
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted;
 
-    // 가입 시점엔 email·password만 필요 — 나머지 필드는 온보딩(AUTH-06 등)에서 채운다.
+    // 가입 시점엔 email·password·nickname(이메일 로컬파트 기본값)만 필요 — 나머지 필드는 온보딩(AUTH-06 등)에서 채운다.
     @Builder
-    private User(String email, String password) {
+    private User(String email, String password, String nickname) {
         this.email = email;
         this.password = password;
+        this.nickname = nickname;
         this.isDeleted = false;
     }
 
@@ -114,6 +115,11 @@ public class User {
     // AUTH-07 비밀번호 변경 — 영속 엔티티 필드 변경 → 더티 체킹으로 자동 UPDATE, save() 불필요.
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    // AUTH-11 프로필 사진 변경 — 더티 체킹으로 자동 UPDATE.
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     // AUTH-08 회원 탈퇴 — soft delete. 실제 row는 삭제하지 않는다.

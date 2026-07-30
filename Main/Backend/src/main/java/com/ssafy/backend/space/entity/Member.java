@@ -55,6 +55,11 @@ public class Member {
         this.nickname = nickname;
     }
 
+    // SPACE-101: 소유권 위임 시 권한 승격(→OWNER)·강등(→MEMBER)에 사용.
+    public void changeAuthority(MemberAuthority authority) {
+        this.authority = authority;
+    }
+
     // SPACE-01: 생성자를 Owner 권한 멤버로 등록. 역할은 미배정(null).
     public static Member owner(Long userId, Long teamId, String nickname) {
         return Member.builder()

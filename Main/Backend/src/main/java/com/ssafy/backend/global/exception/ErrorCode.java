@@ -25,9 +25,15 @@ public enum ErrorCode {
 
     SPACE_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND", "스페이스를 찾을 수 없습니다."),
     SPACE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SPACE_ACCESS_DENIED", "해당 스페이스에 접근할 권한이 없습니다."),
-    SPACE_OWNER_CANNOT_LEAVE(HttpStatus.CONFLICT, "SPACE_OWNER_CANNOT_LEAVE",
-            "소유자는 스페이스를 나갈 수 없습니다. 소유권을 위임하거나 스페이스를 삭제해 주세요."),
+    SPACE_OWNER_LAST_MEMBER(HttpStatus.CONFLICT, "SPACE_OWNER_LAST_MEMBER",
+            "소유자가 혼자인 스페이스는 나갈 수 없습니다. 스페이스를 삭제해 주세요."),
+    SPACE_OWNER_MUST_TRANSFER(HttpStatus.CONFLICT, "SPACE_OWNER_MUST_TRANSFER",
+            "소유자는 나가기 전에 다른 멤버에게 소유권을 위임해야 합니다."),
     SPACE_OWNER_ONLY(HttpStatus.FORBIDDEN, "SPACE_OWNER_ONLY", "소유자만 수행할 수 있는 작업입니다."),
+    SPACE_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_MEMBER_NOT_FOUND", "해당 스페이스의 멤버를 찾을 수 없습니다."),
+    SPACE_ALREADY_OWNER(HttpStatus.CONFLICT, "SPACE_ALREADY_OWNER", "이미 스페이스 소유자입니다."),
+    SPACE_TRANSFER_TARGET_NOT_ELIGIBLE(HttpStatus.BAD_REQUEST, "SPACE_TRANSFER_TARGET_NOT_ELIGIBLE",
+            "게스트에게는 소유권을 위임할 수 없습니다."),
 
     MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
     MEETING_HOST_REQUIRED(HttpStatus.FORBIDDEN, "MEETING_HOST_REQUIRED", "회의 호스트 권한이 필요합니다."),
@@ -42,7 +48,10 @@ public enum ErrorCode {
     DOCUMENT_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_DELETE_FORBIDDEN", "문서를 삭제할 권한이 없습니다."),
 
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
-    ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다.");
+    ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
+
+    PROFILE_IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_TOO_LARGE", "프로필 사진은 5MB 이하만 업로드할 수 있습니다."),
+    PROFILE_IMAGE_INVALID_TYPE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_INVALID_TYPE", "jpg, jpeg, png 형식만 업로드할 수 있습니다.");
 
     private final HttpStatus status;
     private final String code;

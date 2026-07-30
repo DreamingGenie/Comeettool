@@ -2,9 +2,11 @@ package com.ssafy.backend.space.controller;
 
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
+import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.service.SpaceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -76,5 +79,16 @@ public class SpaceController {
             @PathVariable Long spaceId) {
         spaceService.removeSpace(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success("스페이스가 삭제되었습니다.", null));
+    }
+
+    // SPACE-101: 소유권 위임(Owner 전용). 대상 멤버를 새 Owner로 승격하고 기존 Owner는 MEMBER로 강등한다.
+    @PatchMapping("/{spaceId}/owner")
+    public ResponseEntity<ApiResponse<ResponseTransferOwnerDto>> transferOwner(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @Valid @RequestBody RequestTransferOwnerDto request) {
+        ResponseTransferOwnerDto response =
+                spaceService.transferOwner(Long.parseLong(userId), spaceId, request);
+        return ResponseEntity.ok(ApiResponse.success("소유권이 위임되었습니다.", response));
     }
 }
