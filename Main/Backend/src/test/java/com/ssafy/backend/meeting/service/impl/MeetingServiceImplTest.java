@@ -99,7 +99,7 @@ class MeetingServiceImplTest {
     @DisplayName("활성 회의가 2개이면 회의와 미접속 Host Participant를 생성한다")
     void addMeeting_createsMeetingAndDisconnectedHostParticipant() {
         Team team = createTeam();
-        Member hostMember = createMemberWithId(
+        Member hostMember = createMemberWithTeamRoleId(
                 CURRENT_HOST_MEMBER_ID,
                 CURRENT_HOST_USER_ID,
                 TEAM_ID,
@@ -153,7 +153,7 @@ class MeetingServiceImplTest {
     @DisplayName("팀 역할이 없는 Host는 역할을 null로 저장한다")
     void addMeeting_savesNullParticipantRoleWhenHostHasNoTeamRole() {
         Team team = createTeam();
-        Member hostMember = createMemberWithId(
+        Member hostMember = createMemberWithTeamRoleId(
                 CURRENT_HOST_MEMBER_ID,
                 CURRENT_HOST_USER_ID,
                 TEAM_ID,
@@ -249,7 +249,7 @@ class MeetingServiceImplTest {
     @Test
     @DisplayName("활성 회의가 3개이면 MEETING_ROOM_LIMIT_EXCEEDED 예외가 발생한다")
     void addMeeting_rejectsWhenActiveMeetingRoomLimitIsExceeded() {
-        Member hostMember = createMemberWithId(
+        Member hostMember = createMemberWithTeamRoleId(
                 CURRENT_HOST_MEMBER_ID,
                 CURRENT_HOST_USER_ID,
                 TEAM_ID,
@@ -530,7 +530,7 @@ class MeetingServiceImplTest {
         return team;
     }
 
-    private Member createMemberWithId(
+    private Member createMemberWithTeamRoleId(
             Long memberId,
             Long userId,
             Long teamId,

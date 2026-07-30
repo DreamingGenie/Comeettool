@@ -70,7 +70,7 @@ public class MeetingController {
      * MEET-07: 현재 회의에 입장 중인 참여자의 기본 정보를 조회한다.
      * 카메라·마이크 상태는 추후 LiveKit에서 실시간으로 결합한다.
      */
-    @GetMapping("/{meetingId}/participants")
+    @GetMapping("/meetings/{meetingId}/participants")
     public ResponseEntity<ApiResponse<List<ResponseMeetingParticipantDto>>> getParticipants(
             @AuthenticationPrincipal String userId,
             @PathVariable Long meetingId
