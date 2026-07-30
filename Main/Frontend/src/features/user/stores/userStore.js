@@ -61,14 +61,28 @@ export const userStore = {
     state.profile = normalizeProfile(profile)
     return state.profile
   },
-  async updateProfileImage(file) {
-    const result = await dataSource.user.updateProfileImage(file)
-    const profileImage = result?.profileImage || ''
-    state.profile = normalizeProfile({
-      ...state.profile,
-      profileImage
-    })
-    return state.profile
+  async updateProfileImage(file, previewImage = '') {
+    const previousProfile = state.profile
+
+    if (previewImage) {
+      state.profile = normalizeProfile({
+        ...state.profile,
+        profileImage: previewImage
+      })
+    }
+
+    try {
+      const result = await dataSource.user.updateProfileImage(file)
+      const profileImage = result?.profileImage || ''
+      state.profile = normalizeProfile({
+        ...state.profile,
+        profileImage
+      })
+      return state.profile
+    } catch (error) {
+      state.profile = previousProfile
+      throw error
+    }
   },
   async changePassword(data) {
     const result = await dataSource.user.changePassword(data)

@@ -17,7 +17,13 @@
           <p>내 정보를 최신 상태로 유지하고 팀원들에게 나를 소개해 보세요.</p>
         </div>
         <div class="profile-color-preview" aria-label="사용자 색상 미리보기">
-          <i :style="{ backgroundColor: selectedColor }">{{ avatarPreview }}</i>
+          <img
+            v-if="userState.profile?.profileImage && !profileImageFailed"
+            :src="userState.profile.profileImage"
+            :alt="`${form.nickname || '사용자'} 프로필 미리보기`"
+            @error="profileImageFailed = true"
+          />
+          <i v-else :style="{ backgroundColor: selectedColor }">{{ avatarPreview }}</i>
           <span>
             <small>프로필 미리보기</small>
             <b>{{ form.nickname || '사용자' }}</b>
@@ -246,12 +252,15 @@ async function onProfileImageChange(event) {
   }
 
   uploadingProfileImage.value = true
+  const previewImage = URL.createObjectURL(file)
   try {
-    await userStore.updateProfileImage(file)
+    profileImageFailed.value = false
+    await userStore.updateProfileImage(file, previewImage)
     notify('프로필 사진을 변경했습니다.')
   } catch (error) {
     notify(error?.message || '프로필 사진을 변경하지 못했습니다.')
   } finally {
+    URL.revokeObjectURL(previewImage)
     uploadingProfileImage.value = false
     event.target.value = ''
   }
@@ -286,6 +295,16 @@ function onJobFamilyChange() {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 5px 14px rgba(35, 50, 92, 0.16);
+}
+
+.profile-color-preview > img {
+  width: 38.4px;
+  height: 38.4px;
+  flex: 0 0 38.4px;
+  border: 1px solid #d8deed;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 3px 9px rgba(35, 50, 92, 0.14);
 }
 
 .profile-image-input {
