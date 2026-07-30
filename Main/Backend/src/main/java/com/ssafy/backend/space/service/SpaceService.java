@@ -1,9 +1,11 @@
 package com.ssafy.backend.space.service;
 
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
+import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 
 import java.util.List;
 
@@ -23,4 +25,7 @@ public interface SpaceService {
 
     // SPACE-11: Owner가 스페이스를 삭제한다(teams + 하위 documents·meeting_rooms 전파 soft delete, 정책 SP-2).
     void removeSpace(Long userId, Long spaceId);
+
+    // SPACE-101: Owner가 다른 멤버에게 소유권을 위임한다(teams.team_owner_id + members.authority 갱신).
+    ResponseTransferOwnerDto transferOwner(Long requesterUserId, Long spaceId, RequestTransferOwnerDto request);
 }

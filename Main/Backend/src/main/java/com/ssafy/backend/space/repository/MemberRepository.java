@@ -21,6 +21,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // SPACE-05: 스페이스 참여자(멤버) 목록 조회.
     List<Member> findByTeamId(Long teamId);
 
+    // SPACE-07: Owner 나가기 흐름 분기 — 스페이스의 현재 멤버 수(1이면 혼자, 2+면 위임 대상 존재).
+    long countByTeamId(Long teamId);
+
     // SPACE-02: 여러 스페이스의 참여자 수를 한 번에 집계([teamId, count]).
     @Query("select m.teamId, count(m) from Member m where m.teamId in :teamIds group by m.teamId")
     List<Object[]> countMembersByTeamIds(@Param("teamIds") List<Long> teamIds);

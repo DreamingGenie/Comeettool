@@ -77,4 +77,9 @@ public class Team {
         this.isDeleted = true;
         this.deletedAt = deletedAt;
     }
+
+    // SPACE-101: 소유권 위임 — team_owner_id를 새 소유자로 갱신.
+    public void changeOwner(Long newOwnerId) {
+        this.ownerId = newOwnerId;
+    }
 }
