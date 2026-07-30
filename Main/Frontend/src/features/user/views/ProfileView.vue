@@ -17,7 +17,13 @@
           <p>내 정보를 최신 상태로 유지하고 팀원들에게 나를 소개해 보세요.</p>
         </div>
         <div class="profile-color-preview" aria-label="사용자 색상 미리보기">
-          <i :style="{ backgroundColor: selectedColor }">{{ avatarPreview }}</i>
+          <img
+            v-if="userState.profile?.profileImage && !profileImageFailed"
+            :src="userState.profile.profileImage"
+            :alt="`${form.nickname || '사용자'} 프로필 미리보기`"
+            @error="profileImageFailed = true"
+          />
+          <i v-else :style="{ backgroundColor: selectedColor }">{{ avatarPreview }}</i>
           <span>
             <small>프로필 미리보기</small>
             <b>{{ form.nickname || '사용자' }}</b>
@@ -26,13 +32,35 @@
       </header>
       <div class="profile-settings-body">
         <aside class="photo-card">
-          <div class="photo-circle">
-            <img class="side-icon" src="/assets/icons/camera.svg" alt="" />
+          <div
+            class="photo-circle"
+            :class="{ 'has-photo': userState.profile?.profileImage && !profileImageFailed }"
+          >
+            <img
+              v-if="userState.profile?.profileImage && !profileImageFailed"
+              class="profile-photo-image"
+              :src="userState.profile.profileImage"
+              :alt="`${userState.profile.nickname || '사용자'} 프로필`"
+              @error="profileImageFailed = true"
+            />
+            <img v-else class="side-icon" src="/assets/icons/camera.svg" alt="" />
           </div>
+          <input
+            ref="profileImageInput"
+            class="profile-image-input"
+            type="file"
+            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+            @change="onProfileImageChange"
+          />
           <b>프로필 사진</b>
           <small>권장 크기 400 × 400px<br />JPG, PNG · 최대 5MB</small>
-          <button type="button" class="upload-photo" @click="notify('사진 업로드 기능은 API 연결 후 제공됩니다.')">
-            사진 업로드
+          <button
+            type="button"
+            class="upload-photo"
+            :disabled="uploadingProfileImage"
+            @click="profileImageInput?.click()"
+          >
+            {{ uploadingProfileImage ? '업로드 중...' : '사진 업로드' }}
           </button>
           <p>✓ 얼굴이 잘 보이는 사진을 권장해요.</p>
         </aside>
@@ -143,7 +171,12 @@ const { userState, reloadUser } = useUserPage()
 const { notify } = useToast()
 const nicknameMaxLength = 20
 const bioMaxLength = 255
+const maxProfileImageBytes = 5 * 1024 * 1024
+const allowedProfileImageTypes = new Set(['image/jpeg', 'image/png'])
 const saving = ref(false)
+const uploadingProfileImage = ref(false)
+const profileImageInput = ref(null)
+const profileImageFailed = ref(false)
 const form = reactive({
   nickname: '',
   phone: '',
@@ -167,7 +200,7 @@ const selectedColor = computed(
 )
 const avatarPreview = computed(
   () =>
-    form.nickname.trim().slice(0, 2) ||
+    form.nickname.trim().slice(0, 1) ||
     userState.profile?.avatarText ||
     '나'
 )
@@ -183,6 +216,13 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => userState.profile?.profileImage,
+  () => {
+    profileImageFailed.value = false
+  }
+)
+
 async function save() {
   saving.value = true
   try {
@@ -192,6 +232,37 @@ async function save() {
     notify(error?.message || '프로필을 저장하지 못했습니다.')
   } finally {
     saving.value = false
+  }
+}
+
+async function onProfileImageChange(event) {
+  const [file] = event.target.files || []
+  if (!file) return
+
+  if (!allowedProfileImageTypes.has(file.type)) {
+    notify('JPG 또는 PNG 파일만 업로드할 수 있습니다.')
+    event.target.value = ''
+    return
+  }
+
+  if (file.size > maxProfileImageBytes) {
+    notify('프로필 사진은 최대 5MB까지 업로드할 수 있습니다.')
+    event.target.value = ''
+    return
+  }
+
+  uploadingProfileImage.value = true
+  const previewImage = URL.createObjectURL(file)
+  try {
+    profileImageFailed.value = false
+    await userStore.updateProfileImage(file, previewImage)
+    notify('프로필 사진을 변경했습니다.')
+  } catch (error) {
+    notify(error?.message || '프로필 사진을 변경하지 못했습니다.')
+  } finally {
+    URL.revokeObjectURL(previewImage)
+    uploadingProfileImage.value = false
+    event.target.value = ''
   }
 }
 
@@ -215,3 +286,35 @@ function onJobFamilyChange() {
   }
 }
 </script>
+
+<style scoped>
+.profile-photo-image {
+  width: 100%;
+  height: 100%;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 5px 14px rgba(35, 50, 92, 0.16);
+}
+
+.profile-color-preview > img {
+  width: 38.4px;
+  height: 38.4px;
+  flex: 0 0 38.4px;
+  border: 1px solid #d8deed;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 3px 9px rgba(35, 50, 92, 0.14);
+}
+
+.profile-image-input {
+  display: none;
+}
+
+.photo-circle.has-photo {
+  padding: 4px;
+  border-color: #d5dcef;
+  background: #eef1fa;
+  box-shadow: none;
+}
+</style>

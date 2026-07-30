@@ -12,6 +12,14 @@ export const userApi = {
       method: 'PATCH',
       body: JSON.stringify(data)
     }),
+  updateProfileImage: file => {
+    const formData = new FormData()
+    formData.append('profileImage', file)
+    return request('/api/v1/users/me/profile-image', {
+      method: 'PATCH',
+      body: formData
+    })
+  },
   changePassword: ({ currentPassword, newPassword }) =>
     request('/api/v1/users/me/password', {
       method: 'PATCH',

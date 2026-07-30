@@ -2,6 +2,16 @@ import { userMockDatabase } from '../../user/mock/userMockDatabase'
 import { mockResponse } from '../../../shared/api/mockResponse'
 import { authMockDatabase } from './authMockDatabase'
 
+const NICKNAME_MAX_LENGTH = 20
+
+function normalizeEmail(email) {
+  return email.trim().toLowerCase()
+}
+
+function createDefaultNickname(email) {
+  return email.slice(0, email.indexOf('@')).slice(0, NICKNAME_MAX_LENGTH)
+}
+
 export const authMockApi = {
   login: credentials => {
     const user = { ...userMockDatabase.profile, email: credentials.email }
@@ -20,10 +30,19 @@ export const authMockApi = {
     })
   },
   signup: form => {
+    const email = normalizeEmail(form.email)
+    const duplicated = authMockDatabase.users.some(user => user.email === email)
+    if (duplicated) {
+      const error = new Error('이미 사용 중인 이메일입니다.')
+      error.code = 'AUTH_EMAIL_DUPLICATED'
+      error.status = 409
+      return Promise.reject(error)
+    }
+
     const user = {
       ...userMockDatabase.profile,
-      nickname: form.nickname || userMockDatabase.profile.nickname,
-      email: form.email
+      nickname: createDefaultNickname(email),
+      email
     }
     authMockDatabase.users.push(user)
     Object.assign(userMockDatabase.profile, user)

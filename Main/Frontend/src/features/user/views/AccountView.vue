@@ -131,7 +131,7 @@ async function withdraw() {
     authStore.clearSession()
     confirming.value = false
     notify('회원 탈퇴가 완료되었습니다.')
-    await router.replace({ name: 'login' })
+    await router.replace({ name: 'intro' })
   } catch (error) {
     notify(error?.message || '회원 탈퇴를 완료하지 못했습니다.')
   } finally {
