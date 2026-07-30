@@ -46,7 +46,9 @@ export const dataSource = {
     getTeam: spaceSource.getTeam,
     getMembers: spaceSource.getMembers,
     createWorkspace: spaceSource.createWorkspace,
-    leaveWorkspace: spaceSource.leaveWorkspace
+    leaveWorkspace: spaceSource.leaveWorkspace,
+    deleteWorkspace: spaceSource.deleteWorkspace,
+    transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership
   },
   document: documentSource,
   user: {

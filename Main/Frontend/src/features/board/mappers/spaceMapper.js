@@ -48,6 +48,18 @@ export const toTeamViewModel = (space, currentUserId) => {
   const currentMember = members.find(
     member => String(member.userId) === String(currentUserId)
   )
+  const memberViewModels = members.map(member => {
+    const name = member.nickname || `사용자 ${member.userId}`
+    return {
+      id: String(member.memberId ?? member.userId ?? ''),
+      userId: member.userId ?? null,
+      name,
+      avatarText: initials(name),
+      authority: String(member.authority || 'MEMBER').toUpperCase(),
+      authorityLabel: authorityLabel(member.authority),
+      teamRoleId: member.teamRoleId ?? null
+    }
+  })
 
   return {
     ...toWorkspaceViewModel({
@@ -57,6 +69,7 @@ export const toTeamViewModel = (space, currentUserId) => {
     }),
     eyebrow: 'TEAM SPACE',
     memberCount: members.length,
+    members: memberViewModels,
     colorOptions: teamCreateColors,
     defaultMemberRoles: ['Member', 'Guest']
   }

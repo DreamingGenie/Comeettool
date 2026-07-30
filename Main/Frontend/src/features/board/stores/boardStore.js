@@ -10,6 +10,8 @@ const emptyTeam = {
   role: '',
   memberCount: 0,
   description: '',
+  ownerId: null,
+  members: [],
   colorOptions: [],
   defaultMemberRoles: []
 }
@@ -111,6 +113,17 @@ const withLoading = async request => {
   }
 }
 
+function removeWorkspaceFromState(spaceId) {
+  state.workspaces = state.workspaces.filter(
+    workspace => String(workspace.id) !== String(spaceId)
+  )
+  if (String(state.currentTeamId) === String(spaceId)) {
+    state.currentTeamId = ''
+    state.team = { ...emptyTeam, members: [] }
+    state.members = []
+  }
+}
+
 export const boardStore = {
   state,
   async loadResources(resources = [], context = {}) {
@@ -208,15 +221,25 @@ export const boardStore = {
     return workspace
   },
   async leaveWorkspace(spaceId) {
-    await dataSource.board.leaveWorkspace(spaceId)
-    state.workspaces = state.workspaces.filter(
-      workspace => String(workspace.id) !== String(spaceId)
+    await withLoading(() => dataSource.board.leaveWorkspace(spaceId))
+    removeWorkspaceFromState(spaceId)
+  },
+  async deleteWorkspace(spaceId) {
+    await withLoading(() => dataSource.board.deleteWorkspace(spaceId))
+    removeWorkspaceFromState(spaceId)
+  },
+  async transferWorkspaceOwnership(spaceId, newOwnerUserId) {
+    const result = await withLoading(() =>
+      dataSource.board.transferWorkspaceOwnership(
+        spaceId,
+        Number(newOwnerUserId)
+      )
     )
-    if (String(state.currentTeamId) === String(spaceId)) {
-      state.currentTeamId = ''
-      state.team = { ...emptyTeam }
-      state.members = []
-    }
+    await Promise.all([
+      boardStore.loadTeam(spaceId),
+      boardStore.loadWorkspaces()
+    ])
+    return result
   },
   async createMeeting(data) {
     const meeting = await dataSource.board.createMeeting(data)

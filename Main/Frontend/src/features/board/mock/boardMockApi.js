@@ -4,13 +4,38 @@ import { cloneMockValue, mockResponse } from '../../../shared/api/mockResponse'
 const createId = prefix =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`
 
+const findMockTeam = teamId =>
+  boardMockDatabase.teams.find(team => String(team.id) === String(teamId)) ||
+  boardMockDatabase.teams[0]
+
+const getMockTeamMembers = teamId => {
+  const team = findMockTeam(teamId)
+  const members =
+    boardMockDatabase.inviteMembers[team?.id] ||
+    boardMockDatabase.inviteMembers[boardMockDatabase.teams[0]?.id] ||
+    []
+
+  return members.map(member => ({
+    memberId: member.id,
+    userId: member.id,
+    nickname: member.name,
+    authority: member.role,
+    teamRoleId: null
+  }))
+}
+
 export const boardMockApi = {
   getDashboard: () => mockResponse({ workspaces: boardMockDatabase.workspaces }),
-  getTeam: teamId =>
-    mockResponse(
-      boardMockDatabase.teams.find(team => team.id === teamId) ||
-        boardMockDatabase.teams[0]
-    ),
+  getTeam: teamId => {
+    const team = findMockTeam(teamId)
+    return mockResponse({
+      ...team,
+      ownerId:
+        getMockTeamMembers(teamId).find(member => member.authority === 'OWNER')
+          ?.userId ?? null,
+      members: getMockTeamMembers(teamId)
+    })
+  },
   getMembers: teamId =>
     mockResponse(boardMockDatabase.membersByTeam[teamId] || []),
   getActiveMeeting: () =>
@@ -114,12 +139,55 @@ export const boardMockApi = {
   },
   leaveWorkspace: teamId => {
     const workspaceIndex = boardMockDatabase.workspaces.findIndex(
-      workspace => workspace.id === teamId
+      workspace => String(workspace.id) === String(teamId)
     )
     if (workspaceIndex >= 0) {
       boardMockDatabase.workspaces.splice(workspaceIndex, 1)
     }
     return mockResponse(null)
+  },
+  deleteWorkspace: teamId => {
+    const workspaceIndex = boardMockDatabase.workspaces.findIndex(
+      workspace => String(workspace.id) === String(teamId)
+    )
+    const teamIndex = boardMockDatabase.teams.findIndex(
+      team => String(team.id) === String(teamId)
+    )
+
+    if (workspaceIndex >= 0) boardMockDatabase.workspaces.splice(workspaceIndex, 1)
+    if (teamIndex >= 0) boardMockDatabase.teams.splice(teamIndex, 1)
+    delete boardMockDatabase.membersByTeam[teamId]
+    delete boardMockDatabase.calendars[teamId]
+    delete boardMockDatabase.inviteMembers[teamId]
+    return mockResponse(null)
+  },
+  transferWorkspaceOwnership: (teamId, newOwnerUserId) => {
+    const team = findMockTeam(teamId)
+    const members =
+      boardMockDatabase.inviteMembers[team?.id] ||
+      boardMockDatabase.inviteMembers[boardMockDatabase.teams[0]?.id] ||
+      []
+    const previousOwner = members.find(member => member.role === 'OWNER')
+    const nextOwner = members.find(
+      member => String(member.id) === String(newOwnerUserId)
+    )
+
+    if (previousOwner) previousOwner.role = 'MEMBER'
+    if (nextOwner) nextOwner.role = 'OWNER'
+    if (team) {
+      team.ownerId = nextOwner?.id ?? null
+      team.role = 'Member'
+    }
+    const workspace = boardMockDatabase.workspaces.find(
+      item => String(item.id) === String(teamId)
+    )
+    if (workspace) workspace.role = 'Member'
+
+    return mockResponse({
+      spaceId: teamId,
+      previousOwnerId: previousOwner?.id ?? null,
+      newOwnerId: nextOwner?.id ?? null
+    })
   },
   createMeeting: data => {
     const meeting = {

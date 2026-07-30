@@ -44,6 +44,15 @@ export const boardApi = {
     request(`/api/v1/spaces/${spaceId}/members/me`, {
       method: 'DELETE'
     }),
+  deleteWorkspace: spaceId =>
+    request(`/api/v1/spaces/${spaceId}`, {
+      method: 'DELETE'
+    }),
+  transferWorkspaceOwnership: (spaceId, newOwnerUserId) =>
+    request(`/api/v1/spaces/${spaceId}/owner`, {
+      method: 'PATCH',
+      body: JSON.stringify({ newOwnerUserId })
+    }),
   createMeeting: data =>
     request('/api/rooms', {
       method: 'POST',
