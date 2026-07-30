@@ -58,9 +58,36 @@
             <span class="editor-card-eyebrow">TIPTAP EDITOR</span>
             <h2>{{ currentDocument.title }}</h2>
           </div>
-          <div class="editor-state">
-            <i :class="connectionIndicatorClass"></i>
-            <span>{{ editorStateLabel }}</span>
+          <div class="editor-presence">
+            <div
+              class="participant-list"
+              role="list"
+              :aria-label="`현재 참가자 ${participants.length}명`"
+            >
+              <span>참가자 {{ participants.length }}</span>
+              <div v-if="participants.length" class="participant-chips">
+                <div
+                  v-for="participant in participants"
+                  :key="participant.id"
+                  class="participant-chip"
+                  role="listitem"
+                  :title="participant.name"
+                >
+                  <i
+                    :style="{ '--participant-color': participant.color }"
+                  >
+                    {{ participant.avatarText }}
+                  </i>
+                  <b>{{ participant.name }}</b>
+                  <small v-if="participant.isMe">나</small>
+                </div>
+              </div>
+              <small v-else>연결 대기 중</small>
+            </div>
+            <div class="editor-state">
+              <i :class="connectionIndicatorClass"></i>
+              <span>{{ editorStateLabel }}</span>
+            </div>
           </div>
         </div>
 
@@ -186,7 +213,6 @@
 
         <footer class="editor-footer">
           <span>State epoch {{ currentDocument.stateEpoch }}</span>
-          <span>{{ collaborationDescription }}</span>
         </footer>
       </section>
     </template>
@@ -196,6 +222,7 @@
 <script setup>
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
 import { HocuspocusProvider } from '@hocuspocus/provider'
@@ -212,6 +239,8 @@ import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../shared/components/AsyncState.vue'
 import TeamLayout from '../../board/components/TeamLayout.vue'
 import { useBoardPage } from '../../board/composables/useBoardPage'
+import { authStore } from '../../auth/stores/authStore'
+import { userStore } from '../../user/stores/userStore'
 import { documentStore } from '../stores/documentStore'
 
 const route = useRoute()
@@ -223,6 +252,7 @@ const collaborationPermission = ref('')
 const collaborationStatus = ref('idle')
 const collaborationSynced = ref(false)
 const collaborationError = ref('')
+const participants = ref([])
 let collaborationProvider = null
 let collaborationDocument = null
 let connectionGeneration = 0
@@ -248,6 +278,26 @@ const documentTitle = computed(
 const authority = computed(() =>
   String(boardState.team.role || '').toUpperCase()
 )
+const currentAwarenessUser = computed(() => {
+  const profile = userStore.state.profile || {}
+  const userId =
+    profile.userId ?? authStore.state.userId ?? authStore.state.user?.userId
+  const name = String(
+    profile.nickname ||
+    profile.email ||
+    (userId ? `사용자 ${userId}` : '사용자')
+  ).slice(0, 30)
+  const color = /^#[0-9a-f]{6}$/i.test(profile.userColor || '')
+    ? profile.userColor
+    : '#5f6fe5'
+
+  return {
+    id: userId === null || userId === undefined ? '' : String(userId),
+    name,
+    color,
+    avatarText: String(profile.avatarText || name || '?').slice(0, 1)
+  }
+})
 const canEdit = computed(() => collaborationPermission.value === 'WRITE')
 const permissionLabel = computed(() => {
   const role =
@@ -293,17 +343,6 @@ const connectionIndicatorClass = computed(() => ({
   disconnected: collaborationStatus.value === 'disconnected',
   error: Boolean(collaborationError.value)
 }))
-const collaborationDescription = computed(() => {
-  if (collaborationError.value) {
-    return '협업 서버 연결을 확인한 뒤 문서를 다시 불러오세요.'
-  }
-  if (!collaborationSynced.value) {
-    return 'Yjs 문서의 초기 상태를 동기화하고 있습니다.'
-  }
-  return canEdit.value
-    ? '변경사항은 Yjs 서버를 통해 실시간으로 저장·동기화됩니다.'
-    : '다른 사용자의 변경사항을 실시간으로 받아봅니다.'
-})
 const canUndo = computed(() => {
   editorRevision.value
   return Boolean(
@@ -323,6 +362,46 @@ function touchEditorState() {
   editorRevision.value += 1
 }
 
+function updateParticipants(states = []) {
+  const uniqueParticipants = new Map()
+
+  states.forEach(state => {
+    const user = state?.user
+    if (!user?.name) return
+
+    const userId = user.id === undefined || user.id === null
+      ? ''
+      : String(user.id)
+    const id = userId
+      ? `user:${userId}`
+      : `client:${state.clientId}`
+    const name = String(user.name).slice(0, 30)
+    const color = /^#[0-9a-f]{6}$/i.test(user.color || '')
+      ? user.color
+      : '#5f6fe5'
+
+    if (!uniqueParticipants.has(id)) {
+      uniqueParticipants.set(id, {
+        id,
+        name,
+        color,
+        avatarText: String(user.avatarText || name || '?').slice(0, 1),
+        isMe:
+          (
+            Boolean(userId) &&
+            userId === currentAwarenessUser.value.id
+          ) ||
+          state.clientId === collaborationDocument?.clientID
+      })
+    }
+  })
+
+  participants.value = [...uniqueParticipants.values()].sort((a, b) => {
+    if (a.isMe !== b.isMe) return a.isMe ? -1 : 1
+    return a.name.localeCompare(b.name, 'ko')
+  })
+}
+
 function destroyEditor() {
   connectionGeneration += 1
   editor.value?.destroy()
@@ -339,6 +418,7 @@ function destroyEditor() {
   collaborationStatus.value = 'idle'
   collaborationSynced.value = false
   collaborationError.value = ''
+  participants.value = []
 }
 
 function isTokenUsable(collaboration) {
@@ -393,6 +473,10 @@ async function createCollaborativeEditor(document, generation) {
       collaborationSynced.value = state !== false
       collaborationError.value = ''
     },
+    onAwarenessChange: ({ states }) => {
+      if (generation !== connectionGeneration) return
+      updateParticipants(states)
+    },
     onAuthenticationFailed: ({ reason }) => {
       if (generation !== connectionGeneration) return
       collaborationStatus.value = 'error'
@@ -404,6 +488,7 @@ async function createCollaborativeEditor(document, generation) {
       if (generation !== connectionGeneration) return
       collaborationStatus.value = 'disconnected'
       collaborationSynced.value = false
+      participants.value = []
     }
   })
 
@@ -418,6 +503,10 @@ async function createCollaborativeEditor(document, generation) {
       Collaboration.configure({
         document: collaborationDocument,
         field: 'default'
+      }),
+      CollaborationCaret.configure({
+        provider: collaborationProvider,
+        user: currentAwarenessUser.value
       }),
       Placeholder.configure({
         placeholder: '문서 내용을 입력하세요.'
@@ -496,6 +585,9 @@ function goBack() {
 watch(canEdit, editable => {
   editor.value?.setEditable(editable)
   touchEditorState()
+})
+watch(currentAwarenessUser, user => {
+  collaborationProvider?.setAwarenessField('user', user)
 })
 watch(documentId, loadDocument)
 
@@ -592,6 +684,83 @@ onBeforeUnmount(() => {
 .editor-card-header h2 {
   margin: 4px 0 0;
   font-size: 16px;
+}
+
+.editor-presence {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.participant-list,
+.participant-chips,
+.participant-chip {
+  display: flex;
+  align-items: center;
+}
+
+.participant-list {
+  justify-content: flex-end;
+  gap: 8px;
+  color: #70798c;
+  font-size: 9px;
+}
+
+.participant-list > span {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+
+.participant-list > small {
+  color: #9aa2b1;
+}
+
+.participant-chips {
+  overflow-x: auto;
+  justify-content: flex-end;
+  gap: 5px;
+  max-width: min(48vw, 520px);
+  padding: 2px;
+}
+
+.participant-chip {
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 3px 7px 3px 4px;
+  border: 1px solid #e3e6ee;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.participant-chip > i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--participant-color);
+  color: #fff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.participant-chip > b {
+  max-width: 90px;
+  overflow: hidden;
+  color: #4d5669;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-chip > small {
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: #eef1ff;
+  color: var(--blue2);
+  font-size: 7px;
+  font-weight: 800;
 }
 
 .editor-state {
@@ -800,6 +969,36 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+:deep(.collaboration-carets__caret) {
+  position: relative;
+  margin-right: -1px;
+  margin-left: -1px;
+  border-right: 1px solid;
+  border-left: 1px solid;
+  pointer-events: none;
+  word-break: normal;
+}
+
+:deep(.collaboration-carets__label) {
+  position: absolute;
+  top: -1.55em;
+  left: -1px;
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: 4px 4px 4px 0;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.25;
+  user-select: none;
+  white-space: nowrap;
+}
+
+:deep(.ProseMirror-yjs-selection) {
+  border-radius: 2px;
+}
+
 @media (max-width: 920px) {
   .document-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -824,6 +1023,21 @@ onBeforeUnmount(() => {
   .editor-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .editor-presence {
+    width: 100%;
+    justify-items: start;
+  }
+
+  .participant-list {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  .participant-chips {
+    max-width: min(70vw, 520px);
+    justify-content: flex-start;
   }
 
   :deep(.document-prose) {
