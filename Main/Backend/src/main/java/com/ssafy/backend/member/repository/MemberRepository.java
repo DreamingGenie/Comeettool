@@ -1,6 +1,6 @@
-package com.ssafy.backend.space.repository;
+package com.ssafy.backend.member.repository;
 
-import com.ssafy.backend.space.entity.Member;
+import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.space.entity.Team;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

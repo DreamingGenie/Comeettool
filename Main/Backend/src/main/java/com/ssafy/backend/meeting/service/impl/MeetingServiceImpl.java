@@ -11,8 +11,8 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.meeting.service.MeetingService;
-import com.ssafy.backend.space.entity.Member;
-import com.ssafy.backend.space.repository.MemberRepository;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.repository.MemberRepository;
 
 import lombok.RequiredArgsConstructor;
 
