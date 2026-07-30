@@ -2,8 +2,8 @@ package com.ssafy.backend.document.authorization;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
-import com.ssafy.backend.space.entity.MemberAuthority;
-import com.ssafy.backend.space.repository.MemberRepository;
+import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.member.repository.MemberRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;

@@ -30,6 +30,9 @@ import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.member.repository.MemberRepository;
 
 /**
  * MEET-06 호스트 양도 및 MEET-07 참여자 조회 서비스 단위 테스트.

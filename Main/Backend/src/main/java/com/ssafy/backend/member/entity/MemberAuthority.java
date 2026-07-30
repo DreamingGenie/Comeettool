@@ -1,4 +1,4 @@
-package com.ssafy.backend.space.entity;
+package com.ssafy.backend.member.entity;
 
 /**
  * 스페이스 멤버의 권한(고정 3종). members.authority 에 문자열(name())로 저장된다.
