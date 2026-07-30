@@ -22,12 +22,12 @@ export const documentApi = {
   createDocument: teamId =>
     request('/api/v1/document', {
       method: 'POST',
-      body: JSON.stringify({teamId: requirePositiveTeamId(teamId)})
+      body: JSON.stringify({ teamId: requirePositiveTeamId(teamId) })
     }),
   issueCollaborationToken: documentId =>
     request(
       `/api/v1/document/${encodeURIComponent(documentId)}/collaboration-token`,
-      {method: 'POST'}
+      { method: 'POST' }
     ),
   deleteDocument: documentId =>
     request(`/api/v1/document/${encodeURIComponent(documentId)}`, {

@@ -32,7 +32,7 @@ function toSummary(document) {
     updatedAt
   } = document
 
-  return {documentId, teamId, title, finalVersion, updatedAt}
+  return { documentId, teamId, title, finalVersion, updatedAt }
 }
 
 function toDetail(document) {
