@@ -4,10 +4,12 @@ import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
+import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseProfileImageDto;
 import com.ssafy.backend.user.dto.ResponseUserSearchDto;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.mapper.UserProfileMapper;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -30,11 +33,15 @@ public class UserServiceImpl implements UserService {
 
     private static final int SEARCH_RESULT_LIMIT = 7;
 
+    private static final long MAX_PROFILE_IMAGE_BYTES = 5L * 1024 * 1024; // 5MB
+    private static final java.util.Set<String> ALLOWED_IMAGE_EXTENSIONS = java.util.Set.of("jpg", "jpeg", "png");
+
     private final UserRepository userRepository;
     private final UserProfileMapper userProfileMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenService refreshTokenService;
+    private final FileStorageService fileStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -104,6 +111,36 @@ public class UserServiceImpl implements UserService {
 
         // 탈퇴 후에도 남아있는 Refresh Token으로 AUTH-03 재발급이 이어지는 걸 막는다(AUTH-04 로그아웃과 동일 로직).
         refreshTokenService.delete(String.valueOf(userId));
+    }
+
+    @Override
+    @Transactional
+    public ResponseProfileImageDto changeProfileImage(Long userId, MultipartFile file) {
+        if (file.getSize() > MAX_PROFILE_IMAGE_BYTES) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_TOO_LARGE);
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = (originalFilename != null && originalFilename.contains("."))
+                ? originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase()
+                : "";
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(ext)) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        // 기존 사진 삭제 (없으면 스킵)
+        if (user.getProfileImageUrl() != null) {
+            fileStorageService.delete(user.getProfileImageUrl());
+        }
+
+        // 새 사진 업로드 후 URL 갱신 (더티 체킹 — save() 불필요)
+        String newUrl = fileStorageService.upload(file, "profile-images");
+        user.updateProfileImage(newUrl);
+
+        return new ResponseProfileImageDto(newUrl);
     }
 
     @Override

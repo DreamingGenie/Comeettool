@@ -4,7 +4,9 @@ import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
 import com.ssafy.backend.user.dto.ResponseMyProfileDto;
+import com.ssafy.backend.user.dto.ResponseProfileImageDto;
 import com.ssafy.backend.user.dto.ResponseUserSearchDto;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -24,4 +26,7 @@ public interface UserService {
 
     // AUTH-10: 닉네임/이메일에 검색어가 포함된 활성 계정 목록 조회 (최대 7건, 페이지네이션 없음, 요청한 본인은 결과에서 제외).
     List<ResponseUserSearchDto> findUserList(Long userId, String query);
+
+    // AUTH-11: 프로필 사진 업로드 후 새 이미지 URL 반환.
+    ResponseProfileImageDto changeProfileImage(Long userId, MultipartFile file);
 }

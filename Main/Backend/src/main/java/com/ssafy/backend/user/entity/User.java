@@ -116,6 +116,11 @@ public class User {
         this.password = encodedPassword;
     }
 
+    // AUTH-11 프로필 사진 변경 — 더티 체킹으로 자동 UPDATE.
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
     // AUTH-08 회원 탈퇴 — soft delete. 실제 row는 삭제하지 않는다.
     public void withdraw() {
         this.isDeleted = true;
