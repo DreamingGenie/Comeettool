@@ -1,7 +1,8 @@
 package com.ssafy.backend.space.repository;
 
-import com.ssafy.backend.space.entity.Member;
-import com.ssafy.backend.space.entity.MemberAuthority;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.user.entity.User;
 import org.junit.jupiter.api.DisplayName;

@@ -1,4 +1,4 @@
-package com.ssafy.backend.space.entity;
+package com.ssafy.backend.member.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
