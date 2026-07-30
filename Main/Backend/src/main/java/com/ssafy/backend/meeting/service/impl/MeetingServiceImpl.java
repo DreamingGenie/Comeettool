@@ -24,6 +24,7 @@ import com.ssafy.backend.meeting.service.MeetingService;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.repository.TeamRepository;
 
@@ -63,6 +64,9 @@ public class MeetingServiceImpl implements MeetingService {
 
         Member hostMember = memberRepository.findByTeamIdAndUserId(spaceId, requesterUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+        if (hostMember.getAuthority() == MemberAuthority.GUEST) {
+            throw new CustomException(ErrorCode.MEETING_CREATE_FORBIDDEN);
+        }
 
         long activeMeetingRoomCount =
                 meetingRoomRepository.countByTeamIdAndIsDeletedFalse(spaceId);

@@ -223,6 +223,30 @@ class MeetingServiceImplTest {
     }
 
     @Test
+    @DisplayName("게스트는 회의를 생성할 수 없다")
+    void addMeeting_rejectsGuestRequester() {
+        Member guestMember = createMemberWithAuthority(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                MemberAuthority.GUEST,
+                null
+        );
+        RequestCreateMeetingDto createRequest = new RequestCreateMeetingDto("데일리 미팅");
+        given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                .willReturn(Optional.of(createTeam()));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(guestMember));
+
+        assertErrorCode(
+                () -> meetingService.addMeeting(CURRENT_HOST_USER_ID, TEAM_ID, createRequest),
+                ErrorCode.MEETING_CREATE_FORBIDDEN
+        );
+        verifyNoInteractions(meetingRoomRepository, participantRepository, meetingMapper);
+        verify(memberRepository, never()).findTeamRoleNameByMemberId(any(Long.class));
+    }
+
+    @Test
     @DisplayName("활성 회의가 3개이면 MEETING_ROOM_LIMIT_EXCEEDED 예외가 발생한다")
     void addMeeting_rejectsWhenActiveMeetingRoomLimitIsExceeded() {
         Member hostMember = createMemberWithId(
@@ -512,10 +536,26 @@ class MeetingServiceImplTest {
             Long teamId,
             Long teamRoleId
     ) {
+        return createMemberWithAuthority(
+                memberId,
+                userId,
+                teamId,
+                MemberAuthority.MEMBER,
+                teamRoleId
+        );
+    }
+
+    private Member createMemberWithAuthority(
+            Long memberId,
+            Long userId,
+            Long teamId,
+            MemberAuthority authority,
+            Long teamRoleId
+    ) {
         Member member = Member.builder()
                 .userId(userId)
                 .teamId(teamId)
-                .authority(MemberAuthority.MEMBER)
+                .authority(authority)
                 .teamRoleId(teamRoleId)
                 .nickname("참여자")
                 .build();

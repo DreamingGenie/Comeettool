@@ -137,6 +137,20 @@ class MeetingControllerTest {
     }
 
     @Test
+    @DisplayName("게스트가 회의를 생성하면 403을 반환한다")
+    void addMeeting_returns403WhenRequesterIsGuest() throws Exception {
+        RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
+        given(meetingService.addMeeting(eq(1L), eq(SPACE_ID), any(RequestCreateMeetingDto.class)))
+                .willThrow(new CustomException(ErrorCode.MEETING_CREATE_FORBIDDEN));
+
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/meetings", SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_CREATE_FORBIDDEN"));
+    }
+
+    @Test
     @DisplayName("활성 회의가 3개이면 409를 반환한다")
     void addMeeting_returns409WhenActiveMeetingRoomLimitIsExceeded() throws Exception {
         RequestCreateMeetingDto request = new RequestCreateMeetingDto("데일리 미팅");
