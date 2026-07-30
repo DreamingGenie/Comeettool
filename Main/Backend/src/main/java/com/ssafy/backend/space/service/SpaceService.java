@@ -20,4 +20,7 @@ public interface SpaceService {
 
     // SPACE-07: 요청자가 스페이스에서 나간다(members 행 hard delete). Owner는 소유권 위임 후에만 가능(정책 SP-1).
     void removeMyMembership(Long userId, Long spaceId);
+
+    // SPACE-11: Owner가 스페이스를 삭제한다(teams + 하위 documents·meeting_rooms 전파 soft delete, 정책 SP-2).
+    void removeSpace(Long userId, Long spaceId);
 }
