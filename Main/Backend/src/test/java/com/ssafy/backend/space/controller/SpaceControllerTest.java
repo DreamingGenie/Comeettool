@@ -5,10 +5,12 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
+import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseSpaceMemberDto;
+import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.service.SpaceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -263,6 +266,63 @@ class SpaceControllerTest {
             mockMvc.perform(delete("/api/v1/spaces/{spaceId}", 99L))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-101 PATCH /api/v1/spaces/{spaceId}/owner")
+    class TransferOwner {
+
+        @Test
+        @DisplayName("위임에 성공하면 200과 변경 전·후 소유자를 반환한다")
+        void transferOwner_returns200() throws Exception {
+            RequestTransferOwnerDto request = new RequestTransferOwnerDto(2L);
+            given(spaceService.transferOwner(eq(7L), eq(10L), any(RequestTransferOwnerDto.class)))
+                    .willReturn(new ResponseTransferOwnerDto(10L, 7L, 2L));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/owner", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.previousOwnerId").value(7))
+                    .andExpect(jsonPath("$.data.newOwnerId").value(2));
+        }
+
+        @Test
+        @DisplayName("newOwnerUserId가 없으면 400 VALIDATION_FAILED를 반환한다")
+        void transferOwner_returns400WhenTargetMissing() throws Exception {
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/owner", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void transferOwner_returns403ForNonOwner() throws Exception {
+            given(spaceService.transferOwner(eq(7L), eq(10L), any(RequestTransferOwnerDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/owner", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestTransferOwnerDto(2L))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("대상이 GUEST면 400 SPACE_TRANSFER_TARGET_NOT_ELIGIBLE를 반환한다")
+        void transferOwner_returns400ForGuestTarget() throws Exception {
+            given(spaceService.transferOwner(eq(7L), eq(10L), any(RequestTransferOwnerDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_TRANSFER_TARGET_NOT_ELIGIBLE));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/owner", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestTransferOwnerDto(2L))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("SPACE_TRANSFER_TARGET_NOT_ELIGIBLE"));
         }
     }
 }

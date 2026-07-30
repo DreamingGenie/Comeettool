@@ -3,9 +3,11 @@ package com.ssafy.backend.space.service.impl;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
+import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.entity.Member;
 import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
@@ -136,6 +138,41 @@ public class SpaceServiceImpl implements SpaceService {
         team.softDelete(deletedAt);
         documentRepository.softDeleteByTeamId(spaceId, deletedAt);
         meetingRoomRepository.softDeleteByTeamId(spaceId, deletedAt);
+    }
+
+    @Override
+    @Transactional
+    public ResponseTransferOwnerDto transferOwner(Long requesterUserId, Long spaceId, RequestTransferOwnerDto request) {
+        Team team = loadActiveTeam(spaceId);
+
+        // 요청자가 현재 Owner인지 검증. (SPACE-11 삭제와 동일하게 Owner 전용 작업)
+        if (!isOwner(team, requesterUserId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        Long newOwnerUserId = request.newOwnerUserId();
+
+        // 대상이 같은 스페이스의 멤버인지 검증.
+        Member targetMember = memberRepository.findByTeamIdAndUserId(spaceId, newOwnerUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_MEMBER_NOT_FOUND));
+
+        // 이미 소유자(자기 자신에게 위임하는 경우 포함)면 거부.
+        if (targetMember.getAuthority() == MemberAuthority.OWNER) {
+            throw new CustomException(ErrorCode.SPACE_ALREADY_OWNER);
+        }
+        // 정책: GUEST에게는 위임 불가(MEMBER에게만 허용).
+        if (targetMember.getAuthority() == MemberAuthority.GUEST) {
+            throw new CustomException(ErrorCode.SPACE_TRANSFER_TARGET_NOT_ELIGIBLE);
+        }
+
+        // 기존 Owner 강등 + 대상 승격 + team_owner_id 갱신을 단일 트랜잭션으로(중간 실패 시 Owner 공백 방지).
+        Member currentOwnerMember = memberRepository.findByTeamIdAndUserId(spaceId, requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_MEMBER_NOT_FOUND));
+        currentOwnerMember.changeAuthority(MemberAuthority.MEMBER);
+        targetMember.changeAuthority(MemberAuthority.OWNER);
+        team.changeOwner(newOwnerUserId);
+
+        return new ResponseTransferOwnerDto(spaceId, requesterUserId, newOwnerUserId);
     }
 
     // SPACE-05/07/11 공통: 삭제되지 않은 스페이스 조회(없으면 404).

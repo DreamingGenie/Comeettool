@@ -3,9 +3,11 @@ package com.ssafy.backend.space.service.impl;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
+import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.entity.Member;
 import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
@@ -370,6 +372,112 @@ class SpaceServiceImplTest {
             assertThat(team.isDeleted()).isFalse();
             verify(documentRepository, never()).softDeleteByTeamId(any(), any());
             verify(meetingRoomRepository, never()).softDeleteByTeamId(any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-101 소유권 위임")
+    class TransferOwner {
+
+        private static final Long NEW_OWNER_ID = 2L;
+
+        private Member memberWithAuthority(Long userId, MemberAuthority authority) {
+            return Member.builder()
+                    .userId(userId).teamId(TEAM_ID).authority(authority).nickname("m").build();
+        }
+
+        @Test
+        @DisplayName("소유자가 멤버에게 위임하면 team_owner_id·권한이 갱신된다")
+        void transferOwner_promotesTargetAndDemotesOwner() {
+            // given — 요청자(USER_ID)가 현재 Owner, 대상(NEW_OWNER_ID)은 일반 멤버.
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            Member target = memberWithAuthority(NEW_OWNER_ID, MemberAuthority.MEMBER);
+            Member currentOwner = memberWithAuthority(USER_ID, MemberAuthority.OWNER);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.of(target));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(currentOwner));
+
+            // when
+            ResponseTransferOwnerDto response =
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID));
+
+            // then
+            assertThat(team.getOwnerId()).isEqualTo(NEW_OWNER_ID);
+            assertThat(target.getAuthority()).isEqualTo(MemberAuthority.OWNER);
+            assertThat(currentOwner.getAuthority()).isEqualTo(MemberAuthority.MEMBER);
+            assertThat(response.spaceId()).isEqualTo(TEAM_ID);
+            assertThat(response.previousOwnerId()).isEqualTo(USER_ID);
+            assertThat(response.newOwnerId()).isEqualTo(NEW_OWNER_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
+        void transferOwner_throwsNotFoundWhenAbsent() {
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생한다")
+        void transferOwner_throwsForNonOwner() {
+            Team team = teamWithId(TEAM_ID, 99L);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        @Test
+        @DisplayName("대상이 스페이스 멤버가 아니면 SPACE_MEMBER_NOT_FOUND 예외가 발생한다")
+        void transferOwner_throwsWhenTargetNotMember() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_MEMBER_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("대상이 이미 소유자(자기 자신 포함)면 SPACE_ALREADY_OWNER 예외가 발생한다")
+        void transferOwner_throwsWhenTargetAlreadyOwner() {
+            // given — 요청자 자신을 대상으로 지정(현재 Owner).
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            Member ownerSelf = memberWithAuthority(USER_ID, MemberAuthority.OWNER);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(ownerSelf));
+
+            assertThatThrownBy(() ->
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(USER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ALREADY_OWNER);
+        }
+
+        @Test
+        @DisplayName("대상이 GUEST면 SPACE_TRANSFER_TARGET_NOT_ELIGIBLE 예외가 발생한다")
+        void transferOwner_throwsWhenTargetIsGuest() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            Member guest = memberWithAuthority(NEW_OWNER_ID, MemberAuthority.GUEST);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.of(guest));
+
+            assertThatThrownBy(() ->
+                    spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_TRANSFER_TARGET_NOT_ELIGIBLE);
         }
     }
 }
