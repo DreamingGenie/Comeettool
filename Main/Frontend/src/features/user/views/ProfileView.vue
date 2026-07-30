@@ -39,10 +39,22 @@
             />
             <img v-else class="side-icon" src="/assets/icons/camera.svg" alt="" />
           </div>
+          <input
+            ref="profileImageInput"
+            class="profile-image-input"
+            type="file"
+            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+            @change="onProfileImageChange"
+          />
           <b>프로필 사진</b>
           <small>권장 크기 400 × 400px<br />JPG, PNG · 최대 5MB</small>
-          <button type="button" class="upload-photo" @click="notify('사진 업로드 기능은 API 연결 후 제공됩니다.')">
-            사진 업로드
+          <button
+            type="button"
+            class="upload-photo"
+            :disabled="uploadingProfileImage"
+            @click="profileImageInput?.click()"
+          >
+            {{ uploadingProfileImage ? '업로드 중...' : '사진 업로드' }}
           </button>
           <p>✓ 얼굴이 잘 보이는 사진을 권장해요.</p>
         </aside>
@@ -153,7 +165,11 @@ const { userState, reloadUser } = useUserPage()
 const { notify } = useToast()
 const nicknameMaxLength = 20
 const bioMaxLength = 255
+const maxProfileImageBytes = 5 * 1024 * 1024
+const allowedProfileImageTypes = new Set(['image/jpeg', 'image/png'])
 const saving = ref(false)
+const uploadingProfileImage = ref(false)
+const profileImageInput = ref(null)
 const profileImageFailed = ref(false)
 const form = reactive({
   nickname: '',
@@ -213,6 +229,34 @@ async function save() {
   }
 }
 
+async function onProfileImageChange(event) {
+  const [file] = event.target.files || []
+  if (!file) return
+
+  if (!allowedProfileImageTypes.has(file.type)) {
+    notify('JPG 또는 PNG 파일만 업로드할 수 있습니다.')
+    event.target.value = ''
+    return
+  }
+
+  if (file.size > maxProfileImageBytes) {
+    notify('프로필 사진은 최대 5MB까지 업로드할 수 있습니다.')
+    event.target.value = ''
+    return
+  }
+
+  uploadingProfileImage.value = true
+  try {
+    await userStore.updateProfileImage(file)
+    notify('프로필 사진을 변경했습니다.')
+  } catch (error) {
+    notify(error?.message || '프로필 사진을 변경하지 못했습니다.')
+  } finally {
+    uploadingProfileImage.value = false
+    event.target.value = ''
+  }
+}
+
 function onPhoneInput(event) {
   const digits = event.target.value.replace(/\D/g, '').slice(0, 11)
   let formatted = digits
@@ -242,6 +286,10 @@ function onJobFamilyChange() {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 5px 14px rgba(35, 50, 92, 0.16);
+}
+
+.profile-image-input {
+  display: none;
 }
 
 .photo-circle.has-photo {

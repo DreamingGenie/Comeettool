@@ -12,6 +12,14 @@ export const userMockApi = {
     Object.assign(userMockDatabase.profile, data)
     return mockResponse(userMockDatabase.profile)
   },
+  updateProfileImage: file => {
+    const profileImage =
+      typeof URL !== 'undefined' && file
+        ? URL.createObjectURL(file)
+        : userMockDatabase.profile.profileImage
+    userMockDatabase.profile.profileImage = profileImage
+    return mockResponse({ profileImage })
+  },
   changePassword: () =>
     mockResponse({
       tokenType: 'Bearer',

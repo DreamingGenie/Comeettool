@@ -61,6 +61,15 @@ export const userStore = {
     state.profile = normalizeProfile(profile)
     return state.profile
   },
+  async updateProfileImage(file) {
+    const result = await dataSource.user.updateProfileImage(file)
+    const profileImage = result?.profileImage || ''
+    state.profile = normalizeProfile({
+      ...state.profile,
+      profileImage
+    })
+    return state.profile
+  },
   async changePassword(data) {
     const result = await dataSource.user.changePassword(data)
     authSession.updateTokens(result)
