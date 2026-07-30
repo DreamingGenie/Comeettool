@@ -25,9 +25,9 @@
           <input
             id="invite-email-input"
             v-model.trim="email"
-            type="email"
-            placeholder="email@example.com"
-            autocomplete="email"
+            type="search"
+            placeholder="이름 또는 이메일을 입력하세요"
+            autocomplete="off"
             required
             @focus="scheduleSearch"
             @input="scheduleSearch"
