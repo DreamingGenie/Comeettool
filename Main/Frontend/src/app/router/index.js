@@ -11,6 +11,8 @@ const HomeView = () => import('../../features/board/views/HomeView.vue')
 const TeamSpaceView = () => import('../../features/board/views/TeamSpaceView.vue')
 const MembersView = () => import('../../features/board/views/MembersView.vue')
 const DocumentsView = () => import('../../features/board/views/DocumentsView.vue')
+const DocumentListView = () => import('../../features/document/views/DocumentListView.vue')
+const DocumentEditorView = () => import('../../features/document/views/DocumentEditorView.vue')
 const TeamSettingsView = () =>
   import('../../features/board/views/TeamSettingsView.vue')
 const MeetingView = () => import('../../features/board/views/MeetingView.vue')
@@ -70,7 +72,18 @@ const routes = [
     component: MembersView,
     meta: { requiresAuth: true }
   },
-  archiveRoute('documents', 'team-documents'),
+  {
+    path: '/teams/:teamId/documents',
+    name: 'team-documents',
+    component: DocumentListView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/teams/:teamId/documents/:documentId',
+    name: 'team-document-editor',
+    component: DocumentEditorView,
+    meta: { requiresAuth: true }
+  },
   archiveRoute('minutes', 'team-minutes'),
   archiveRoute('summary', 'team-summary'),
   archiveRoute('feedback', 'team-feedback'),

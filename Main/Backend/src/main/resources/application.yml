@@ -52,6 +52,11 @@ aws:
     bucket: ${AWS_S3_BUCKET:}
     region: ${AWS_S3_REGION:ap-northeast-2}
 
+app:
+  cors:
+    # 로컬/LAN 개발 기본값. 배포 환경에서는 실제 프론트 Origin만 환경변수로 지정한다.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
+
 ---
 # ===== local (개인 로컬 개발) =====
 spring:

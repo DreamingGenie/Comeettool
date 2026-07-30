@@ -30,11 +30,48 @@ const pool = new Pool({
     max: 10,
 })
 
-function createEmptyYjsState() {
+function createEmptyYjsState(title = '새 문서') {
     const document = new Y.Doc()
 
     try {
+        document.getText('title').insert(0, title)
         return Buffer.from(Y.encodeStateAsUpdate(document))
+    } finally {
+        document.destroy()
+    }
+}
+
+function ensureTitleInYjsState(state, fallbackTitle) {
+    const document = new Y.Doc()
+
+    try {
+        Y.applyUpdate(document, new Uint8Array(state))
+        const title = document.getText('title')
+
+        if (title.length > 0 || !fallbackTitle) {
+            return {
+                state: Buffer.from(state),
+                migrated: false,
+            }
+        }
+
+        title.insert(0, fallbackTitle)
+        return {
+            state: Buffer.from(Y.encodeStateAsUpdate(document)),
+            migrated: true,
+        }
+    } finally {
+        document.destroy()
+    }
+}
+
+function readTitleFromYjsState(state) {
+    const document = new Y.Doc()
+
+    try {
+        Y.applyUpdate(document, new Uint8Array(state))
+        return document.getText('title').toString().trim().slice(0, 1000)
+            || '새 문서'
     } finally {
         document.destroy()
     }
@@ -103,7 +140,8 @@ const hocuspocus = new Hocuspocus({
             fetch: async ({documentName}) => {
                 const {documentId} = parseDocumentName(documentName)
                 const result = await pool.query(
-                    `SELECT s.yjs_state
+                    `SELECT s.yjs_state,
+                            d.document_title
                      FROM documents_state s
                               JOIN documents d ON d.document_id = s.document_id
                      WHERE s.document_id = $1
@@ -115,11 +153,34 @@ const hocuspocus = new Hocuspocus({
                     throw new Error('존재하지 않거나 삭제된 문서입니다.')
                 }
 
-                return result.rows[0].yjs_state
+                const loaded = ensureTitleInYjsState(
+                    result.rows[0].yjs_state,
+                    result.rows[0].document_title,
+                )
+
+                if (loaded.migrated) {
+                    await pool.query(
+                        `UPDATE documents_state
+                         SET yjs_state   = $2,
+                             binary_size = $3,
+                             state_hash  = $4,
+                             updated_at  = CURRENT_TIMESTAMP
+                         WHERE document_id = $1`,
+                        [
+                            documentId,
+                            loaded.state,
+                            loaded.state.byteLength,
+                            hashState(loaded.state),
+                        ],
+                    )
+                }
+
+                return loaded.state
             },
             store: async ({documentName, state}) => {
                 const {documentId} = parseDocumentName(documentName)
                 const binary = Buffer.from(state)
+                const title = readTitleFromYjsState(binary)
                 const result = await pool.query(
                     `UPDATE documents_state s
                      SET yjs_state          = $2,
@@ -140,9 +201,10 @@ const hocuspocus = new Hocuspocus({
 
                 await pool.query(
                     `UPDATE documents
-                     SET updated_at = CURRENT_TIMESTAMP
+                     SET document_title = $2,
+                         updated_at     = CURRENT_TIMESTAMP
                      WHERE document_id = $1`,
-                    [documentId],
+                    [documentId, title],
                 )
             },
         }),

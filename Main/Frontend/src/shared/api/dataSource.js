@@ -2,6 +2,8 @@ import { authApi } from '../../features/auth/api'
 import { authMockApi } from '../../features/auth/mock/authMockApi'
 import { boardApi } from '../../features/board/api'
 import { boardMockApi } from '../../features/board/mock/boardMockApi'
+import { documentApi } from '../../features/document/api'
+import { documentMockApi } from '../../features/document/mock/documentMockApi'
 import { userApi } from '../../features/user/api'
 import { userMockApi } from '../../features/user/mock/userMockApi'
 
@@ -15,6 +17,7 @@ export const useMockApi = globalMockMode
 export const mockMode = {
   auth: getMockMode(import.meta.env.VITE_USE_MOCK_AUTH_API),
   board: getMockMode(import.meta.env.VITE_USE_MOCK_BOARD_API),
+  document: getMockMode(import.meta.env.VITE_USE_MOCK_DOCUMENT_API),
   passwordReset: getMockMode(
     import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API
   ),
@@ -27,6 +30,7 @@ export const mockMode = {
 const authSource = mockMode.auth ? authMockApi : authApi
 const boardSource = mockMode.board ? boardMockApi : boardApi
 const spaceSource = mockMode.space ? boardMockApi : boardApi
+const documentSource = mockMode.document ? documentMockApi : documentApi
 const userSource = mockMode.user ? userMockApi : userApi
 
 export const dataSource = {
@@ -44,6 +48,7 @@ export const dataSource = {
     createWorkspace: spaceSource.createWorkspace,
     leaveWorkspace: spaceSource.leaveWorkspace
   },
+  document: documentSource,
   user: {
     ...userSource,
     searchUsers: mockMode.userSearch

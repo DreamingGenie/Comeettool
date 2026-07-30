@@ -72,11 +72,13 @@ public class DocumentController {
     }
 
     @DeleteMapping("/{documentId}")
-    public ResponseEntity<Void> deleteDocument(
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(
             @PathVariable UUID documentId,
             @AuthenticationPrincipal String userId
     ) {
         documentService.deleteDocument(documentId, userId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(
+                ApiResponse.success("문서가 삭제되었습니다.", null)
+        );
     }
 }
