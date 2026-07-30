@@ -28,9 +28,6 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
-import com.ssafy.backend.space.entity.Member;
-import com.ssafy.backend.space.entity.MemberAuthority;
-import com.ssafy.backend.space.repository.MemberRepository;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 
