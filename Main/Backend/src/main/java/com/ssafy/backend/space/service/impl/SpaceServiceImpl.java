@@ -108,15 +108,20 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional
     public void removeMyMembership(Long userId, Long spaceId) {
-        Team team = loadActiveTeam(spaceId);
+        Team team = loadActiveTeamForUpdate(spaceId);
 
         // 요청자의 멤버 행을 조회하며 멤버 여부를 검사한다.
         Member member = memberRepository.findByTeamIdAndUserId(spaceId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
 
-        // 정책 SP-1: 소유자는 소유권 위임 또는 스페이스 삭제(SPACE-11) 후에만 퇴장할 수 있다.
+        // 정책 SP-1: 소유자는 바로 나갈 수 없다. 남은 멤버 수로 다음 행동을 분기해 안내한다.
         if (isOwner(team, userId)) {
-            throw new CustomException(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
+            if (memberRepository.countByTeamId(spaceId) <= 1) {
+                // 혼자뿐인 소유자 → 나가기 대신 스페이스 삭제(SPACE-11)로 유도.
+                throw new CustomException(ErrorCode.SPACE_OWNER_LAST_MEMBER);
+            }
+            // 다른 멤버가 있는 소유자 → 소유권 위임(SPACE-101) 후 나가기로 유도.
+            throw new CustomException(ErrorCode.SPACE_OWNER_MUST_TRANSFER);
         }
 
         memberRepository.delete(member);
@@ -125,7 +130,7 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional
     public void removeSpace(Long userId, Long spaceId) {
-        Team team = loadActiveTeam(spaceId);
+        Team team = loadActiveTeamForUpdate(spaceId);
 
         // 정책: 스페이스 삭제는 소유자만 가능. 비-Owner는 거부.
         if (!isOwner(team, userId)) {
@@ -143,7 +148,7 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional
     public ResponseTransferOwnerDto transferOwner(Long requesterUserId, Long spaceId, RequestTransferOwnerDto request) {
-        Team team = loadActiveTeam(spaceId);
+        Team team = loadActiveTeamForUpdate(spaceId);
 
         // 요청자가 현재 Owner인지 검증. (SPACE-11 삭제와 동일하게 Owner 전용 작업)
         if (!isOwner(team, requesterUserId)) {
@@ -175,9 +180,15 @@ public class SpaceServiceImpl implements SpaceService {
         return new ResponseTransferOwnerDto(spaceId, requesterUserId, newOwnerUserId);
     }
 
-    // SPACE-05/07/11 공통: 삭제되지 않은 스페이스 조회(없으면 404).
+    // SPACE-05 등 읽기 전용: 삭제되지 않은 스페이스 조회(잠금 없음, 없으면 404).
     private Team loadActiveTeam(Long spaceId) {
         return teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+    }
+
+    // SPACE-07/11/101 공통: 소유자 상태 변경 작업용 — 비관적 쓰기 잠금으로 조회해 동시 요청을 직렬화(없으면 404).
+    private Team loadActiveTeamForUpdate(Long spaceId) {
+        return teamRepository.findActiveByIdForUpdate(spaceId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
     }
 

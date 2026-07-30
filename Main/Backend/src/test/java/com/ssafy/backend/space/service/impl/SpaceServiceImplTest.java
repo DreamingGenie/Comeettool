@@ -271,7 +271,7 @@ class SpaceServiceImplTest {
             // given — owner는 다른 사용자(99L), 요청자는 일반 멤버.
             Team team = teamWithId(TEAM_ID, 99L);
             Member member = memberOf(TEAM_ID, USER_ID);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(member));
 
             // when
@@ -284,7 +284,7 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
         void removeMyMembership_throwsNotFoundWhenAbsent() {
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
@@ -297,7 +297,7 @@ class SpaceServiceImplTest {
         @DisplayName("멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 삭제하지 않는다")
         void removeMyMembership_throwsAccessDeniedForNonMember() {
             Team team = teamWithId(TEAM_ID, 99L);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
@@ -308,19 +308,54 @@ class SpaceServiceImplTest {
         }
 
         @Test
-        @DisplayName("요청자가 소유자면 SPACE_OWNER_CANNOT_LEAVE 예외가 발생하고 삭제하지 않는다(정책 SP-1)")
-        void removeMyMembership_throwsWhenOwner() {
-            // given — 요청자가 team_owner_id.
+        @DisplayName("소유자가 혼자면 SPACE_OWNER_LAST_MEMBER로 삭제를 유도한다(정책 SP-1)")
+        void removeMyMembership_throwsLastMemberWhenSoloOwner() {
+            // given — 요청자가 team_owner_id이고 멤버가 자신뿐(count=1).
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member owner = memberOf(TEAM_ID, USER_ID);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(owner));
+            given(memberRepository.countByTeamId(TEAM_ID)).willReturn(1L);
 
             assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
-                    .isEqualTo(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
+                    .isEqualTo(ErrorCode.SPACE_OWNER_LAST_MEMBER);
             verify(memberRepository, never()).delete(any(Member.class));
+        }
+
+        @Test
+        @DisplayName("소유자에게 다른 멤버가 있으면 SPACE_OWNER_MUST_TRANSFER로 위임을 유도한다(정책 SP-1)")
+        void removeMyMembership_throwsMustTransferWhenOwnerHasOtherMembers() {
+            // given — 요청자가 team_owner_id이고 멤버가 2명 이상(count=2).
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            Member owner = memberOf(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(owner));
+            given(memberRepository.countByTeamId(TEAM_ID)).willReturn(2L);
+
+            assertThatThrownBy(() -> spaceService.removeMyMembership(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_MUST_TRANSFER);
+            verify(memberRepository, never()).delete(any(Member.class));
+        }
+
+        @Test
+        @DisplayName("GUEST도 소유자가 아니면 정상적으로 나갈 수 있다")
+        void removeMyMembership_allowsGuestToLeave() {
+            // given — 요청자는 GUEST(비-Owner).
+            Team team = teamWithId(TEAM_ID, 99L);
+            Member guest = Member.builder()
+                    .userId(USER_ID).teamId(TEAM_ID).authority(MemberAuthority.GUEST).nickname("g").build();
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(guest));
+
+            // when
+            spaceService.removeMyMembership(USER_ID, TEAM_ID);
+
+            // then
+            verify(memberRepository).delete(guest);
         }
     }
 
@@ -333,7 +368,7 @@ class SpaceServiceImplTest {
         void removeSpace_softDeletesTeamAndCascades() {
             // given — 요청자가 team_owner_id.
             Team team = teamWithId(TEAM_ID, USER_ID);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
 
             // when
             spaceService.removeSpace(USER_ID, TEAM_ID);
@@ -348,7 +383,7 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
         void removeSpace_throwsNotFoundWhenAbsent() {
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> spaceService.removeSpace(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
@@ -363,7 +398,7 @@ class SpaceServiceImplTest {
         void removeSpace_throwsForNonOwner() {
             // given — owner는 다른 사용자(99L).
             Team team = teamWithId(TEAM_ID, 99L);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
 
             assertThatThrownBy(() -> spaceService.removeSpace(USER_ID, TEAM_ID))
                     .isInstanceOf(CustomException.class)
@@ -393,7 +428,7 @@ class SpaceServiceImplTest {
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member target = memberWithAuthority(NEW_OWNER_ID, MemberAuthority.MEMBER);
             Member currentOwner = memberWithAuthority(USER_ID, MemberAuthority.OWNER);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.of(target));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(currentOwner));
 
@@ -413,7 +448,7 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
         void transferOwner_throwsNotFoundWhenAbsent() {
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() ->
                     spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
@@ -426,7 +461,7 @@ class SpaceServiceImplTest {
         @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생한다")
         void transferOwner_throwsForNonOwner() {
             Team team = teamWithId(TEAM_ID, 99L);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
 
             assertThatThrownBy(() ->
                     spaceService.transferOwner(USER_ID, TEAM_ID, new RequestTransferOwnerDto(NEW_OWNER_ID)))
@@ -439,7 +474,7 @@ class SpaceServiceImplTest {
         @DisplayName("대상이 스페이스 멤버가 아니면 SPACE_MEMBER_NOT_FOUND 예외가 발생한다")
         void transferOwner_throwsWhenTargetNotMember() {
             Team team = teamWithId(TEAM_ID, USER_ID);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() ->
@@ -455,7 +490,7 @@ class SpaceServiceImplTest {
             // given — 요청자 자신을 대상으로 지정(현재 Owner).
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member ownerSelf = memberWithAuthority(USER_ID, MemberAuthority.OWNER);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(Optional.of(ownerSelf));
 
             assertThatThrownBy(() ->
@@ -470,7 +505,7 @@ class SpaceServiceImplTest {
         void transferOwner_throwsWhenTargetIsGuest() {
             Team team = teamWithId(TEAM_ID, USER_ID);
             Member guest = memberWithAuthority(NEW_OWNER_ID, MemberAuthority.GUEST);
-            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
             given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEW_OWNER_ID)).willReturn(Optional.of(guest));
 
             assertThatThrownBy(() ->

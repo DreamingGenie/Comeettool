@@ -199,14 +199,25 @@ class SpaceControllerTest {
         }
 
         @Test
-        @DisplayName("소유자가 나가기를 시도하면 409 SPACE_OWNER_CANNOT_LEAVE를 반환한다")
-        void removeMyMembership_returns409ForOwner() throws Exception {
-            doThrow(new CustomException(ErrorCode.SPACE_OWNER_CANNOT_LEAVE))
+        @DisplayName("혼자인 소유자가 나가기를 시도하면 409 SPACE_OWNER_LAST_MEMBER를 반환한다")
+        void removeMyMembership_returns409ForSoloOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_LAST_MEMBER))
                     .when(spaceService).removeMyMembership(7L, 10L);
 
             mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/me", 10L))
                     .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_CANNOT_LEAVE"));
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_LAST_MEMBER"));
+        }
+
+        @Test
+        @DisplayName("다른 멤버가 있는 소유자가 나가기를 시도하면 409 SPACE_OWNER_MUST_TRANSFER를 반환한다")
+        void removeMyMembership_returns409ForOwnerWithMembers() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_MUST_TRANSFER))
+                    .when(spaceService).removeMyMembership(7L, 10L);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/me", 10L))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_MUST_TRANSFER"));
         }
 
         @Test

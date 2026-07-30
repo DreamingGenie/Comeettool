@@ -25,8 +25,10 @@ public enum ErrorCode {
 
     SPACE_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND", "스페이스를 찾을 수 없습니다."),
     SPACE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SPACE_ACCESS_DENIED", "해당 스페이스에 접근할 권한이 없습니다."),
-    SPACE_OWNER_CANNOT_LEAVE(HttpStatus.CONFLICT, "SPACE_OWNER_CANNOT_LEAVE",
-            "소유자는 스페이스를 나갈 수 없습니다. 소유권을 위임하거나 스페이스를 삭제해 주세요."),
+    SPACE_OWNER_LAST_MEMBER(HttpStatus.CONFLICT, "SPACE_OWNER_LAST_MEMBER",
+            "소유자가 혼자인 스페이스는 나갈 수 없습니다. 스페이스를 삭제해 주세요."),
+    SPACE_OWNER_MUST_TRANSFER(HttpStatus.CONFLICT, "SPACE_OWNER_MUST_TRANSFER",
+            "소유자는 나가기 전에 다른 멤버에게 소유권을 위임해야 합니다."),
     SPACE_OWNER_ONLY(HttpStatus.FORBIDDEN, "SPACE_OWNER_ONLY", "소유자만 수행할 수 있는 작업입니다."),
     SPACE_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_MEMBER_NOT_FOUND", "해당 스페이스의 멤버를 찾을 수 없습니다."),
     SPACE_ALREADY_OWNER(HttpStatus.CONFLICT, "SPACE_ALREADY_OWNER", "이미 스페이스 소유자입니다."),
