@@ -2,10 +2,12 @@ package com.ssafy.backend.meeting.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -15,25 +17,29 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
+import com.ssafy.backend.user.entity.User;
+import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
 
 /**
- * MEET-06 호스트 양도 서비스 단위 테스트.
- * 저장소는 Mock으로 분리하고 호스트·참여자·팀 검증과 hostId 변경 결과를 확인한다.
+ * MEET-06 호스트 양도 및 MEET-07 참여자 조회 서비스 단위 테스트.
+ * 저장소는 Mock으로 분리하고 호스트 양도, 조회 접근 권한, 현재 참여자 응답 조립을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MEET-06 호스트 양도 서비스 테스트")
+@DisplayName("회의 서비스 테스트")
 class MeetingServiceImplTest {
 
     private static final Long MEETING_ID = 100L;
@@ -51,6 +57,9 @@ class MeetingServiceImplTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -182,6 +191,109 @@ class MeetingServiceImplTest {
         );
     }
 
+    @Test
+    @DisplayName("초대된 사용자가 현재 입장 중인 참여자 목록을 조회한다")
+    void getParticipants_returnsCurrentParticipants() {
+        long requesterMemberId = 11L;
+        long attendeeMemberId = 20L;
+        long requesterParticipantId = 30L;
+        long attendeeParticipantId = 31L;
+
+        Member requesterMember =
+                createMemberWithId(requesterMemberId, CURRENT_HOST_USER_ID, TEAM_ID, "호스트");
+        Member attendeeMember =
+                createMemberWithId(attendeeMemberId, NEXT_HOST_USER_ID, TEAM_ID, "참여자");
+        Participant requesterParticipant =
+                createParticipantWithId(requesterParticipantId, requesterMemberId, "BE", true);
+        Participant attendeeParticipant =
+                createParticipantWithId(attendeeParticipantId, attendeeMemberId, "FE", true);
+        User requesterUser =
+                createUserWithId(CURRENT_HOST_USER_ID, "https://example.com/host.png");
+        User attendeeUser =
+                createUserWithId(NEXT_HOST_USER_ID, "https://example.com/attendee.png");
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(requesterMember));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                requesterMemberId
+        )).willReturn(Optional.of(requesterParticipant));
+        given(participantRepository
+                .findAllByMeetingRoomIdAndIsInMeetingTrueOrderByIdAsc(MEETING_ID))
+                .willReturn(List.of(requesterParticipant, attendeeParticipant));
+        given(memberRepository.findAllById(any()))
+                .willReturn(List.of(requesterMember, attendeeMember));
+        given(userRepository.findAllById(any()))
+                .willReturn(List.of(requesterUser, attendeeUser));
+
+        List<ResponseMeetingParticipantDto> response =
+                meetingService.getParticipants(CURRENT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).participantId()).isEqualTo(requesterParticipantId);
+        assertThat(response.get(0).nickname()).isEqualTo("호스트");
+        assertThat(response.get(0).participantRole()).isEqualTo("BE");
+        assertThat(response.get(0).isHost()).isTrue();
+        assertThat(response.get(0).isInMeeting()).isTrue();
+        assertThat(response.get(1).participantId()).isEqualTo(attendeeParticipantId);
+        assertThat(response.get(1).nickname()).isEqualTo("참여자");
+        assertThat(response.get(1).participantRole()).isEqualTo("FE");
+        assertThat(response.get(1).isHost()).isFalse();
+        assertThat(response.get(1).isInMeeting()).isTrue();
+    }
+
+    @Test
+    @DisplayName("삭제되지 않은 회의를 찾을 수 없으면 참여자 조회를 거부한다")
+    void getParticipants_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.getParticipants(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(participantRepository, memberRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("요청자가 회의의 상위 팀 멤버가 아니면 참여자 조회를 거부한다")
+    void getParticipants_rejectsRequesterOutsideTeam() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.getParticipants(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(participantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("팀 멤버라도 회의에 초대되지 않았으면 참여자 조회를 거부한다")
+    void getParticipants_rejectsUninvitedRequester() {
+        long requesterMemberId = 11L;
+        Member requesterMember =
+                createMemberWithId(requesterMemberId, CURRENT_HOST_USER_ID, TEAM_ID, "요청자");
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(requesterMember));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                requesterMemberId
+        )).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.getParticipants(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(userRepository);
+    }
+
     private void assertErrorCode(Runnable action, ErrorCode expectedErrorCode) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(CustomException.class)
@@ -213,5 +325,47 @@ class MeetingServiceImplTest {
                 .authority(MemberAuthority.MEMBER)
                 .nickname("참여자")
                 .build();
+    }
+
+    private Member createMemberWithId(
+            Long memberId,
+            Long userId,
+            Long teamId,
+            String nickname
+    ) {
+        Member member = Member.builder()
+                .userId(userId)
+                .teamId(teamId)
+                .authority(MemberAuthority.MEMBER)
+                .nickname(nickname)
+                .build();
+        ReflectionTestUtils.setField(member, "id", memberId);
+        return member;
+    }
+
+    private Participant createParticipantWithId(
+            Long participantId,
+            Long memberId,
+            String participantRole,
+            boolean isInMeeting
+    ) {
+        Participant participant = Participant.builder()
+                .meetingRoomId(MEETING_ID)
+                .memberId(memberId)
+                .participantRole(participantRole)
+                .isInMeeting(isInMeeting)
+                .build();
+        ReflectionTestUtils.setField(participant, "id", participantId);
+        return participant;
+    }
+
+    private User createUserWithId(Long userId, String profileImageUrl) {
+        User user = User.builder()
+                .email("user" + userId + "@example.com")
+                .password("encoded-password")
+                .build();
+        ReflectionTestUtils.setField(user, "id", userId);
+        ReflectionTestUtils.setField(user, "profileImageUrl", profileImageUrl);
+        return user;
     }
 }

@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,15 +29,16 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
- * MEET-06 호스트 양도 컨트롤러 테스트.
+ * MEET-06 호스트 양도 및 MEET-07 참여자 조회 컨트롤러 테스트.
  * 실제 DB·시큐리티 필터 없이 API 매핑, 인증 userId 전달, 입력 검증과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MEET-06 호스트 양도 API 테스트")
+@DisplayName("회의 API 테스트")
 class MeetingControllerTest {
 
     private static final String HOST_USER_ID = "1";
@@ -118,5 +120,48 @@ class MeetingControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("현재 회의 참여자 조회에 성공하면 참여자 기본 정보를 반환한다")
+    void getParticipants_returns200WithCurrentParticipants() throws Exception {
+        ResponseMeetingParticipantDto participant =
+                new ResponseMeetingParticipantDto(
+                        30L,
+                        20L,
+                        1L,
+                        "호스트",
+                        "https://example.com/host.png",
+                        "BE",
+                        true,
+                        true
+                );
+        given(meetingService.getParticipants(1L, MEETING_ID))
+                .willReturn(List.of(participant));
+
+        mockMvc.perform(get("/api/v1/meetings/{meetingId}/participants", MEETING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("회의 참여자 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data[0].participantId").value(30))
+                .andExpect(jsonPath("$.data[0].memberId").value(20))
+                .andExpect(jsonPath("$.data[0].userId").value(1))
+                .andExpect(jsonPath("$.data[0].nickname").value("호스트"))
+                .andExpect(jsonPath("$.data[0].profileImageUrl")
+                        .value("https://example.com/host.png"))
+                .andExpect(jsonPath("$.data[0].participantRole").value("BE"))
+                .andExpect(jsonPath("$.data[0].isHost").value(true))
+                .andExpect(jsonPath("$.data[0].isInMeeting").value(true));
+    }
+
+    @Test
+    @DisplayName("회의에 초대되지 않은 요청자의 참여자 조회는 403을 반환한다")
+    void getParticipants_returns403WhenAccessIsDenied() throws Exception {
+        given(meetingService.getParticipants(1L, MEETING_ID))
+                .willThrow(new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/v1/meetings/{meetingId}/participants", MEETING_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_ACCESS_DENIED"));
     }
 }
