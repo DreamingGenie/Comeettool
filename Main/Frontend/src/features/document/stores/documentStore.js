@@ -135,6 +135,16 @@ export const documentStore = {
       state.deletingDocumentId = ''
     }
   },
+  syncDocumentTitle(documentId, title) {
+    if (state.currentDocument?.documentId === documentId) {
+      state.currentDocument.title = title
+    }
+
+    const summary = state.documents.find(
+      document => document.documentId === documentId
+    )
+    if (summary) summary.title = title
+  },
   clearCurrentDocument() {
     state.currentDocument = null
     state.collaboration = null

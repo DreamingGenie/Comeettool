@@ -4,7 +4,9 @@ import com.ssafy.backend.global.jwt.JwtAccessDeniedHandler;
 import com.ssafy.backend.global.jwt.JwtAuthenticationEntryPoint;
 import com.ssafy.backend.global.jwt.JwtAuthenticationFilter;
 import com.ssafy.backend.global.jwt.JwtProperties;
+import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +24,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * 인증·인가 설정 (auth-jwt-contract).
- * stateless + JWT 필터, 공개 엔드포인트만 permitAll, 그 외 인증 필요.
+ * 인증·인가 설정 (auth-jwt-contract). stateless + JWT 필터, 공개 엔드포인트만 permitAll, 그 외 인증 필요.
  */
 @Configuration
 @EnableWebSecurity
@@ -45,6 +46,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+
+    @Value("${app.cors.allowed-origin-patterns}")
+    private String allowedOriginPatterns;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -70,7 +74,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOriginPatterns(
+                Arrays.stream(allowedOriginPatterns.split(","))
+                        .map(String::trim)
+                        .filter(origin -> !origin.isEmpty())
+                        .toList()
+        );
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

@@ -56,7 +56,17 @@
         <div class="editor-card-header">
           <div>
             <span class="editor-card-eyebrow">TIPTAP EDITOR</span>
-            <h2>{{ currentDocument.title }}</h2>
+            <input
+              class="document-title-input"
+              type="text"
+              :value="titleInputValue"
+              :readonly="!canEdit || !collaborationSynced"
+              maxlength="1000"
+              aria-label="문서 제목"
+              @input="updateDocumentTitle"
+              @blur="normalizeDocumentTitle"
+              @keydown.enter.prevent="$event.currentTarget.blur()"
+            />
           </div>
           <div class="editor-presence">
             <div
@@ -252,15 +262,28 @@ const collaborationPermission = ref('')
 const collaborationStatus = ref('idle')
 const collaborationSynced = ref(false)
 const collaborationError = ref('')
+const collaborativeTitle = ref('')
+const titleReady = ref(false)
 const participants = ref([])
 let collaborationProvider = null
 let collaborationDocument = null
+let collaborationTitle = null
+let titleObserver = null
 let connectionGeneration = 0
 let currentCollaboration = null
 
+function getDefaultCollaborationUrl() {
+  if (typeof window === 'undefined') {
+    return 'ws://127.0.0.1:3000/collaboration'
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/collaboration`
+}
+
 const collaborationUrl =
   import.meta.env.VITE_YJS_WEBSOCKET_URL ||
-  'ws://127.0.0.1:3000/collaboration'
+  getDefaultCollaborationUrl()
 
 const documentId = computed(() => String(route.params.documentId || ''))
 const { boardState, teamId, reloadBoard } = useBoardPage({
@@ -272,8 +295,13 @@ const currentDocument = computed(() =>
     ? documentState.currentDocument
     : null
 )
+const titleInputValue = computed(() =>
+  titleReady.value
+    ? collaborativeTitle.value
+    : currentDocument.value?.title || ''
+)
 const documentTitle = computed(
-  () => currentDocument.value?.title || '공유 문서'
+  () => titleInputValue.value.trim() || '새 문서'
 )
 const authority = computed(() =>
   String(boardState.team.role || '').toUpperCase()
@@ -402,10 +430,80 @@ function updateParticipants(states = []) {
   })
 }
 
+function syncTitleFromYjs() {
+  if (!collaborationTitle || !currentDocument.value) return
+
+  collaborativeTitle.value = collaborationTitle.toString()
+  titleReady.value = true
+  documentStore.syncDocumentTitle(
+    currentDocument.value.documentId,
+    collaborativeTitle.value
+  )
+}
+
+function replaceCollaborativeTitle(nextTitle) {
+  if (!collaborationTitle) return
+
+  const previousTitle = collaborationTitle.toString()
+  if (previousTitle === nextTitle) return
+
+  let prefixLength = 0
+  const sharedLength = Math.min(previousTitle.length, nextTitle.length)
+
+  while (
+    prefixLength < sharedLength &&
+    previousTitle[prefixLength] === nextTitle[prefixLength]
+  ) {
+    prefixLength += 1
+  }
+
+  let previousSuffix = previousTitle.length
+  let nextSuffix = nextTitle.length
+
+  while (
+    previousSuffix > prefixLength &&
+    nextSuffix > prefixLength &&
+    previousTitle[previousSuffix - 1] === nextTitle[nextSuffix - 1]
+  ) {
+    previousSuffix -= 1
+    nextSuffix -= 1
+  }
+
+  collaborationDocument.transact(() => {
+    const deleteLength = previousSuffix - prefixLength
+    if (deleteLength > 0) {
+      collaborationTitle.delete(prefixLength, deleteLength)
+    }
+
+    const insertedText = nextTitle.slice(prefixLength, nextSuffix)
+    if (insertedText) {
+      collaborationTitle.insert(prefixLength, insertedText)
+    }
+  }, 'document-title-input')
+}
+
+function updateDocumentTitle(event) {
+  if (!canEdit.value || !collaborationSynced.value) return
+  replaceCollaborativeTitle(event.currentTarget.value.slice(0, 1000))
+}
+
+function normalizeDocumentTitle() {
+  if (!canEdit.value || !collaborationSynced.value) return
+  replaceCollaborativeTitle(
+    collaborationTitle?.toString().trim().slice(0, 1000) || '새 문서'
+  )
+}
+
 function destroyEditor() {
   connectionGeneration += 1
   editor.value?.destroy()
   editor.value = null
+
+  if (collaborationTitle && titleObserver) {
+    collaborationTitle.unobserve(titleObserver)
+  }
+  collaborationTitle = null
+  titleObserver = null
 
   collaborationProvider?.destroy()
   collaborationProvider = null
@@ -418,6 +516,8 @@ function destroyEditor() {
   collaborationStatus.value = 'idle'
   collaborationSynced.value = false
   collaborationError.value = ''
+  collaborativeTitle.value = ''
+  titleReady.value = false
   participants.value = []
 }
 
@@ -455,6 +555,9 @@ async function createCollaborativeEditor(document, generation) {
   currentCollaboration = collaboration
   collaborationPermission.value = currentCollaboration.permission
   collaborationDocument = new Y.Doc()
+  collaborationTitle = collaborationDocument.getText('title')
+  titleObserver = syncTitleFromYjs
+  collaborationTitle.observe(titleObserver)
   collaborationStatus.value = 'connecting'
 
   collaborationProvider = new HocuspocusProvider({
@@ -472,6 +575,18 @@ async function createCollaborativeEditor(document, generation) {
       if (generation !== connectionGeneration) return
       collaborationSynced.value = state !== false
       collaborationError.value = ''
+
+      if (
+        collaborationSynced.value &&
+        collaborationTitle.length === 0
+      ) {
+        collaborationTitle.insert(
+          0,
+          document.title?.trim().slice(0, 1000) || '새 문서'
+        )
+      }
+
+      syncTitleFromYjs()
     },
     onAwarenessChange: ({ states }) => {
       if (generation !== connectionGeneration) return
@@ -681,9 +796,26 @@ onBeforeUnmount(() => {
   letter-spacing: 1.2px;
 }
 
-.editor-card-header h2 {
+.document-title-input {
+  display: block;
+  width: min(520px, 48vw);
   margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #273047;
+  font-family: inherit;
   font-size: 16px;
+  font-weight: 800;
+  outline: none;
+}
+
+.document-title-input:not([readonly]):focus {
+  box-shadow: 0 2px 0 var(--blue);
+}
+
+.document-title-input[readonly] {
+  cursor: default;
 }
 
 .editor-presence {
@@ -874,9 +1006,7 @@ onBeforeUnmount(() => {
 
 .editor-content {
   min-height: 440px;
-  background:
-    linear-gradient(#eef1f5 1px, transparent 1px) 0 53px / 100% 32px,
-    #fff;
+  background: #fff;
 }
 
 .editor-footer {
@@ -1038,6 +1168,10 @@ onBeforeUnmount(() => {
   .participant-chips {
     max-width: min(70vw, 520px);
     justify-content: flex-start;
+  }
+
+  .document-title-input {
+    width: min(75vw, 520px);
   }
 
   :deep(.document-prose) {
