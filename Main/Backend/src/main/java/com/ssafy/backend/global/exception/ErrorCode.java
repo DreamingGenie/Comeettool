@@ -43,7 +43,11 @@ public enum ErrorCode {
             "회의 참여자를 찾을 수 없습니다."),
     MEETING_HOST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "MEETING_HOST_ALREADY_ASSIGNED",
             "이미 해당 회의의 호스트입니다."),
-            
+    MEETING_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "MEETING_CREATE_FORBIDDEN",
+            "게스트는 회의를 생성할 수 없습니다."),
+    MEETING_ROOM_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "MEETING_ROOM_LIMIT_EXCEEDED",
+            "팀 스페이스에서 동시에 진행할 수 있는 회의는 최대 3개입니다."),
+
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "해당 문서에 접근할 권한이 없습니다."),
     DOCUMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_CREATE_FORBIDDEN", "문서를 생성할 권한이 없습니다."),

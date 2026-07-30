@@ -9,34 +9,99 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
+import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.meeting.service.MeetingService;
 import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.space.repository.TeamRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
  * 회의 도메인 서비스.
  * MEET-06 호스트 양도와 MEET-07 현재 참여자 조회를 처리한다.
+ * 회의 생성과 호스트 양도 비즈니스 로직.
  */
 @Service
 @RequiredArgsConstructor
 public class MeetingServiceImpl implements MeetingService {
 
+    private static final long MAX_ACTIVE_MEETING_ROOM_COUNT = 3L;
+    private static final int INITIAL_PARTICIPANT_COUNT = 1;
+
     private final MeetingRoomRepository meetingRoomRepository;
     private final ParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
+    private final MeetingMapper meetingMapper;
 
+    /**
+     * MEET-01: 회의 생성.
+     */
+    @Override
+    @Transactional
+    public ResponseCreateMeetingDto addMeeting(
+            Long requesterUserId,
+            Long spaceId,
+            RequestCreateMeetingDto request
+    ) {
+        teamRepository.findActiveByIdForUpdate(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        Member hostMember = memberRepository.findByTeamIdAndUserId(spaceId, requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+        if (hostMember.getAuthority() == MemberAuthority.GUEST) {
+            throw new CustomException(ErrorCode.MEETING_CREATE_FORBIDDEN);
+        }
+
+        long activeMeetingRoomCount =
+                meetingRoomRepository.countByTeamIdAndIsDeletedFalse(spaceId);
+        if (activeMeetingRoomCount >= MAX_ACTIVE_MEETING_ROOM_COUNT) {
+            throw new CustomException(ErrorCode.MEETING_ROOM_LIMIT_EXCEEDED);
+        }
+
+        MeetingRoom meetingRoom = MeetingRoom.builder()
+                .teamId(spaceId)
+                .hostId(requesterUserId)
+                .name(request.meetingRoomName())
+                .build();
+        MeetingRoom savedMeetingRoom = meetingRoomRepository.save(meetingRoom);
+
+        String participantRole = memberRepository
+                .findTeamRoleNameByMemberId(hostMember.getId())
+                .orElse(null);
+        Participant hostParticipant = Participant.builder()
+                .meetingRoomId(savedMeetingRoom.getId())
+                .memberId(hostMember.getId())
+                .participantRole(participantRole)
+                .isInMeeting(false)
+                .build();
+        participantRepository.save(hostParticipant);
+
+        return meetingMapper.toCreateResponse(
+                savedMeetingRoom,
+                requesterUserId,
+                INITIAL_PARTICIPANT_COUNT
+        );
+    }
+
+    /**
+     * MEET-06: 현재 호스트가 회의 참여자에게 호스트 권한을 양도한다.
+     */
     @Override
     @Transactional
     public ResponseTransferHostDto transferHost(
@@ -51,7 +116,7 @@ public class MeetingServiceImpl implements MeetingService {
             throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
         }
 
-        var nextHostParticipant = participantRepository
+        Participant nextHostParticipant = participantRepository
                 .findByIdAndMeetingRoomId(request.nextHostParticipantId(), meetingId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 

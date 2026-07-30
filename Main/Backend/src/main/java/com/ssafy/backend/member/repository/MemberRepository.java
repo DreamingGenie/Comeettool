@@ -1,14 +1,13 @@
 package com.ssafy.backend.member.repository;
 
-import com.ssafy.backend.member.entity.Member;
-import com.ssafy.backend.space.entity.Team;
+import java.util.List;
 import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
-import java.util.Optional;
+import com.ssafy.backend.member.entity.Member;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
@@ -23,6 +22,21 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     // SPACE-07: Owner 나가기 흐름 분기 — 스페이스의 현재 멤버 수(1이면 혼자, 2+면 위임 대상 존재).
     long countByTeamId(Long teamId);
+
+    /**
+     * MEET-01: 최초 참여자 등록 시점의 팀 역할명을 조회한다.
+     */
+    @Query(
+            value = """
+                    select team_role.role_name
+                    from members member_record
+                    left join team_roles team_role
+                      on team_role.team_role_id = member_record.team_role_id
+                    where member_record.member_id = :memberId
+                    """,
+            nativeQuery = true
+    )
+    Optional<String> findTeamRoleNameByMemberId(@Param("memberId") Long memberId);
 
     // SPACE-02: 여러 스페이스의 참여자 수를 한 번에 집계([teamId, count]).
     @Query("select m.teamId, count(m) from Member m where m.teamId in :teamIds group by m.teamId")
