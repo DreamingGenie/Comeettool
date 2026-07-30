@@ -20,6 +20,7 @@ const jwtIssuer = process.env.JWT_ISSUER || 'a707-api'
 const jwtYjsAudience = process.env.JWT_YJS_AUDIENCE || 'a707-yjs'
 const internalApiToken = process.env.YJS_INTERNAL_TOKEN
     || 'local-yjs-internal-token'
+const titleFragmentField = 'title-content'
 
 if (!databaseUrl) {
     throw new Error('DATABASE_URL 환경변수가 필요합니다.')
@@ -30,11 +31,40 @@ const pool = new Pool({
     max: 10,
 })
 
+function insertTitleIntoFragment(fragment, title) {
+    const paragraph = new Y.XmlElement('paragraph')
+    const text = new Y.XmlText()
+
+    text.insert(0, title)
+    paragraph.insert(0, [text])
+    fragment.insert(0, [paragraph])
+}
+
+function readXmlText(type) {
+    if (type instanceof Y.XmlText) {
+        return type.toString()
+    }
+
+    if (type instanceof Y.XmlFragment) {
+        return type.toArray().map(readXmlText).join(' ')
+    }
+
+    if (type instanceof Y.XmlElement) {
+        return type.toArray().map(readXmlText).join('')
+    }
+
+    return ''
+}
+
 function createEmptyYjsState(title = '새 문서') {
     const document = new Y.Doc()
 
     try {
         document.getText('title').insert(0, title)
+        insertTitleIntoFragment(
+            document.getXmlFragment(titleFragmentField),
+            title,
+        )
         return Buffer.from(Y.encodeStateAsUpdate(document))
     } finally {
         document.destroy()
@@ -46,16 +76,19 @@ function ensureTitleInYjsState(state, fallbackTitle) {
 
     try {
         Y.applyUpdate(document, new Uint8Array(state))
-        const title = document.getText('title')
+        const titleFragment = document.getXmlFragment(titleFragmentField)
 
-        if (title.length > 0 || !fallbackTitle) {
+        if (titleFragment.length > 0) {
             return {
                 state: Buffer.from(state),
                 migrated: false,
             }
         }
 
-        title.insert(0, fallbackTitle)
+        const legacyTitle = document.getText('title').toString().trim()
+        const title = legacyTitle || fallbackTitle?.trim() || '새 문서'
+        insertTitleIntoFragment(titleFragment, title.slice(0, 1000))
+
         return {
             state: Buffer.from(Y.encodeStateAsUpdate(document)),
             migrated: true,
@@ -70,7 +103,12 @@ function readTitleFromYjsState(state) {
 
     try {
         Y.applyUpdate(document, new Uint8Array(state))
-        return document.getText('title').toString().trim().slice(0, 1000)
+        const collaborativeTitle = readXmlText(
+            document.getXmlFragment(titleFragmentField),
+        ).trim()
+        const legacyTitle = document.getText('title').toString().trim()
+
+        return (collaborativeTitle || legacyTitle).slice(0, 1000)
             || '새 문서'
     } finally {
         document.destroy()
