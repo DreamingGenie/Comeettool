@@ -26,8 +26,18 @@
       </header>
       <div class="profile-settings-body">
         <aside class="photo-card">
-          <div class="photo-circle">
-            <img class="side-icon" src="/assets/icons/camera.svg" alt="" />
+          <div
+            class="photo-circle"
+            :class="{ 'has-photo': userState.profile?.profileImage && !profileImageFailed }"
+          >
+            <img
+              v-if="userState.profile?.profileImage && !profileImageFailed"
+              class="profile-photo-image"
+              :src="userState.profile.profileImage"
+              :alt="`${userState.profile.nickname || '사용자'} 프로필`"
+              @error="profileImageFailed = true"
+            />
+            <img v-else class="side-icon" src="/assets/icons/camera.svg" alt="" />
           </div>
           <b>프로필 사진</b>
           <small>권장 크기 400 × 400px<br />JPG, PNG · 최대 5MB</small>
@@ -144,6 +154,7 @@ const { notify } = useToast()
 const nicknameMaxLength = 20
 const bioMaxLength = 255
 const saving = ref(false)
+const profileImageFailed = ref(false)
 const form = reactive({
   nickname: '',
   phone: '',
@@ -167,7 +178,7 @@ const selectedColor = computed(
 )
 const avatarPreview = computed(
   () =>
-    form.nickname.trim().slice(0, 2) ||
+    form.nickname.trim().slice(0, 1) ||
     userState.profile?.avatarText ||
     '나'
 )
@@ -181,6 +192,13 @@ watch(
     if (!form.userColor && colors.length) form.userColor = colors[0].value
   },
   { immediate: true }
+)
+
+watch(
+  () => userState.profile?.profileImage,
+  () => {
+    profileImageFailed.value = false
+  }
 )
 
 async function save() {
@@ -215,3 +233,21 @@ function onJobFamilyChange() {
   }
 }
 </script>
+
+<style scoped>
+.profile-photo-image {
+  width: 100%;
+  height: 100%;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 5px 14px rgba(35, 50, 92, 0.16);
+}
+
+.photo-circle.has-photo {
+  padding: 4px;
+  border-color: #d5dcef;
+  background: #eef1fa;
+  box-shadow: none;
+}
+</style>
