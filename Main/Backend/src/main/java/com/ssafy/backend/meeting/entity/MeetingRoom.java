@@ -65,7 +65,7 @@ public class MeetingRoom {
     }
 
     // MEET-06: 참여자·팀 검증은 Service에서 완료하고, 엔티티는 Host userId만 변경한다.
-    public void changeHost(Long nextHostUserId) {
+    public void transferHostTo(Long nextHostUserId) {
         if (nextHostUserId == null) {
             throw new IllegalArgumentException("새 호스트 ID는 필수입니다.");
         }

@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * participants 테이블 매핑 엔티티.
- * participantRole은 BE·FE·서기처럼 화면에 표시하는 프로필 역할이며, 회의 권한과 무관하다.
+ * participantRole은 BE·FE·서기처럼 화면에 표시하는 선택 프로필이며, 회의 권한과 무관하다.
  * Host 권한은 Participant에 중복 저장하지 않고 MeetingRoom.hostId에서만 관리한다.
  */
 @Entity
@@ -34,20 +34,34 @@ public class Participant {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
 
-    @Column(name = "participants_role", nullable = false, length = 50)
+    @Column(name = "participants_role", length = 50)
     private String participantRole;
 
     @Column(name = "is_in_meeting", nullable = false)
-    private String isInMeeting = "Y";
+    private boolean isInMeeting;
 
     @Builder
-    private Participant(Long meetingRoomId, Long memberId, String participantRole) {
+    private Participant(
+            Long meetingRoomId,
+            Long memberId,
+            String participantRole,
+            boolean isInMeeting
+    ) {
         this.meetingRoomId = meetingRoomId;
         this.memberId = memberId;
         this.participantRole = participantRole;
+        this.isInMeeting = isInMeeting;
     }
 
     public void updateParticipantRole(String participantRole) {
         this.participantRole = participantRole;
+    }
+
+    public void enterMeeting() {
+        this.isInMeeting = true;
+    }
+
+    public void leaveMeeting() {
+        this.isInMeeting = false;
     }
 }

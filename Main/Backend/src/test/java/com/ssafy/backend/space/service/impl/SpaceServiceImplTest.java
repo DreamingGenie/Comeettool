@@ -9,6 +9,8 @@ import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.entity.Member;
 import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
+import com.ssafy.backend.document.repository.DocumentRepository;
+import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.space.repository.MemberRepository;
 import com.ssafy.backend.space.repository.TeamRepository;
@@ -25,6 +27,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,6 +58,12 @@ class SpaceServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private DocumentRepository documentRepository;
+
+    @Mock
+    private MeetingRoomRepository meetingRoomRepository;
 
     // 실제 매퍼를 주입해 변환 결과까지 검증한다(순수 변환 로직이라 @Spy로 실제 구현 사용).
     @Spy
@@ -309,6 +319,57 @@ class SpaceServiceImplTest {
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
             verify(memberRepository, never()).delete(any(Member.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-11 스페이스 삭제")
+    class RemoveSpace {
+
+        @Test
+        @DisplayName("소유자면 teams와 하위 documents·meeting_rooms를 전파 soft delete 한다")
+        void removeSpace_softDeletesTeamAndCascades() {
+            // given — 요청자가 team_owner_id.
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+
+            // when
+            spaceService.removeSpace(USER_ID, TEAM_ID);
+
+            // then — teams는 엔티티 상태 변경, 하위는 벌크 갱신 호출.
+            assertThat(team.isDeleted()).isTrue();
+            assertThat(team.getDeletedAt()).isNotNull();
+            verify(documentRepository).softDeleteByTeamId(eq(TEAM_ID), any(OffsetDateTime.class));
+            verify(meetingRoomRepository).softDeleteByTeamId(eq(TEAM_ID), any(OffsetDateTime.class));
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
+        void removeSpace_throwsNotFoundWhenAbsent() {
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> spaceService.removeSpace(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verify(documentRepository, never()).softDeleteByTeamId(any(), any());
+            verify(meetingRoomRepository, never()).softDeleteByTeamId(any(), any());
+        }
+
+        @Test
+        @DisplayName("소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 삭제하지 않는다")
+        void removeSpace_throwsForNonOwner() {
+            // given — owner는 다른 사용자(99L).
+            Team team = teamWithId(TEAM_ID, 99L);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() -> spaceService.removeSpace(USER_ID, TEAM_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            assertThat(team.isDeleted()).isFalse();
+            verify(documentRepository, never()).softDeleteByTeamId(any(), any());
+            verify(meetingRoomRepository, never()).softDeleteByTeamId(any(), any());
         }
     }
 }

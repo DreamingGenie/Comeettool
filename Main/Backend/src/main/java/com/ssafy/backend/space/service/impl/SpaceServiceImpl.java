@@ -9,6 +9,8 @@ import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.entity.Member;
 import com.ssafy.backend.space.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
+import com.ssafy.backend.document.repository.DocumentRepository;
+import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.space.service.SpaceService;
 import com.ssafy.backend.space.repository.MemberRepository;
@@ -19,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +37,8 @@ public class SpaceServiceImpl implements SpaceService {
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final DocumentRepository documentRepository;
+    private final MeetingRoomRepository meetingRoomRepository;
     private final SpaceMapper spaceMapper;
 
     @Override
@@ -87,8 +92,7 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional(readOnly = true)
     public ResponseSpaceDetailDto findSpaceDetails(Long userId, Long spaceId) {
-        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
-                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+        Team team = loadActiveTeam(spaceId);
 
         // 요청자가 해당 스페이스 멤버인지 인가 검사.
         if (!memberRepository.existsByTeamIdAndUserId(spaceId, userId)) {
@@ -102,19 +106,47 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     @Transactional
     public void removeMyMembership(Long userId, Long spaceId) {
-        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
-                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+        Team team = loadActiveTeam(spaceId);
 
         // 요청자의 멤버 행을 조회하며 멤버 여부를 검사한다.
         Member member = memberRepository.findByTeamIdAndUserId(spaceId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
 
         // 정책 SP-1: 소유자는 소유권 위임 또는 스페이스 삭제(SPACE-11) 후에만 퇴장할 수 있다.
-        if (team.getOwnerId().equals(userId)) {
+        if (isOwner(team, userId)) {
             throw new CustomException(ErrorCode.SPACE_OWNER_CANNOT_LEAVE);
         }
 
         memberRepository.delete(member);
+    }
+
+    @Override
+    @Transactional
+    public void removeSpace(Long userId, Long spaceId) {
+        Team team = loadActiveTeam(spaceId);
+
+        // 정책: 스페이스 삭제는 소유자만 가능. 비-Owner는 거부.
+        if (!isOwner(team, userId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        // 정책 SP-2: 전파 soft delete. teams + is_deleted를 가진 하위 테이블(documents·meeting_rooms)을
+        // 함께 갱신하고, is_deleted 컬럼이 없는 나머지 종속 테이블은 상위 teams.is_deleted 판정으로 방어한다.
+        OffsetDateTime deletedAt = OffsetDateTime.now();
+        team.softDelete(deletedAt);
+        documentRepository.softDeleteByTeamId(spaceId, deletedAt);
+        meetingRoomRepository.softDeleteByTeamId(spaceId, deletedAt);
+    }
+
+    // SPACE-05/07/11 공통: 삭제되지 않은 스페이스 조회(없으면 404).
+    private Team loadActiveTeam(Long spaceId) {
+        return teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+    }
+
+    // Owner 판별 공통화 — team_owner_id 기준.
+    private boolean isOwner(Team team, Long userId) {
+        return team.getOwnerId().equals(userId);
     }
 
     // members.nickname(NOT NULL) 용 표시 이름 — 유저 닉네임 우선, 없으면 이메일 로컬파트.
