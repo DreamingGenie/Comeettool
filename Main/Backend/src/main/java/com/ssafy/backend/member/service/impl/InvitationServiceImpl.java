@@ -1,44 +1,42 @@
 package com.ssafy.backend.member.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
-import com.ssafy.backend.member.dto.InvitationData;
+import com.ssafy.backend.member.entity.Invitation;
 import com.ssafy.backend.member.dto.RequestInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseInviteMemberDto;
+import com.ssafy.backend.member.repository.InvitationRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.member.service.InvitationService;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
 import com.ssafy.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 
 /**
- * MEMBER-02 멤버 초대. 초대 상태는 Redis 키의 존재 여부로만 판단한다(별도 상태 필드 없음).
- * 수락/거절 시 즉시 DEL, 만료는 TTL(1일)에 위임(다음 작업 범위).
+ * MEMBER-02 멤버 초대. 초대는 invitations 테이블(RDB)에 저장하며, 상태는 expires_at 경과 여부로만 판단한다(별도 상태 필드 없음).
+ * (team_id, target_user_id) 유니크 제약이 "이미 대기 중인 초대" 중복 생성을 DB 레벨에서 최종 방어한다.
+ * 수락/거절 시 처리, 만료 초대 물리 삭제(배치/스케줄러)는 다음 작업 범위.
  */
 @Service
 @RequiredArgsConstructor
 public class InvitationServiceImpl implements InvitationService {
 
-    private static final String INVITATION_KEY_PREFIX = "invitation:";
-    private static final String LOOKUP_KEY_PREFIX = "invitation:lookup:";
     private static final Duration TTL = Duration.ofDays(1);
 
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final MemberRepository memberRepository;
-    private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
+    private final InvitationRepository invitationRepository;
 
     @Override
+    @Transactional
     public ResponseInviteMemberDto inviteMember(Long inviterId, Long spaceId, RequestInviteMemberDto request) {
         Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
@@ -57,34 +55,20 @@ public class InvitationServiceImpl implements InvitationService {
             throw new CustomException(ErrorCode.MEMBER_ALREADY_JOINED);
         }
 
-        String invitationId = UUID.randomUUID().toString();
-        String lookupKey = lookupKey(spaceId, targetUserId);
-
-        // SETNX(원자적 확인+선점)로 TOCTOU 없이 "이미 대기 중인 초대" 여부를 판단한다.
-        Boolean lookupSet = redisTemplate.opsForValue().setIfAbsent(lookupKey, invitationId, TTL);
-        if (Boolean.FALSE.equals(lookupSet)) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (invitationRepository.existsByTeamIdAndTargetUserIdAndExpiresAtAfter(spaceId, targetUserId, now)) {
             throw new CustomException(ErrorCode.INVITATION_ALREADY_PENDING);
         }
 
-        InvitationData data = new InvitationData(spaceId, inviterId, targetUserId, OffsetDateTime.now());
-        redisTemplate.opsForValue().set(invitationKey(invitationId), serialize(data), TTL);
-
-        return new ResponseInviteMemberDto(invitationId);
-    }
-
-    private String invitationKey(String invitationId) {
-        return INVITATION_KEY_PREFIX + invitationId;
-    }
-
-    private String lookupKey(Long spaceId, Long targetUserId) {
-        return LOOKUP_KEY_PREFIX + spaceId + ":" + targetUserId;
-    }
-
-    private String serialize(InvitationData data) {
+        Invitation invitation = Invitation.create(spaceId, inviterId, targetUserId, TTL);
         try {
-            return objectMapper.writeValueAsString(data);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("초대 데이터 직렬화에 실패했습니다.", e);
+            // saveAndFlush로 즉시 INSERT를 실행해, 유니크 제약 위반을 이 트랜잭션 안에서 바로 잡아낸다.
+            invitationRepository.saveAndFlush(invitation);
+        } catch (DataIntegrityViolationException e) {
+            // (team_id, target_user_id) 유니크 제약 위반 — 위 existsBy 체크 이후 동시에 들어온 요청이 먼저 커밋된 경우의 race condition 방어.
+            throw new CustomException(ErrorCode.INVITATION_ALREADY_PENDING);
         }
+
+        return new ResponseInviteMemberDto(invitation.getInvitationId().toString());
     }
 }
