@@ -35,6 +35,12 @@ public enum ErrorCode {
     SPACE_TRANSFER_TARGET_NOT_ELIGIBLE(HttpStatus.BAD_REQUEST, "SPACE_TRANSFER_TARGET_NOT_ELIGIBLE",
             "게스트에게는 소유권을 위임할 수 없습니다."),
 
+    MEMBER_ALREADY_JOINED(HttpStatus.CONFLICT, "MEMBER_ALREADY_JOINED", "이미 스페이스의 멤버입니다."),
+    INVITATION_ALREADY_PENDING(HttpStatus.CONFLICT, "INVITATION_ALREADY_PENDING", "이미 대기 중인 초대가 있습니다."),
+    // 만료/미존재/본인 초대가 아닌 경우를 모두 동일 코드로 응답 — 타인의 초대 존재 여부가 노출되지 않도록 404로 통합.
+    INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "INVITATION_NOT_FOUND", "유효한 초대를 찾을 수 없습니다."),
+    MEMBER_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "MEMBER_LIMIT_EXCEEDED", "스페이스 멤버는 최대 10명까지 참여할 수 있습니다."),
+
     MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
     MEETING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MEETING_ACCESS_DENIED",
             "해당 회의에 접근할 권한이 없습니다."),

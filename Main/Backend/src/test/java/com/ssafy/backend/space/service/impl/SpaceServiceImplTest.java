@@ -13,6 +13,7 @@ import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.document.repository.DocumentRepository;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
+import com.ssafy.backend.member.repository.InvitationRepository;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.repository.TeamRepository;
@@ -66,6 +67,9 @@ class SpaceServiceImplTest {
 
     @Mock
     private MeetingRoomRepository meetingRoomRepository;
+
+    @Mock
+    private InvitationRepository invitationRepository;
 
     // 실제 매퍼를 주입해 변환 결과까지 검증한다(순수 변환 로직이라 @Spy로 실제 구현 사용).
     @Spy
@@ -385,7 +389,7 @@ class SpaceServiceImplTest {
     class RemoveSpace {
 
         @Test
-        @DisplayName("소유자면 teams와 하위 documents·meeting_rooms를 전파 soft delete 한다")
+        @DisplayName("소유자면 teams와 하위 documents·meeting_rooms를 전파 soft delete 하고 관련 초대를 삭제한다")
         void removeSpace_softDeletesTeamAndCascades() {
             // given — 요청자가 team_owner_id.
             Team team = teamWithId(TEAM_ID, USER_ID);
@@ -394,11 +398,12 @@ class SpaceServiceImplTest {
             // when
             spaceService.removeSpace(USER_ID, TEAM_ID);
 
-            // then — teams는 엔티티 상태 변경, 하위는 벌크 갱신 호출.
+            // then — teams는 엔티티 상태 변경, 하위는 벌크 갱신 호출. invitations는 is_deleted가 없어 hard delete.
             assertThat(team.isDeleted()).isTrue();
             assertThat(team.getDeletedAt()).isNotNull();
             verify(documentRepository).softDeleteByTeamId(eq(TEAM_ID), any(OffsetDateTime.class));
             verify(meetingRoomRepository).softDeleteByTeamId(eq(TEAM_ID), any(OffsetDateTime.class));
+            verify(invitationRepository).deleteByTeamId(TEAM_ID);
         }
 
         @Test
@@ -412,6 +417,7 @@ class SpaceServiceImplTest {
                     .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
             verify(documentRepository, never()).softDeleteByTeamId(any(), any());
             verify(meetingRoomRepository, never()).softDeleteByTeamId(any(), any());
+            verify(invitationRepository, never()).deleteByTeamId(any());
         }
 
         @Test
@@ -428,6 +434,7 @@ class SpaceServiceImplTest {
             assertThat(team.isDeleted()).isFalse();
             verify(documentRepository, never()).softDeleteByTeamId(any(), any());
             verify(meetingRoomRepository, never()).softDeleteByTeamId(any(), any());
+            verify(invitationRepository, never()).deleteByTeamId(any());
         }
     }
 
