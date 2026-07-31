@@ -385,24 +385,36 @@ watch(teamId, loadDocuments)
 }
 
 .document-stats article {
-  min-height: 94.4px;
-  padding: 17.6px 20px;
+  grid-template-rows: auto auto;
+  align-content: center;
+  align-items: center;
+  row-gap: 12px;
+  min-height: 82px;
+  padding: 14px 20px;
   border-width: 0.8px;
   border-radius: 12px;
 }
 
 .document-stats span {
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
+  grid-row: 1;
+  grid-column: 1 / 3;
+  font-size: 13.6px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.25px;
 }
 
 .document-stats small {
+  grid-row: 2;
+  grid-column: 1;
   font-size: 10.4px;
   line-height: 1.45;
 }
 
 .document-stats b {
+  grid-row: 2;
+  grid-column: 2;
+  align-self: center;
   max-width: 240px;
   font-size: 16px;
   line-height: 1.35;
@@ -426,11 +438,11 @@ watch(teamId, loadDocuments)
   padding: 8px 12px;
   border-width: 0.8px;
   border-radius: 7.2px;
-  font-size: 11.2px;
+  font-size: 12.8px;
 }
 
 .document-search input {
-  font-size: 11.2px;
+  font-size: 12.8px;
 }
 
 .document-tools select {
@@ -439,7 +451,7 @@ watch(teamId, loadDocuments)
   padding: 8px 12px;
   border-width: 0.8px;
   border-radius: 7.2px;
-  font-size: 11.2px;
+  font-size: 12.8px;
 }
 
 .document-row {
@@ -447,7 +459,7 @@ watch(teamId, loadDocuments)
     40px minmax(200px, 2fr) minmax(72px, 0.55fr)
     minmax(170px, 0.9fr) auto;
   gap: 14.4px;
-  min-height: 76.8px;
+  min-height: 80px;
   padding: 12px 16px;
   border-bottom-width: 0.8px;
 }
@@ -464,12 +476,12 @@ watch(teamId, loadDocuments)
 }
 
 .document-title b {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
 .document-title span {
-  font-size: 8.8px;
+  font-size: 10.4px;
   line-height: 1.4;
 }
 
@@ -478,12 +490,12 @@ watch(teamId, loadDocuments)
 }
 
 .document-meta small {
-  font-size: 8.8px;
+  font-size: 10.4px;
 }
 
 .document-meta b {
   overflow: hidden;
-  font-size: 10.4px;
+  font-size: 12px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -497,7 +509,7 @@ watch(teamId, loadDocuments)
   min-height: 30.4px;
   padding: 6.4px 9.6px;
   border-radius: 5.6px;
-  font-size: 9.6px;
+  font-size: 11.2px;
 }
 
 .document-footer {
@@ -505,7 +517,7 @@ watch(teamId, loadDocuments)
   align-items: center;
   height: 52.8px;
   padding: 0 16px;
-  font-size: 9.6px;
+  font-size: 11.2px;
 }
 
 @media (max-width: 1100px) {

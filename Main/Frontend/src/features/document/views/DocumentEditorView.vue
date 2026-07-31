@@ -456,6 +456,15 @@ function syncTitleFromEditor() {
   })
 }
 
+function refreshSyncedTitle() {
+  if (!titleEditor.value) return
+
+  titleEditor.value.view.dispatch(
+    titleEditor.value.state.tr.setMeta('collaboration-sync-render', true)
+  )
+  syncTitleFromEditor()
+}
+
 function normalizeDocumentTitle() {
   if (
     !canEdit.value ||
@@ -545,6 +554,7 @@ async function createCollaborativeEditor(document, generation) {
 
   collaborationProvider = new HocuspocusProvider({
     url: collaborationUrl,
+    autoConnect: false,
     name: `document:${document.documentId}:epoch:${document.stateEpoch}`,
     document: collaborationDocument,
     flushDelay: 30,
@@ -559,7 +569,7 @@ async function createCollaborativeEditor(document, generation) {
       if (generation !== connectionGeneration) return
       collaborationSynced.value = state !== false
       collaborationError.value = ''
-      syncTitleFromEditor()
+      refreshSyncedTitle()
     },
     onAwarenessChange: ({ states }) => {
       if (generation !== connectionGeneration) return
@@ -688,6 +698,8 @@ async function createCollaborativeEditor(document, generation) {
     onCreate: touchEditorState,
     onTransaction: touchEditorState
   })
+
+  await collaborationProvider.connect()
 }
 
 function isActive(name, attributes) {
@@ -1310,9 +1322,9 @@ onBeforeUnmount(() => {
 }
 
 .editor-card-header {
-  min-height: 64px;
+  min-height: 80px;
   gap: 12.8px;
-  padding: 12.8px 16px;
+  padding: 17.6px 18px;
   border-bottom-width: 0.8px;
 }
 
@@ -1321,12 +1333,15 @@ onBeforeUnmount(() => {
   letter-spacing: 1.2px;
 }
 
-.document-title-input {
+.document-title-editor {
   width: min(520px, 46vw);
-  margin-top: 3.2px;
-  font-size: 14.4px;
-  line-height: 1.4;
-  letter-spacing: -0.3px;
+  margin-top: 5px;
+}
+
+.document-title-editor :deep(.document-title-prose) {
+  font-size: 18.4px;
+  line-height: 1.45;
+  letter-spacing: -0.4px;
 }
 
 .editor-presence {
@@ -1387,30 +1402,30 @@ onBeforeUnmount(() => {
 }
 
 :deep(.document-prose) {
-  padding: 28.8px clamp(24px, 6vw, 76.8px) 64px;
+  padding: 32px clamp(24px, 6vw, 76.8px) 68px;
   color: var(--text);
   font-family: 'Noto Sans KR', sans-serif;
-  font-size: 12.8px;
-  line-height: 1.75;
+  font-size: 14.4px;
+  line-height: 1.8;
 }
 
 :deep(.document-prose h1) {
   margin: 1.4em 0 0.55em;
-  font-size: 24px;
+  font-size: 26.4px;
   line-height: 1.3;
   letter-spacing: -0.8px;
 }
 
 :deep(.document-prose h2) {
   margin: 1.35em 0 0.5em;
-  font-size: 19.2px;
+  font-size: 21.6px;
   line-height: 1.35;
   letter-spacing: -0.5px;
 }
 
 :deep(.document-prose h3) {
   margin: 1.3em 0 0.45em;
-  font-size: 15.2px;
+  font-size: 17.6px;
   line-height: 1.4;
 }
 
