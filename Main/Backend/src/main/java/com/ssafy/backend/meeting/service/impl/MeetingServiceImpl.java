@@ -14,6 +14,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -21,6 +22,7 @@ import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
+import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
@@ -55,6 +57,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final TeamRepository teamRepository;
     private final MeetingMapper meetingMapper;
     private final LiveKitTokenProvider liveKitTokenProvider;
+    private final LiveKitParticipantManager liveKitParticipantManager;
 
     /**
      * MEET-01: 회의 생성.
@@ -206,6 +209,38 @@ public class MeetingServiceImpl implements MeetingService {
                 connectionInfo.token(),
                 connectionInfo.url()
         );
+    }
+
+    /**
+     * MEET-04: 현재 사용자를 회의에서 퇴장시키고 LiveKit 연결을 종료한다.
+     */
+    @Override
+    @Transactional
+    public ResponseLeaveMeetingDto leaveMeeting(
+            Long requesterUserId,
+            Long meetingId
+    ) {
+        MeetingRoom meetingRoom = meetingRoomRepository.findActiveById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        Member member = memberRepository
+                .findByTeamIdAndUserId(meetingRoom.getTeamId(), requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        Participant participant = participantRepository
+                .findByMeetingRoomIdAndMemberId(meetingId, member.getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        if (meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_CANNOT_LEAVE);
+        }
+
+        liveKitParticipantManager.disconnectParticipant(
+                meetingRoom.getId(),
+                participant.getId()
+        );
+
+        return new ResponseLeaveMeetingDto(false);
     }
 
     /**

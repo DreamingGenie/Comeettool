@@ -25,6 +25,7 @@ import java.util.Collections;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String ERROR_ATTRIBUTE = "authError";
+    private static final String LIVEKIT_WEBHOOK_ENDPOINT = "/api/v1/webhooks/livekit";
 
     private final JwtProvider jwtProvider;
 
@@ -50,6 +51,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return LIVEKIT_WEBHOOK_ENDPOINT.equals(request.getServletPath());
     }
 
     private String resolveToken(HttpServletRequest request) {

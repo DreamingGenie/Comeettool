@@ -35,6 +35,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
@@ -245,6 +246,56 @@ class MeetingControllerTest {
         mockMvc.perform(post("/api/v1/meetings/{meetingId}/join", MEETING_ID))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MEETING_ACCESS_DENIED"));
+    }
+
+    @Test
+    @DisplayName("회의 퇴장에 성공하면 isKick=false를 반환한다")
+    void leaveMeeting_returns200WithVoluntaryLeaveResult() throws Exception {
+        ResponseLeaveMeetingDto response = new ResponseLeaveMeetingDto(false);
+        given(meetingService.leaveMeeting(1L, MEETING_ID))
+                .willReturn(response);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/leave", MEETING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("퇴장되었습니다."))
+                .andExpect(jsonPath("$.data.isKick").value(false));
+    }
+
+    @Test
+    @DisplayName("회의에 초대되지 않은 사용자가 퇴장하면 403을 반환한다")
+    void leaveMeeting_returns403WhenAccessIsDenied() throws Exception {
+        given(meetingService.leaveMeeting(1L, MEETING_ID))
+                .willThrow(new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/leave", MEETING_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_ACCESS_DENIED"));
+    }
+
+    @Test
+    @DisplayName("현재 호스트가 일반 퇴장을 요청하면 409를 반환한다")
+    void leaveMeeting_returns409WhenRequesterIsHost() throws Exception {
+        given(meetingService.leaveMeeting(1L, MEETING_ID))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_CANNOT_LEAVE));
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/leave", MEETING_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_CANNOT_LEAVE"));
+    }
+
+    @Test
+    @DisplayName("LiveKit 연결 종료에 실패하면 502를 반환한다")
+    void leaveMeeting_returns502WhenLiveKitDisconnectFails() throws Exception {
+        given(meetingService.leaveMeeting(1L, MEETING_ID))
+                .willThrow(new CustomException(
+                        ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
+                ));
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/leave", MEETING_ID))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_LIVEKIT_DISCONNECT_FAILED"));
     }
 
     @Test
