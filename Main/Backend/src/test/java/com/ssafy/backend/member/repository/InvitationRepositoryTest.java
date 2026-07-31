@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -254,6 +255,53 @@ class InvitationRepositoryTest {
         @DisplayName("해당 team_id의 초대가 없어도 예외 없이 아무 일도 일어나지 않는다")
         void doesNothingWhenNoInvitationsForTeam() {
             invitationRepository.deleteByTeamId(uniqueId());
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteByTeamIdAndTargetUserId")
+    class DeleteByTeamIdAndTargetUserId {
+
+        @Test
+        @DisplayName("해당 (team_id, target_user_id) 쌍의 초대를 삭제하고 다른 쌍은 남긴다")
+        void deletesOnlyInvitationForGivenPair() {
+            Long teamId = uniqueId();
+            Long targetUserId = uniqueId();
+            Invitation toDelete = entityManager.persistAndFlush(
+                    invitation(teamId, uniqueId(), targetUserId, OffsetDateTime.now().plusDays(1)));
+            Invitation otherTarget = entityManager.persistAndFlush(
+                    invitation(teamId, uniqueId(), uniqueId(), OffsetDateTime.now().plusDays(1)));
+
+            invitationRepository.deleteByTeamIdAndTargetUserId(teamId, targetUserId);
+            entityManager.flush();
+            entityManager.clear();
+
+            assertThat(invitationRepository.findById(toDelete.getInvitationId())).isEmpty();
+            assertThat(invitationRepository.findById(otherTarget.getInvitationId())).isPresent();
+        }
+
+        @Test
+        @DisplayName("해당 쌍의 초대가 없어도 예외 없이 아무 일도 일어나지 않는다")
+        void doesNothingWhenNoInvitationForPair() {
+            invitationRepository.deleteByTeamIdAndTargetUserId(uniqueId(), uniqueId());
+        }
+
+        @Test
+        @DisplayName("실사용 시나리오: 만료된 이전 초대가 남아있어도 정리(delete) 후 재초대(save) 하면 유니크 제약에 걸리지 않는다")
+        void reInviteSucceedsAfterCleaningUpStaleExpiredInvitation() {
+            // given — A가 B를 초대했지만(team_id+target_user_id) 만료됐고, 물리 삭제되지 않아 행이 그대로 남아있다.
+            Long teamId = uniqueId();
+            Long targetUserId = uniqueId();
+            entityManager.persistAndFlush(
+                    invitation(teamId, uniqueId(), targetUserId, OffsetDateTime.now().minusMinutes(1)));
+
+            // when — 재초대 로직과 동일한 순서: 정리(delete) 후 저장(saveAndFlush).
+            invitationRepository.deleteByTeamIdAndTargetUserId(teamId, targetUserId);
+            Invitation renewed = invitation(teamId, uniqueId(), targetUserId, OffsetDateTime.now().plusDays(1));
+
+            // then — 유니크 제약 위반 없이 새 초대가 저장된다.
+            assertThatCode(() -> invitationRepository.saveAndFlush(renewed)).doesNotThrowAnyException();
+            assertThat(invitationRepository.findById(renewed.getInvitationId())).isPresent();
         }
     }
 }

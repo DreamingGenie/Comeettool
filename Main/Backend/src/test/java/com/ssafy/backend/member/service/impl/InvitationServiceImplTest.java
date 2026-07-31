@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -126,6 +128,7 @@ class InvitationServiceImplTest {
 
             // then
             assertThat(response.invitationId()).isNotBlank();
+            verify(invitationRepository).deleteByTeamIdAndTargetUserId(TEAM_ID, TARGET_USER_ID);
 
             ArgumentCaptor<Invitation> captor = ArgumentCaptor.forClass(Invitation.class);
             verify(invitationRepository).saveAndFlush(captor.capture());
@@ -137,6 +140,31 @@ class InvitationServiceImplTest {
             // TTL 1일 정책 — expiresAt은 호출 시점 + 1일 근방(오차 허용 2초)이어야 한다.
             assertThat(saved.getExpiresAt())
                     .isCloseTo(beforeCall.plusDays(1), within(2, ChronoUnit.SECONDS));
+        }
+
+        @Test
+        @DisplayName("만료된 이전 초대가 남아있어도 재초대에 성공한다(유니크 제약 충돌을 피하려고 만료 행을 먼저 정리 후 저장)")
+        void inviteMember_succeedsWhenStaleExpiredInvitationRemains() {
+            // given — existsBy...ExpiresAtAfter=false는 "대기중인 초대가 없다"는 뜻이지 "행 자체가 없다"는 뜻은 아니다.
+            // A→B 초대가 만료됐지만 물리 삭제되지 않아 같은 (team_id, target_user_id) 행이 여전히 DB에 남아있는 상황을 가정한다.
+            Team team = teamWithId(TEAM_ID, INVITER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(userRepository.existsById(TARGET_USER_ID)).willReturn(true);
+            given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, TARGET_USER_ID)).willReturn(false);
+            given(invitationRepository.existsByTeamIdAndTargetUserIdAndExpiresAtAfter(
+                    eq(TEAM_ID), eq(TARGET_USER_ID), any(OffsetDateTime.class))).willReturn(false);
+            given(invitationRepository.saveAndFlush(any(Invitation.class)))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            // when
+            ResponseInviteMemberDto response = invitationService.inviteMember(
+                    INVITER_ID, TEAM_ID, new RequestInviteMemberDto(TARGET_USER_ID));
+
+            // then — 재초대가 예외 없이 성공하고, 만료 행 정리(delete)가 저장(saveAndFlush)보다 먼저 호출된다.
+            assertThat(response.invitationId()).isNotBlank();
+            InOrder inOrder = inOrder(invitationRepository);
+            inOrder.verify(invitationRepository).deleteByTeamIdAndTargetUserId(TEAM_ID, TARGET_USER_ID);
+            inOrder.verify(invitationRepository).saveAndFlush(any(Invitation.class));
         }
 
         @Test
@@ -212,6 +240,7 @@ class InvitationServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.INVITATION_ALREADY_PENDING);
+            verify(invitationRepository, never()).deleteByTeamIdAndTargetUserId(any(), any());
             verify(invitationRepository, never()).saveAndFlush(any(Invitation.class));
         }
 

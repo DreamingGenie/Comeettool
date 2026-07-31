@@ -66,6 +66,11 @@ public class InvitationServiceImpl implements InvitationService {
             throw new CustomException(ErrorCode.INVITATION_ALREADY_PENDING);
         }
 
+        // 위 체크를 통과했다면 이 (team_id, target_user_id) 쌍의 행이 남아있어도 반드시 만료된 것이다.
+        // invitations는 만료돼도 물리 삭제되지 않으므로(배치 정리는 범위 밖) 그대로 두면 유니크 제약에 걸려
+        // 정상적인 재초대까지 막힌다 — 새 초대를 만들기 전에 먼저 지운다.
+        invitationRepository.deleteByTeamIdAndTargetUserId(spaceId, targetUserId);
+
         Invitation invitation = Invitation.create(spaceId, inviterId, targetUserId, TTL);
         try {
             // saveAndFlush로 즉시 INSERT를 실행해, 유니크 제약 위반을 이 트랜잭션 안에서 바로 잡아낸다.
