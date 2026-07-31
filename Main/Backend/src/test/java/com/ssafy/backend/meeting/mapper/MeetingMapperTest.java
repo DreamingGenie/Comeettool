@@ -9,12 +9,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.user.entity.User;
 
 /**
  * MeetingMapper 단위 테스트.
- * MeetingRoom 엔티티가 MEET-01 생성 응답과 MEET-02 목록 응답으로 정확히 변환되는지 검증한다.
+ * MeetingRoom·Member·User 엔티티가
+ * MEET-01 생성, MEET-02 목록, MEET-09 초대 후보 응답으로 정확히 변환되는지 검증한다.
  */
 @DisplayName("회의 Mapper 테스트")
 class MeetingMapperTest {
@@ -57,6 +62,39 @@ class MeetingMapperTest {
         assertThat(response.createdAt()).isEqualTo(CREATED_AT);
         assertThat(response.participantCount()).isEqualTo(2L);
         assertThat(response.isInMeeting()).isFalse();
+    }
+
+    @Test
+    @DisplayName("초대 후보 응답에 멤버와 사용자 정보를 매핑한다")
+    void toInviteCandidate_mapsMemberAndUser() {
+        Member member = Member.builder()
+                .userId(2L)
+                .teamId(TEAM_ID)
+                .authority(MemberAuthority.MEMBER)
+                .nickname("백엔드개발자")
+                .build();
+        ReflectionTestUtils.setField(member, "id", 20L);
+
+        User user = User.builder()
+                .email("backend@example.com")
+                .password("encoded-password")
+                .build();
+        ReflectionTestUtils.setField(user, "id", 2L);
+        ReflectionTestUtils.setField(
+                user,
+                "profileImageUrl",
+                "https://example.com/backend.png"
+        );
+
+        ResponseMeetingInviteCandidateDto response =
+                meetingMapper.toInviteCandidate(member, user);
+
+        assertThat(response.memberId()).isEqualTo(20L);
+        assertThat(response.userId()).isEqualTo(2L);
+        assertThat(response.nickname()).isEqualTo("백엔드개발자");
+        assertThat(response.email()).isEqualTo("backend@example.com");
+        assertThat(response.profileImage())
+                .isEqualTo("https://example.com/backend.png");
     }
 
     private MeetingRoom createSavedMeetingRoom() {

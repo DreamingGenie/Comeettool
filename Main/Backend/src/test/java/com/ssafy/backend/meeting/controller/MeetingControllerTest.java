@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,6 +36,7 @@ import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -42,7 +44,7 @@ import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
  * 회의 컨트롤러 단위 테스트.
- * 실제 DB·시큐리티 필터 없이 MEET-01·02·06·07 매핑과 공통 응답 형식을 검증한다.
+ * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·06·07·09 매핑과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 API 테스트")
@@ -357,5 +359,104 @@ class MeetingControllerTest {
         mockMvc.perform(get("/api/v1/meetings/{meetingId}/participants", MEETING_ID))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MEETING_ACCESS_DENIED"));
+    }
+
+    @Test
+    @DisplayName("초대 후보 검색에 성공하면 200과 후보 정보를 반환한다")
+    void getInviteCandidates_returns200WithCandidates() throws Exception {
+        ResponseMeetingInviteCandidateDto candidate =
+                new ResponseMeetingInviteCandidateDto(
+                        20L,
+                        2L,
+                        "BackendDev",
+                        "backend@example.com",
+                        "https://example.com/backend.png"
+                );
+        given(meetingService.getInviteCandidates(1L, MEETING_ID, "backend"))
+                .willReturn(List.of(candidate));
+
+        mockMvc.perform(get(
+                        "/api/v1/meetings/{meetingId}/invite-candidates",
+                        MEETING_ID
+                ).param("keyword", "backend"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message")
+                        .value("초대 가능한 멤버를 조회했습니다."))
+                .andExpect(jsonPath("$.data[0].memberId").value(20))
+                .andExpect(jsonPath("$.data[0].userId").value(2))
+                .andExpect(jsonPath("$.data[0].nickname").value("BackendDev"))
+                .andExpect(jsonPath("$.data[0].email")
+                        .value("backend@example.com"))
+                .andExpect(jsonPath("$.data[0].profileImage")
+                        .value("https://example.com/backend.png"));
+
+        verify(meetingService).getInviteCandidates(1L, MEETING_ID, "backend");
+    }
+
+    @Test
+    @DisplayName("검색어를 생략하면 빈 문자열로 전체 초대 후보를 조회한다")
+    void getInviteCandidates_usesEmptyKeywordWhenKeywordIsOmitted() throws Exception {
+        given(meetingService.getInviteCandidates(1L, MEETING_ID, ""))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(
+                        "/api/v1/meetings/{meetingId}/invite-candidates",
+                        MEETING_ID
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message")
+                        .value("초대 가능한 멤버가 없습니다."))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(meetingService).getInviteCandidates(1L, MEETING_ID, "");
+    }
+
+    @Test
+    @DisplayName("검색 결과가 없으면 200과 유저를 찾지 못했다는 메시지를 반환한다")
+    void getInviteCandidates_returnsNotFoundMessageWhenSearchResultIsEmpty()
+            throws Exception {
+        given(meetingService.getInviteCandidates(1L, MEETING_ID, "nobody"))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(
+                        "/api/v1/meetings/{meetingId}/invite-candidates",
+                        MEETING_ID
+                ).param("keyword", "nobody"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("유저를 찾지 못했습니다."))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자가 초대 후보를 조회하면 403을 반환한다")
+    void getInviteCandidates_returns403ForNonHost() throws Exception {
+        given(meetingService.getInviteCandidates(1L, MEETING_ID, ""))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_REQUIRED));
+
+        mockMvc.perform(get(
+                        "/api/v1/meetings/{meetingId}/invite-candidates",
+                        MEETING_ID
+                ))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("초대 후보 조회 시 회의가 없으면 404를 반환한다")
+    void getInviteCandidates_returns404WhenMeetingIsMissing() throws Exception {
+        given(meetingService.getInviteCandidates(1L, MEETING_ID, ""))
+                .willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        mockMvc.perform(get(
+                        "/api/v1/meetings/{meetingId}/invite-candidates",
+                        MEETING_ID
+                ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
     }
 }

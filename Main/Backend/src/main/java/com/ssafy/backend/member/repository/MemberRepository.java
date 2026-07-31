@@ -57,4 +57,37 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             order by t.createdAt desc
             """)
     List<Object[]> findActiveTeamsWithMyAuthority(@Param("userId") Long userId, @Param("search") String search);
+
+    /**
+     * MEET-09: 회의가 속한 팀에서 아직 해당 회의에 초대되지 않은 멤버를 조회한다.
+     *
+     * 반환 배열 구조:
+     * row[0] = Member
+     * row[1] = User
+     *
+     * query가 빈 문자열이면 LIKE '%%'가 되어 초대 가능한 전체 멤버를 반환한다.
+     */
+    @Query("""
+            select m, u
+            from Member m, User u
+            where m.userId = u.id
+              and m.teamId = :teamId
+              and u.isDeleted = false
+              and not exists (
+                  select p.id
+                  from Participant p
+                  where p.meetingRoomId = :meetingId
+                    and p.memberId = m.id
+              )
+              and (
+                  lower(m.nickname) like lower(concat('%', :query, '%'))
+                  or lower(u.email) like lower(concat('%', :query, '%'))
+              )
+            order by m.id asc
+            """)
+    List<Object[]> findMeetingInviteCandidates(
+            @Param("teamId") Long teamId,
+            @Param("meetingId") Long meetingId,
+            @Param("query") String query
+    );
 }

@@ -20,13 +20,15 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.user.entity.User;
 
 /**
- * MEET-02 Repository 통합 테스트.
+ * MEET-02·09 Repository 통합 테스트.
  * memberId 기반 Participant 조회, 회의별 현재 접속자 집계,
- * 같은 스페이스의 삭제되지 않은 회의 필터를 실제 PostgreSQL에서 검증한다.
+ * 같은 스페이스의 삭제되지 않은 회의 필터와 초대 후보 검색을
+ * 실제 PostgreSQL에서 검증한다.
  *
  * <p>프로젝트의 다른 Repository 테스트와 동일하게 로컬 프로필의 실제 DB를 사용한다.
  * SQL v1.1.7 스키마가 필요하며 각 테스트 데이터는 트랜잭션 종료 시 롤백된다.</p>
@@ -44,6 +46,9 @@ class MeetingRepositoryTest {
 
     @Autowired
     private ParticipantRepository participantRepository;
+
+    @Autowired
+    private MemberRepository memberRepository;
 
     @Test
     @DisplayName("memberId로 등록된 모든 Participant를 ID 순서대로 조회한다")
@@ -128,16 +133,137 @@ class MeetingRepositoryTest {
                 .containsExactly(newerActiveMeeting.getId(), olderActiveMeeting.getId());
     }
 
+    @Test
+    @DisplayName("초대 후보 전체 조회는 같은 팀의 현재 회의 미초대 활성 사용자만 반환한다")
+    void findMeetingInviteCandidates_returnsOnlyEligibleTeamMembers() {
+        User hostUser = persistUser();
+        User candidateUser = persistUser();
+        User otherMeetingUser = persistUser();
+        User deletedUser = persistUser("deleted-" + token() + "@test.com", true);
+        User otherTeamUser = persistUser();
+        Team requestedTeam = persistTeam(hostUser.getId());
+        Team otherTeam = persistTeam(otherTeamUser.getId());
+
+        Member hostMember = persistMember(hostUser.getId(), requestedTeam.getId());
+        Member candidateMember =
+                persistMember(candidateUser.getId(), requestedTeam.getId());
+        Member otherMeetingMember =
+                persistMember(otherMeetingUser.getId(), requestedTeam.getId());
+        persistMember(deletedUser.getId(), requestedTeam.getId());
+        persistMember(otherTeamUser.getId(), otherTeam.getId());
+
+        MeetingRoom requestedMeeting = persistMeeting(
+                requestedTeam.getId(),
+                hostUser.getId(),
+                "현재 회의",
+                false
+        );
+        MeetingRoom otherMeeting = persistMeeting(
+                requestedTeam.getId(),
+                hostUser.getId(),
+                "다른 회의",
+                false
+        );
+        persistParticipant(requestedMeeting.getId(), hostMember.getId(), false);
+        persistParticipant(otherMeeting.getId(), otherMeetingMember.getId(), false);
+
+        List<Object[]> rows = memberRepository.findMeetingInviteCandidates(
+                requestedTeam.getId(),
+                requestedMeeting.getId(),
+                ""
+        );
+
+        assertThat(rows)
+                .extracting(row -> ((Member) row[0]).getId())
+                .containsExactly(candidateMember.getId(), otherMeetingMember.getId());
+    }
+
+    @Test
+    @DisplayName("초대 후보는 멤버 닉네임을 대소문자 구분 없이 부분 검색한다")
+    void findMeetingInviteCandidates_searchesNicknameIgnoringCase() {
+        User hostUser = persistUser();
+        User backendUser = persistUser();
+        User frontendUser = persistUser();
+        Team team = persistTeam(hostUser.getId());
+        Member backendMember =
+                persistMember(backendUser.getId(), team.getId(), "BackendDev");
+        persistMember(frontendUser.getId(), team.getId(), "FrontendDev");
+        MeetingRoom meeting =
+                persistMeeting(team.getId(), hostUser.getId(), "검색 회의", false);
+
+        List<Object[]> rows = memberRepository.findMeetingInviteCandidates(
+                team.getId(),
+                meeting.getId(),
+                "BACKEND"
+        );
+
+        assertThat(rows)
+                .extracting(row -> ((Member) row[0]).getId())
+                .containsExactly(backendMember.getId());
+    }
+
+    @Test
+    @DisplayName("초대 후보는 사용자 이메일을 대소문자 구분 없이 부분 검색한다")
+    void findMeetingInviteCandidates_searchesEmailIgnoringCase() {
+        User hostUser = persistUser();
+        User matchedUser =
+                persistUser("Meeting.Member-" + token() + "@Test.com", false);
+        User unmatchedUser =
+                persistUser("other-" + token() + "@test.com", false);
+        Team team = persistTeam(hostUser.getId());
+        Member matchedMember =
+                persistMember(matchedUser.getId(), team.getId());
+        persistMember(unmatchedUser.getId(), team.getId());
+        MeetingRoom meeting =
+                persistMeeting(team.getId(), hostUser.getId(), "검색 회의", false);
+
+        List<Object[]> rows = memberRepository.findMeetingInviteCandidates(
+                team.getId(),
+                meeting.getId(),
+                "MEETING.MEMBER"
+        );
+
+        assertThat(rows)
+                .extracting(row -> ((Member) row[0]).getId())
+                .containsExactly(matchedMember.getId());
+    }
+
+    @Test
+    @DisplayName("닉네임과 이메일이 모두 일치하지 않으면 초대 후보 빈 목록을 반환한다")
+    void findMeetingInviteCandidates_returnsEmptyListWhenNoMemberMatches() {
+        User hostUser = persistUser();
+        User candidateUser = persistUser();
+        Team team = persistTeam(hostUser.getId());
+        persistMember(candidateUser.getId(), team.getId(), "BackendDev");
+        MeetingRoom meeting =
+                persistMeeting(team.getId(), hostUser.getId(), "검색 회의", false);
+
+        List<Object[]> rows = memberRepository.findMeetingInviteCandidates(
+                team.getId(),
+                meeting.getId(),
+                "no-such-member"
+        );
+
+        assertThat(rows).isEmpty();
+    }
+
     private String token() {
         return UUID.randomUUID().toString().substring(0, 8);
     }
 
     private User persistUser() {
         String value = token();
+        return persistUser("meeting-" + value + "@test.com", false);
+    }
+
+    private User persistUser(String email, boolean deleted) {
         User user = User.builder()
-                .email("meeting-" + value + "@test.com")
+                .email(email)
                 .password("$2a$10$encoded")
                 .build();
+        if (deleted) {
+            user.withdraw();
+        }
         return entityManager.persistAndFlush(user);
     }
 
@@ -151,11 +277,15 @@ class MeetingRepositoryTest {
     }
 
     private Member persistMember(Long userId, Long teamId) {
+        return persistMember(userId, teamId, "회의 테스트 멤버-" + token());
+    }
+
+    private Member persistMember(Long userId, Long teamId, String nickname) {
         Member member = Member.builder()
                 .userId(userId)
                 .teamId(teamId)
                 .authority(MemberAuthority.MEMBER)
-                .nickname("회의 테스트 멤버-" + token())
+                .nickname(nickname)
                 .build();
         return entityManager.persistAndFlush(member);
     }
