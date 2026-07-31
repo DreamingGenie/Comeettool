@@ -1,33 +1,107 @@
 package com.ssafy.backend.meeting.service.impl;
 
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
+import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
+import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.meeting.service.MeetingService;
+import com.ssafy.backend.user.entity.User;
+import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.space.repository.TeamRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * MEET-06 회의 호스트 양도.
- * 호스트 권한은 MeetingRoom.hostId만을 기준으로 판단하고 변경한다.
+ * 회의 도메인 서비스.
+ * MEET-06 호스트 양도와 MEET-07 현재 참여자 조회를 처리한다.
+ * 회의 생성과 호스트 양도 비즈니스 로직.
  */
 @Service
 @RequiredArgsConstructor
 public class MeetingServiceImpl implements MeetingService {
 
+    private static final long MAX_ACTIVE_MEETING_ROOM_COUNT = 3L;
+    private static final int INITIAL_PARTICIPANT_COUNT = 1;
+
     private final MeetingRoomRepository meetingRoomRepository;
     private final ParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
+    private final MeetingMapper meetingMapper;
 
+    /**
+     * MEET-01: 회의 생성.
+     */
+    @Override
+    @Transactional
+    public ResponseCreateMeetingDto addMeeting(
+            Long requesterUserId,
+            Long spaceId,
+            RequestCreateMeetingDto request
+    ) {
+        teamRepository.findActiveByIdForUpdate(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        Member hostMember = memberRepository.findByTeamIdAndUserId(spaceId, requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+        if (hostMember.getAuthority() == MemberAuthority.GUEST) {
+            throw new CustomException(ErrorCode.MEETING_CREATE_FORBIDDEN);
+        }
+
+        long activeMeetingRoomCount =
+                meetingRoomRepository.countByTeamIdAndIsDeletedFalse(spaceId);
+        if (activeMeetingRoomCount >= MAX_ACTIVE_MEETING_ROOM_COUNT) {
+            throw new CustomException(ErrorCode.MEETING_ROOM_LIMIT_EXCEEDED);
+        }
+
+        MeetingRoom meetingRoom = MeetingRoom.builder()
+                .teamId(spaceId)
+                .hostId(requesterUserId)
+                .name(request.meetingRoomName())
+                .build();
+        MeetingRoom savedMeetingRoom = meetingRoomRepository.save(meetingRoom);
+
+        String participantRole = memberRepository
+                .findTeamRoleNameByMemberId(hostMember.getId())
+                .orElse(null);
+        Participant hostParticipant = Participant.builder()
+                .meetingRoomId(savedMeetingRoom.getId())
+                .memberId(hostMember.getId())
+                .participantRole(participantRole)
+                .isInMeeting(false)
+                .build();
+        participantRepository.save(hostParticipant);
+
+        return meetingMapper.toCreateResponse(
+                savedMeetingRoom,
+                requesterUserId,
+                INITIAL_PARTICIPANT_COUNT
+        );
+    }
+
+    /**
+     * MEET-06: 현재 호스트가 회의 참여자에게 호스트 권한을 양도한다.
+     */
     @Override
     @Transactional
     public ResponseTransferHostDto transferHost(
@@ -42,7 +116,7 @@ public class MeetingServiceImpl implements MeetingService {
             throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
         }
 
-        var nextHostParticipant = participantRepository
+        Participant nextHostParticipant = participantRepository
                 .findByIdAndMeetingRoomId(request.nextHostParticipantId(), meetingId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
@@ -62,5 +136,80 @@ public class MeetingServiceImpl implements MeetingService {
         meetingRoom.transferHostTo(nextHostId);
 
         return new ResponseTransferHostDto(meetingId, previousHostId, nextHostId);
+    }
+
+    /**
+     * MEET-07: 현재 회의에 입장 중인 참여자의 기본 정보를 조회한다.
+     *
+     * 카메라·마이크 상태는 DB에 저장하지 않고 추후 LiveKit에서 실시간으로 결합한다.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResponseMeetingParticipantDto> getParticipants(
+            Long requesterUserId,
+            Long meetingId
+    ) {
+        // 1. 삭제되지 않은 회의인지 확인한다.
+        MeetingRoom meetingRoom = meetingRoomRepository.findActiveById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 2. 요청자가 해당 회의의 상위 팀에 소속된 Member인지 확인한다.
+        Member requesterMember = memberRepository
+                .findByTeamIdAndUserId(meetingRoom.getTeamId(), requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        // 3. 팀 멤버이더라도 회의에 초대된 Participant가 아니면 조회를 거부한다.
+        participantRepository
+                .findByMeetingRoomIdAndMemberId(meetingId, requesterMember.getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        // 4. 현재 회의에 입장 중인(isInMeeting=true) Participant만 조회한다.
+        List<Participant> participants = participantRepository
+                .findAllByMeetingRoomIdAndIsInMeetingTrueOrderByIdAsc(meetingId);
+
+        // 5. Participant가 참조하는 Member를 일괄 조회해 N+1 쿼리를 방지한다.
+        List<Long> memberIds = participants.stream()
+                .map(Participant::getMemberId)
+                .toList();
+
+        Map<Long, Member> memberMap = memberRepository.findAllById(memberIds)
+                .stream()
+                .collect(Collectors.toMap(Member::getId, member -> member));
+
+        // 6. 프로필 이미지 조회에 필요한 User도 한 번에 조회한다.
+        List<Long> userIds = memberMap.values()
+                .stream()
+                .map(Member::getUserId)
+                .toList();
+
+        Map<Long, User> userMap = userRepository.findAllById(userIds)
+                .stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+
+        // 7. Participant·Member·User 데이터를 화면 응답 DTO로 조립한다.
+        return participants.stream()
+                .map(participant -> {
+                    Member member = memberMap.get(participant.getMemberId());
+                    if (member == null) {
+                        throw new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND);
+                    }
+
+                    User user = userMap.get(member.getUserId());
+                    if (user == null) {
+                        throw new CustomException(ErrorCode.USER_NOT_FOUND);
+                    }
+
+                    return new ResponseMeetingParticipantDto(
+                            participant.getId(),
+                            member.getId(),
+                            user.getId(),
+                            member.getNickname(),
+                            user.getProfileImageUrl(),
+                            participant.getParticipantRole(),
+                            meetingRoom.isHost(user.getId()),
+                            participant.isInMeeting()
+                    );
+                })
+                .toList();
     }
 }
