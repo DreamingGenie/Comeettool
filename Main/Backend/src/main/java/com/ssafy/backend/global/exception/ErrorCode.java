@@ -43,6 +43,8 @@ public enum ErrorCode {
             "회의 참여자를 찾을 수 없습니다."),
     MEETING_HOST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "MEETING_HOST_ALREADY_ASSIGNED",
             "이미 해당 회의의 호스트입니다."),
+    MEETING_HOST_CANNOT_LEAVE(HttpStatus.CONFLICT, "MEETING_HOST_CANNOT_LEAVE",
+            "호스트는 권한을 양도하거나 회의를 종료해야 합니다."),
     MEETING_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "MEETING_CREATE_FORBIDDEN",
             "게스트는 회의를 생성할 수 없습니다."),
     MEETING_ROOM_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "MEETING_ROOM_LIMIT_EXCEEDED",

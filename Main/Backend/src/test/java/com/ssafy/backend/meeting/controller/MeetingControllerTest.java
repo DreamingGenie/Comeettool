@@ -274,6 +274,17 @@ class MeetingControllerTest {
     }
 
     @Test
+    @DisplayName("현재 호스트가 일반 퇴장을 요청하면 409를 반환한다")
+    void leaveMeeting_returns409WhenRequesterIsHost() throws Exception {
+        given(meetingService.leaveMeeting(1L, MEETING_ID))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_CANNOT_LEAVE));
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/leave", MEETING_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_CANNOT_LEAVE"));
+    }
+
+    @Test
     @DisplayName("LiveKit 연결 종료에 실패하면 502를 반환한다")
     void leaveMeeting_returns502WhenLiveKitDisconnectFails() throws Exception {
         given(meetingService.leaveMeeting(1L, MEETING_ID))

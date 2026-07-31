@@ -231,6 +231,10 @@ public class MeetingServiceImpl implements MeetingService {
                 .findByMeetingRoomIdAndMemberId(meetingId, member.getId())
                 .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
 
+        if (meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_CANNOT_LEAVE);
+        }
+
         liveKitParticipantManager.disconnectParticipant(
                 meetingRoom.getId(),
                 participant.getId()

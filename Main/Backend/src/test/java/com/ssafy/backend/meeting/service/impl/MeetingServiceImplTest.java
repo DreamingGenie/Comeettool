@@ -570,6 +570,82 @@ class MeetingServiceImplTest {
         long participantId = 30L;
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
         Member member = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                NEXT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                NEXT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+
+        ResponseLeaveMeetingDto response =
+                meetingService.leaveMeeting(NEXT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response.isKick()).isFalse();
+        assertThat(participant.isInMeeting()).isFalse();
+        verify(liveKitParticipantManager)
+                .disconnectParticipant(MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("이미 퇴장한 참여자의 재요청도 멱등 성공하고 LiveKit 토큰을 정리한다")
+    void leaveMeeting_succeedsIdempotentlyWhenAlreadyLeft() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                false
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                NEXT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                NEXT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+
+        ResponseLeaveMeetingDto response =
+                meetingService.leaveMeeting(NEXT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response.isKick()).isFalse();
+        assertThat(participant.isInMeeting()).isFalse();
+        verify(liveKitParticipantManager)
+                .disconnectParticipant(MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("현재 호스트는 일반 퇴장할 수 없다")
+    void leaveMeeting_rejectsCurrentHost() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
                 CURRENT_HOST_MEMBER_ID,
                 CURRENT_HOST_USER_ID,
                 TEAM_ID,
@@ -593,53 +669,15 @@ class MeetingServiceImplTest {
                 CURRENT_HOST_MEMBER_ID
         )).willReturn(Optional.of(participant));
 
-        ResponseLeaveMeetingDto response =
-                meetingService.leaveMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
-
-        assertThat(response.isKick()).isFalse();
-        assertThat(participant.isInMeeting()).isFalse();
-        assertThat(savedMeetingRoom.getHostId())
-                .isEqualTo(CURRENT_HOST_USER_ID);
-        verify(liveKitParticipantManager)
-                .disconnectParticipant(MEETING_ID, participantId);
-    }
-
-    @Test
-    @DisplayName("이미 퇴장한 참여자의 재요청도 멱등 성공하고 LiveKit 토큰을 정리한다")
-    void leaveMeeting_succeedsIdempotentlyWhenAlreadyLeft() {
-        long participantId = 30L;
-        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
-        Member member = createMemberWithId(
-                CURRENT_HOST_MEMBER_ID,
-                CURRENT_HOST_USER_ID,
-                TEAM_ID,
-                "참여자"
+        assertErrorCode(
+                () -> meetingService.leaveMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_HOST_CANNOT_LEAVE
         );
-        Participant participant = createParticipantWithId(
-                participantId,
-                CURRENT_HOST_MEMBER_ID,
-                "BE",
-                false
-        );
-
-        given(meetingRoomRepository.findActiveById(MEETING_ID))
-                .willReturn(Optional.of(savedMeetingRoom));
-        given(memberRepository.findByTeamIdAndUserId(
-                TEAM_ID,
-                CURRENT_HOST_USER_ID
-        )).willReturn(Optional.of(member));
-        given(participantRepository.findByMeetingRoomIdAndMemberId(
-                MEETING_ID,
-                CURRENT_HOST_MEMBER_ID
-        )).willReturn(Optional.of(participant));
-
-        ResponseLeaveMeetingDto response =
-                meetingService.leaveMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
-
-        assertThat(response.isKick()).isFalse();
-        assertThat(participant.isInMeeting()).isFalse();
-        verify(liveKitParticipantManager)
-                .disconnectParticipant(MEETING_ID, participantId);
+        assertThat(participant.isInMeeting()).isTrue();
+        verifyNoInteractions(liveKitParticipantManager);
     }
 
     @Test
@@ -724,14 +762,14 @@ class MeetingServiceImplTest {
         long participantId = 30L;
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
         Member member = createMemberWithId(
-                CURRENT_HOST_MEMBER_ID,
-                CURRENT_HOST_USER_ID,
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
                 TEAM_ID,
                 "참여자"
         );
         Participant participant = createParticipantWithId(
                 participantId,
-                CURRENT_HOST_MEMBER_ID,
+                NEXT_HOST_MEMBER_ID,
                 "BE",
                 true
         );
@@ -740,11 +778,11 @@ class MeetingServiceImplTest {
                 .willReturn(Optional.of(savedMeetingRoom));
         given(memberRepository.findByTeamIdAndUserId(
                 TEAM_ID,
-                CURRENT_HOST_USER_ID
+                NEXT_HOST_USER_ID
         )).willReturn(Optional.of(member));
         given(participantRepository.findByMeetingRoomIdAndMemberId(
                 MEETING_ID,
-                CURRENT_HOST_MEMBER_ID
+                NEXT_HOST_MEMBER_ID
         )).willReturn(Optional.of(participant));
         willThrow(new CustomException(
                 ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
@@ -753,7 +791,7 @@ class MeetingServiceImplTest {
 
         assertErrorCode(
                 () -> meetingService.leaveMeeting(
-                        CURRENT_HOST_USER_ID,
+                        NEXT_HOST_USER_ID,
                         MEETING_ID
                 ),
                 ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
