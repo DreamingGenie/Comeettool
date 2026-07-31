@@ -351,4 +351,185 @@ watch(teamId, loadDocuments)
   .document-row{grid-template-columns:38px minmax(0,1fr) auto}
   .document-row>.document-meta{display:none}
 }
+
+/* 코밋툴 공통 80% 스케일에 맞춘 문서 화면 */
+.document-heading {
+  min-height: 54px;
+  margin-bottom: 19.2px;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.document-heading h1 {
+  margin: 4.8px 0 2.4px;
+  font-size: 21.6px;
+  line-height: 1.3;
+  letter-spacing: -0.8px;
+}
+
+.document-heading p {
+  font-size: 11.2px;
+  line-height: 1.55;
+}
+
+.document-heading-actions .primary {
+  min-width: 104px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 7.2px;
+  font-size: 11.2px;
+}
+
+.document-stats {
+  gap: 16px;
+  margin-bottom: 19.2px;
+}
+
+.document-stats article {
+  grid-template-rows: auto auto;
+  align-content: center;
+  align-items: center;
+  row-gap: 12px;
+  min-height: 82px;
+  padding: 14px 20px;
+  border-width: 0.8px;
+  border-radius: 12px;
+}
+
+.document-stats span {
+  grid-row: 1;
+  grid-column: 1 / 3;
+  font-size: 13.6px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.25px;
+}
+
+.document-stats small {
+  grid-row: 2;
+  grid-column: 1;
+  font-size: 10.4px;
+  line-height: 1.45;
+}
+
+.document-stats b {
+  grid-row: 2;
+  grid-column: 2;
+  align-self: center;
+  max-width: 240px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.document-panel {
+  border-width: 0.8px;
+  border-radius: 12px;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.document-tools {
+  min-height: 64px;
+  gap: 9.6px;
+  padding: 12px 16px;
+}
+
+.document-search {
+  width: min(360px, 100%);
+  min-height: 40px;
+  padding: 8px 12px;
+  border-width: 0.8px;
+  border-radius: 7.2px;
+  font-size: 12.8px;
+}
+
+.document-search input {
+  font-size: 12.8px;
+}
+
+.document-tools select {
+  min-width: 120px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-width: 0.8px;
+  border-radius: 7.2px;
+  font-size: 12.8px;
+}
+
+.document-row {
+  grid-template-columns:
+    40px minmax(200px, 2fr) minmax(72px, 0.55fr)
+    minmax(170px, 0.9fr) auto;
+  gap: 14.4px;
+  min-height: 80px;
+  padding: 12px 16px;
+  border-bottom-width: 0.8px;
+}
+
+.document-icon {
+  width: 36.8px;
+  height: 36.8px;
+  border-radius: 9.6px;
+  font-size: 12px;
+}
+
+.document-title {
+  gap: 4px;
+}
+
+.document-title b {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.document-title span {
+  font-size: 10.4px;
+  line-height: 1.4;
+}
+
+.document-meta {
+  gap: 4px;
+}
+
+.document-meta small {
+  font-size: 10.4px;
+}
+
+.document-meta b {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-row-actions {
+  gap: 4.8px;
+}
+
+.document-row-actions button {
+  min-height: 30.4px;
+  padding: 6.4px 9.6px;
+  border-radius: 5.6px;
+  font-size: 11.2px;
+}
+
+.document-footer {
+  display: flex;
+  align-items: center;
+  height: 52.8px;
+  padding: 0 16px;
+  font-size: 11.2px;
+}
+
+@media (max-width: 1100px) {
+  .document-stats b {
+    max-width: 160px;
+  }
+
+  .document-row {
+    grid-template-columns:
+      40px minmax(170px, 1.6fr) minmax(64px, 0.45fr)
+      minmax(145px, 0.8fr) auto;
+    gap: 10px;
+  }
+}
 </style>

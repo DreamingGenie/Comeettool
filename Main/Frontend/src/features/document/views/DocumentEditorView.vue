@@ -456,6 +456,15 @@ function syncTitleFromEditor() {
   })
 }
 
+function refreshSyncedTitle() {
+  if (!titleEditor.value) return
+
+  titleEditor.value.view.dispatch(
+    titleEditor.value.state.tr.setMeta('collaboration-sync-render', true)
+  )
+  syncTitleFromEditor()
+}
+
 function normalizeDocumentTitle() {
   if (
     !canEdit.value ||
@@ -545,6 +554,7 @@ async function createCollaborativeEditor(document, generation) {
 
   collaborationProvider = new HocuspocusProvider({
     url: collaborationUrl,
+    autoConnect: false,
     name: `document:${document.documentId}:epoch:${document.stateEpoch}`,
     document: collaborationDocument,
     flushDelay: 30,
@@ -559,7 +569,7 @@ async function createCollaborativeEditor(document, generation) {
       if (generation !== connectionGeneration) return
       collaborationSynced.value = state !== false
       collaborationError.value = ''
-      syncTitleFromEditor()
+      refreshSyncedTitle()
     },
     onAwarenessChange: ({ states }) => {
       if (generation !== connectionGeneration) return
@@ -688,6 +698,8 @@ async function createCollaborativeEditor(document, generation) {
     onCreate: touchEditorState,
     onTransaction: touchEditorState
   })
+
+  await collaborationProvider.connect()
 }
 
 function isActive(name, attributes) {
@@ -1237,6 +1249,209 @@ onBeforeUnmount(() => {
 
   :deep(.document-prose) {
     padding: 26px 20px 60px;
+  }
+}
+
+/* 목록 화면 및 코밋툴 공통 80% 스케일과 동일한 편집기 UI */
+.document-editor-heading {
+  min-height: 54px;
+  margin-bottom: 16px;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.document-editor-heading h1 {
+  margin: 4.8px 0 2.4px;
+  font-size: 21.6px;
+  line-height: 1.3;
+  letter-spacing: -0.8px;
+}
+
+.document-editor-heading p {
+  font-size: 11.2px;
+  line-height: 1.55;
+}
+
+.document-heading-actions {
+  gap: 8px;
+}
+
+.permission-badge,
+.document-heading-actions .outline-btn {
+  min-height: 32px;
+  padding: 7.2px 11.2px;
+  border-radius: 16px;
+  font-size: 9.6px;
+}
+
+.document-heading-actions .outline-btn {
+  border-radius: 6.4px;
+}
+
+.document-meta-grid {
+  grid-template-columns:
+    minmax(260px, 1.55fr) minmax(88px, 0.42fr)
+    repeat(2, minmax(170px, 0.85fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.document-meta-grid article {
+  min-height: 62px;
+  gap: 5px;
+  padding: 11px 12px;
+  border-width: 0.8px;
+  border-radius: 8px;
+}
+
+.document-meta-grid span {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.document-meta-grid b {
+  font-size: 11.2px;
+  line-height: 1.35;
+}
+
+.editor-card {
+  border-width: 0.8px;
+  border-radius: 12px;
+  font-family: 'Noto Sans KR', sans-serif;
+  box-shadow: 0 8px 24px #2437610a;
+}
+
+.editor-card-header {
+  min-height: 80px;
+  gap: 12.8px;
+  padding: 17.6px 18px;
+  border-bottom-width: 0.8px;
+}
+
+.editor-card-eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.2px;
+}
+
+.document-title-editor {
+  width: min(520px, 46vw);
+  margin-top: 5px;
+}
+
+.document-title-editor :deep(.document-title-prose) {
+  font-size: 18.4px;
+  line-height: 1.45;
+  letter-spacing: -0.4px;
+}
+
+.editor-presence {
+  gap: 6.4px;
+}
+
+.participant-list,
+.editor-state {
+  font-size: 8.8px;
+}
+
+.participant-chip {
+  gap: 4px;
+  padding: 2.4px 6.4px 2.4px 3.2px;
+  border-width: 0.8px;
+}
+
+.participant-chip > i {
+  width: 19.2px;
+  height: 19.2px;
+  font-size: 7.2px;
+}
+
+.participant-chip > b {
+  font-size: 8.8px;
+}
+
+.editor-toolbar {
+  gap: 5.6px;
+  padding: 7.2px 10.4px;
+  border-bottom-width: 0.8px;
+}
+
+.toolbar-group {
+  gap: 2.4px;
+  padding-right: 5.6px;
+  border-right-width: 0.8px;
+}
+
+.editor-toolbar button {
+  min-width: 28.8px;
+  height: 27.2px;
+  padding: 0 7.2px;
+  border-width: 0.8px;
+  border-radius: 4.8px;
+  font-size: 9.6px;
+}
+
+.readonly-notice {
+  padding: 8px 12.8px;
+  border-bottom-width: 0.8px;
+  font-size: 9.6px;
+}
+
+.editor-content,
+:deep(.document-prose) {
+  min-height: 384px;
+}
+
+:deep(.document-prose) {
+  padding: 32px clamp(24px, 6vw, 76.8px) 68px;
+  color: var(--text);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 14.4px;
+  line-height: 1.8;
+}
+
+:deep(.document-prose h1) {
+  margin: 1.4em 0 0.55em;
+  font-size: 26.4px;
+  line-height: 1.3;
+  letter-spacing: -0.8px;
+}
+
+:deep(.document-prose h2) {
+  margin: 1.35em 0 0.5em;
+  font-size: 21.6px;
+  line-height: 1.35;
+  letter-spacing: -0.5px;
+}
+
+:deep(.document-prose h3) {
+  margin: 1.3em 0 0.45em;
+  font-size: 17.6px;
+  line-height: 1.4;
+}
+
+:deep(.document-prose p) {
+  margin: 0.65em 0;
+}
+
+:deep(.document-prose ul),
+:deep(.document-prose ol) {
+  margin: 0.7em 0;
+  padding-left: 1.5em;
+}
+
+.editor-footer {
+  padding: 8.8px 13.6px;
+  border-top-width: 0.8px;
+  font-size: 8.8px;
+}
+
+@media (max-width: 1100px) {
+  .document-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .document-title-input {
+    width: min(420px, 43vw);
   }
 }
 </style>
