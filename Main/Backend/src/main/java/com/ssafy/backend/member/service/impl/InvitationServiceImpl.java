@@ -116,7 +116,10 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
-    @Transactional
+    // noRollbackFor: "이미 멤버" 분기(중복 수락 등으로 도달)는 정리(invitation 삭제) 후 예외를 던지는데,
+    // CustomException은 RuntimeException이라 기본 규칙대로면 트랜잭션 전체가 롤백돼 방금 한 삭제까지 무효화된다.
+    // 이 메서드의 모든 CustomException 분기는 그 시점까지 반영해도 되는(오히려 반영돼야 하는) 상태이므로 안전하다.
+    @Transactional(noRollbackFor = CustomException.class)
     public void acceptInvitation(Long userId, String invitationId) {
         Invitation invitation = invitationRepository
                 .findByInvitationIdAndExpiresAtAfter(UUID.fromString(invitationId), OffsetDateTime.now())
@@ -130,6 +133,7 @@ public class InvitationServiceImpl implements InvitationService {
         Long teamId = invitation.getTeamId();
         if (memberRepository.existsByTeamIdAndUserId(teamId, userId)) {
             // 이미 멤버가 됐다는 것은 이 초대가 더 이상 의미 없다는 뜻 — 초대도 함께 정리한다.
+            // (주로 같은 초대를 중복/동시 수락했을 때 도달 — 먼저 처리된 요청이 이미 멤버로 등록을 마친 경우.)
             invitationRepository.delete(invitation);
             throw new CustomException(ErrorCode.MEMBER_ALREADY_JOINED);
         }
