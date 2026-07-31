@@ -213,5 +213,21 @@ class MemberRepositoryTest {
                     .contains(planning.getId())
                     .doesNotContain(dev.getId());
         }
+
+        @Test
+        @DisplayName("SPACE-03: 영문 이름은 대소문자를 무시하고 매칭한다(lower 적용)")
+        void matchesNameCaseInsensitively() {
+            User user = persistUser();
+            String tag = token();
+            // 대문자가 섞인 이름을 소문자 검색어로 찾을 수 있어야 lower() 필터가 검증된다.
+            Team team = persistTeam(user.getId(), false, "Alpha-" + tag);
+            persistMember(user.getId(), team.getId(), MemberAuthority.OWNER);
+
+            List<Object[]> lower = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), "alpha");
+            List<Object[]> upper = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), "ALPHA");
+
+            assertThat(lower).extracting(row -> ((Team) row[0]).getId()).contains(team.getId());
+            assertThat(upper).extracting(row -> ((Team) row[0]).getId()).contains(team.getId());
+        }
     }
 }
