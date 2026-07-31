@@ -35,11 +35,11 @@
 | SPACE-09 | `POST /spaces/{spaceId}/invite-links` | 초대 링크/코드 생성·공유 (게스트 초대 포함) | Owner | MVP |
 | SPACE-11 | `DELETE /spaces/{spaceId}` | 스페이스 삭제 | Owner | MVP |
 | SPACE-03 | `GET /spaces?search=` | 스페이스 검색 | 필요 | Extra |
-| SPACE-04 | `GET /spaces?sort=` | 스페이스 정렬 | 필요 | Extra |
+| SPACE-04 | `GET /spaces` · `PATCH /spaces/order` | 스페이스 정렬(사용자별 커스텀 순서, 기본 최신순) | 필요 | Extra |
 | SPACE-08 | `PATCH /spaces/{spaceId}` | 스페이스 정보 수정 | Owner | Extra |
-| SPACE-10 | `PATCH /spaces/{spaceId}/access-policy` | 접근 제한 정책 설정 | Owner | Extra |
 
 > SPACE-06 사이드바는 UI 내비게이션으로 전용 엔드포인트 없음(기존 조회 API 조합). SPACE-12 채팅은 WebSocket(§6).
+> SPACE-10(접근 제한 정책)은 제거됨 — 정책 정의가 부재하고, 후보 의미(공개범위·가입승인·권한세분화)가 모두 불필요/중복으로 판단(2026-07-31).
 
 ## 3. MEMBER — 멤버·권한
 

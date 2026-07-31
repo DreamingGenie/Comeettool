@@ -7,11 +7,11 @@
 - **스택**: Spring Boot 4.1.0 / Java 21 / Gradle / PostgreSQL / Spring Data JPA / Spring Security / JWT / Redis
   - (당초 계획은 Boot 3.x였으나, 현재 Spring Initializr가 3.x 미지원(>=4.0.0)이라 4.x 채택)
 - **패키지**: `com.ssafy.backend.{도메인}.{controller,domain,dto,exception,mapper,service}` ([02_code-convention](../00_Convention/02_code-convention.md))
-- **현황**: M1 공통 기반(F1~F4) 완료, M2 인증 진행 중(회원가입 완료·로그인 리뷰 중). 아래 진행 현황 참조
+- **현황**: M1 공통 기반(F1~F4)·M2 인증(A1~A5) 완료. M3는 SPACE 생성/목록/상세/나가기/삭제·Owner 이양까지 완료, MEMBER(B1~B4)·초대 링크(S3)·권한 공통 모듈(P1) 미착수. 아래 진행 현황 참조
 
 ---
 
-## 0. 진행 현황 (2026-07-25 기준)
+## 0. 진행 현황 (2026-07-31 기준)
 
 > 범례: ✅ 완료 · 🟡 진행 중 · ⬜ 미착수 · ⏸️ 보류. 상태는 `Main/Backend` 코드베이스(develop) 기준.
 
@@ -19,36 +19,38 @@
 | 이슈 | 범위 | 비고 |
 | --- | --- | --- |
 | **F1** 프로젝트 스캐폴딩 & 로컬 환경 | Spring Boot/Gradle, 패키지 구조, `application.yml`(local/prod) | Docker Compose는 미도입(로컬 설치 사용, "추후 전환") |
-| **F2** DB 스키마 구성(로컬) | DDL 적용, `ddl-auto: validate`, IDENTITY 보완 | MR #23 리뷰 대기(코드 완료) |
+| **F2** DB 스키마 구성(로컬) | DDL 적용, `ddl-auto: validate`, IDENTITY 보완 | develop 머지 완료 |
 | **F3** 공통 응답·예외 처리 | `ApiResponse`, `ErrorResponse`, `@RestControllerAdvice`, `ErrorCode` | README §0 규약 일치 |
 | **F4** 인증 기반(Security/JWT) | SecurityConfig, JWT 발급·검증 필터, BCrypt, Redis Refresh, JWKS | jjwt 사용 |
 | **A1** 회원가입 | `POST /auth/signup`, 이메일 중복·BCrypt·users insert | AUTH-01 |
+| **A2** 로그인·로그아웃·토큰 갱신 | `POST /auth/login`, `/auth/logout`, `/auth/token/refresh` | AUTH-02/03/04 |
+| **A3** 프로필 조회·수정 | `GET/PATCH /api/v1/users/me` (+프로필 이미지 업로드 `PATCH /me/profile-image`, 계획 외 추가) | AUTH-05/06 |
+| **A4** 비밀번호 변경·회원 탈퇴 | `PATCH /users/me/password`, `DELETE /users/me` | AUTH-07/08 |
+| **A5** 사용자 검색 | `GET /api/v1/users` | AUTH-10 |
+| **S1** 스페이스 생성·목록·상세 | `POST /spaces`, `GET /spaces`, `GET /spaces/{id}` | SPACE-01/02/05 |
+| **S2** 스페이스 나가기·삭제 | `DELETE /spaces/{id}/members/me`, `DELETE /spaces/{id}`, `PATCH /spaces/{id}/owner`(Owner 이양) | SPACE-07/11 |
 
 ### 진행 중 🟡
 | 이슈 | 범위 | 현재 상태 |
 | --- | --- | --- |
-| **A2** 로그인·로그아웃·토큰 갱신 | 로그인/로그아웃/refresh | 로그인만 구현(AUTH-02 MR 리뷰 대기), 로그아웃·토큰 갱신 미구현 |
+| **P1** 권한 검사 공통 모듈 | Owner/Member/Guest 접근 검사 | 전역 공통 모듈 미구현. `refactor S15P11A707-168`로 SPACE↔MEMBER 권한 분리 진행. document 도메인엔 자체 `authorization` 존재 |
 
 ### 미착수 ⬜
 | 이슈 | 범위 | 매핑 |
 | --- | --- | --- |
-| **A3** 프로필 조회·수정 | `GET/PATCH /users/me` | AUTH-05/06 |
-| **A4** 비밀번호 변경·회원 탈퇴 | 본인확인, soft delete | AUTH-07/08 |
-| **A5** 사용자 검색 | `GET /users?query=` | AUTH-10 |
-| **P1** 권한 검사 공통 모듈 | Owner/Member/Guest 접근 검사 | NFR 권한 |
-| **S1** 스페이스 생성·목록·상세 | teams, members | SPACE-01/02/05 |
-| **S2** 스페이스 나가기·삭제 | soft delete, Owner 권한 | SPACE-07/11 |
-| **S3** 초대 링크/코드 공유 | team_invite_link | SPACE-09 |
-| **B1** 멤버 조회 | 멤버·권한 목록 | MEMBER-01 |
+| **S3** 초대 링크/코드 공유 | `Team.inviteLink` 필드만 존재, 엔드포인트 미구현 | SPACE-09 |
+| **B1** 멤버 조회 | 멤버·권한 목록 (도메인 스캐폴딩만 존재, 컨트롤러·서비스 비어있음) | MEMBER-01 |
 | **B2** 멤버 초대·수락·거절 | Redis 대기 상태 | MEMBER-02/03/04 |
 | **B3** 멤버 강퇴·권한 변경 | Owner | MEMBER-05/06 |
 | **B4** 스페이스 프로필 | members.role·nickname | MEMBER-07 |
+
+> **참고.** 이 문서 범위(AUTH·SPACE·MEMBER) 밖으로, develop에는 **MEETING**(회의 생성·권한 부여·참가자 조회, `S15P11A707-91/23`)과 **DOCUMENT**(CRDT 협업 편집·문서 권한) 도메인이 별도로 구현되어 있다. 해당 도메인은 별도 계획 문서에서 관리한다.
 
 ### 보류 ⏸️
 | 이슈 | 범위 | 사유 |
 | --- | --- | --- |
 | **AUTH-09** 비밀번호 재설정 | 이메일 발송 | 이메일 인프라 후순위 |
-| MVP 이후 | 검색·정렬·정보수정·접근제한·채팅 | SPACE-03/04/08/10/12 등 |
+| MVP 이후 | 검색·정렬·정보수정·채팅 | SPACE-03/04/08/12 등 (SPACE-10 접근제한은 제거) |
 
 ---
 
@@ -116,7 +118,7 @@
 | **B2** 멤버 초대·수락·거절 | ⚠️ 결정 #1 선행 | MEMBER-02/03/04 |
 | **B3** 멤버 강퇴·권한 변경 | Owner | MEMBER-05/06 |
 | **B4** 스페이스 프로필 | members.role(직무)·nickname | MEMBER-07 |
-| (MVP 이후) 검색·정렬·정보수정·접근제한·채팅 | `Extra`/`SUB` | SPACE-03/04/08/10/12 |
+| (MVP 이후) 검색·정렬·정보수정·채팅 | `Extra`/`SUB` | SPACE-03/04/08/12 (SPACE-10 접근제한 제거) |
 
 ---
 
