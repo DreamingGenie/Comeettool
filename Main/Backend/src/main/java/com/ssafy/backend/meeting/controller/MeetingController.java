@@ -18,6 +18,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -84,6 +85,22 @@ public class MeetingController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("참가 중인 회의 목록을 조회했습니다.", response)
+        );
+    }
+
+    /**
+     * MEET-04: 현재 사용자를 회의에서 퇴장시킨다.
+     */
+    @PostMapping("/meetings/{meetingId}/leave")
+    public ResponseEntity<ApiResponse<ResponseLeaveMeetingDto>> leaveMeeting(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId
+    ) {
+        ResponseLeaveMeetingDto response =
+                meetingService.leaveMeeting(Long.parseLong(userId), meetingId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("퇴장되었습니다.", response)
         );
     }
 

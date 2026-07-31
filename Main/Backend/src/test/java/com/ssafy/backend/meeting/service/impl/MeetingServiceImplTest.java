@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -29,6 +30,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
@@ -37,6 +39,7 @@ import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
+import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
@@ -52,7 +55,7 @@ import com.ssafy.backend.space.repository.TeamRepository;
 /**
  * 회의 서비스 단위 테스트.
  * 저장소와 LiveKit 토큰 발급기를 Mock으로 분리하고
- * MEET-01·02·03·06·07·09의 정상 흐름과 접근 제한을 검증한다.
+ * MEET-01·02·03·04·06·07·09의 정상 흐름과 접근 제한을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 서비스 테스트")
@@ -88,6 +91,9 @@ class MeetingServiceImplTest {
 
     @Mock
     private LiveKitTokenProvider liveKitTokenProvider;
+
+    @Mock
+    private LiveKitParticipantManager liveKitParticipantManager;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -556,6 +562,203 @@ class MeetingServiceImplTest {
                 ErrorCode.MEETING_ACCESS_DENIED
         );
         verifyNoInteractions(liveKitTokenProvider);
+    }
+
+    @Test
+    @DisplayName("입장 중인 참여자가 퇴장하면 LiveKit 연결을 종료하고 상태를 false로 변경한다")
+    void leaveMeeting_disconnectsParticipantAndChangesPresence() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "호스트"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                CURRENT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                CURRENT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+
+        ResponseLeaveMeetingDto response =
+                meetingService.leaveMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response.isKick()).isFalse();
+        assertThat(participant.isInMeeting()).isFalse();
+        assertThat(savedMeetingRoom.getHostId())
+                .isEqualTo(CURRENT_HOST_USER_ID);
+        verify(liveKitParticipantManager)
+                .disconnectParticipant(MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("이미 퇴장한 참여자의 재요청도 멱등 성공하고 LiveKit 토큰을 정리한다")
+    void leaveMeeting_succeedsIdempotentlyWhenAlreadyLeft() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                CURRENT_HOST_MEMBER_ID,
+                "BE",
+                false
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                CURRENT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+
+        ResponseLeaveMeetingDto response =
+                meetingService.leaveMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response.isKick()).isFalse();
+        assertThat(participant.isInMeeting()).isFalse();
+        verify(liveKitParticipantManager)
+                .disconnectParticipant(MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("활성 회의를 찾을 수 없으면 퇴장을 거부한다")
+    void leaveMeeting_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.leaveMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(
+                memberRepository,
+                participantRepository,
+                liveKitParticipantManager
+        );
+    }
+
+    @Test
+    @DisplayName("요청자가 회의의 상위 팀 멤버가 아니면 퇴장을 거부한다")
+    void leaveMeeting_rejectsRequesterOutsideTeam() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                CURRENT_HOST_USER_ID
+        )).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.leaveMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(
+                participantRepository,
+                liveKitParticipantManager
+        );
+    }
+
+    @Test
+    @DisplayName("팀 멤버라도 회의에 초대되지 않았으면 퇴장을 거부한다")
+    void leaveMeeting_rejectsUninvitedRequester() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "요청자"
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                CURRENT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.leaveMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(liveKitParticipantManager);
+    }
+
+    @Test
+    @DisplayName("LiveKit 연결 종료에 실패하면 입장 상태를 변경하지 않는다")
+    void leaveMeeting_keepsPresenceWhenLiveKitDisconnectFails() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                CURRENT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(
+                TEAM_ID,
+                CURRENT_HOST_USER_ID
+        )).willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+        willThrow(new CustomException(
+                ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
+        )).given(liveKitParticipantManager)
+                .disconnectParticipant(MEETING_ID, participantId);
+
+        assertErrorCode(
+                () -> meetingService.leaveMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
+        );
+        assertThat(participant.isInMeeting()).isTrue();
     }
 
     @Test
