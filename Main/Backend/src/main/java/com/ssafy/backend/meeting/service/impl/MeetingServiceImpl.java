@@ -11,12 +11,14 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
-import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
+import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
@@ -48,6 +50,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final MeetingMapper meetingMapper;
+    private final LiveKitTokenProvider liveKitTokenProvider;
 
     /**
      * MEET-01: 회의 생성.
@@ -96,6 +99,42 @@ public class MeetingServiceImpl implements MeetingService {
                 savedMeetingRoom,
                 requesterUserId,
                 INITIAL_PARTICIPANT_COUNT
+        );
+    }
+
+    /**
+     * MEET-03: 초대된 참여자의 LiveKit 회의 입장 정보를 발급한다.
+     */
+    @Override
+    @Transactional
+    public ResponseJoinMeetingDto joinMeeting(
+            Long requesterUserId,
+            Long meetingId
+    ) {
+        MeetingRoom meetingRoom = meetingRoomRepository.findActiveById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        Member member = memberRepository
+                .findByTeamIdAndUserId(meetingRoom.getTeamId(), requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        Participant participant = participantRepository
+                .findByMeetingRoomIdAndMemberId(meetingId, member.getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        LiveKitConnectionInfo connectionInfo = liveKitTokenProvider.generateJoinToken(
+                meetingRoom.getId(),
+                participant.getId(),
+                member.getNickname()
+        );
+        participant.enterMeeting();
+
+        return new ResponseJoinMeetingDto(
+                meetingRoom.getId(),
+                participant.getParticipantRole(),
+                meetingRoom.isHost(requesterUserId),
+                connectionInfo.token(),
+                connectionInfo.url()
         );
     }
 
