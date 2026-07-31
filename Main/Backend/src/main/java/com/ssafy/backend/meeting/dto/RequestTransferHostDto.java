@@ -1,6 +1,7 @@
 package com.ssafy.backend.meeting.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 /**
  * MEET-06 호스트 양도 요청.
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
  */
 public record RequestTransferHostDto(
         @NotNull(message = "새 호스트 ID는 필수입니다.")
+        @Positive(message = "새 호스트 ID는 양수여야 합니다.")
         Long nextHostParticipantId
 ) {
 }

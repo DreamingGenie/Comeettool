@@ -15,9 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
-import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
-import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.service.MeetingService;
 
@@ -64,6 +65,24 @@ public class MeetingController {
         ResponseJoinMeetingDto response =
                 meetingService.joinMeeting(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("회의 입장 성공", response));
+    }
+
+    /**
+     * MEET-02: 로그인 사용자가 참가 권한을 가진 진행 중인 회의 목록을 조회한다.
+     */
+    @GetMapping("/spaces/{spaceId}/meetings")
+    public ResponseEntity<ApiResponse<List<ResponseMeetingListDto>>> getParticipatingMeetings(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId
+    ) {
+        List<ResponseMeetingListDto> response = meetingService.getParticipatingMeetings(
+                Long.parseLong(userId),
+                spaceId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("참가 중인 회의 목록을 조회했습니다.", response)
+        );
     }
 
     /**
