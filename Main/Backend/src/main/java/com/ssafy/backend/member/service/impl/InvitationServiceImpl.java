@@ -35,6 +35,7 @@ public class InvitationServiceImpl implements InvitationService {
 
     private static final Duration TTL = Duration.ofDays(1);
     private static final String UNKNOWN_INVITER_NICKNAME = "(알 수 없음)";
+    private static final long MAX_MEMBER_COUNT = 10;
 
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
@@ -64,6 +65,13 @@ public class InvitationServiceImpl implements InvitationService {
         OffsetDateTime now = OffsetDateTime.now();
         if (invitationRepository.existsByTeamIdAndTargetUserIdAndExpiresAtAfter(spaceId, targetUserId, now)) {
             throw new CustomException(ErrorCode.INVITATION_ALREADY_PENDING);
+        }
+
+        // 정책: 스페이스당 멤버 최대 10명. 대상이 이미 멤버/초대된 상태가 아닐 때만 의미 있는 체크라 마지막에 둔다.
+        // (이 시점의 카운트는 "현재 멤버 수" 기준 — 대기 중인 다른 초대까지 자리를 미리 예약해두지는 않는다.
+        // 최종 방어는 실제로 인원이 느는 시점인 acceptInvitation()에서 한다.)
+        if (memberRepository.countByTeamId(spaceId) >= MAX_MEMBER_COUNT) {
+            throw new CustomException(ErrorCode.MEMBER_LIMIT_EXCEEDED);
         }
 
         // 위 체크를 통과했다면 이 (team_id, target_user_id) 쌍의 행이 남아있어도 반드시 만료된 것이다.
@@ -144,6 +152,13 @@ public class InvitationServiceImpl implements InvitationService {
             // (주로 같은 초대를 중복/동시 수락했을 때 도달 — 먼저 처리된 요청이 이미 멤버로 등록을 마친 경우.)
             invitationRepository.delete(invitation);
             throw new CustomException(ErrorCode.MEMBER_ALREADY_JOINED);
+        }
+
+        // 정책: 스페이스당 멤버 최대 10명 — 실제로 인원이 느는 시점의 최종 방어선. inviteMember()의 체크는
+        // 초대 시점 기준이라, 그 사이 다른 초대들이 먼저 수락되면서 자리가 다 찼을 수 있다.
+        // 자리가 없을 뿐 초대 자체는 여전히 유효할 수 있으므로(누군가 나가면 다시 수락 가능) 초대는 지우지 않는다.
+        if (memberRepository.countByTeamId(teamId) >= MAX_MEMBER_COUNT) {
+            throw new CustomException(ErrorCode.MEMBER_LIMIT_EXCEEDED);
         }
 
         User user = userRepository.findById(userId)

@@ -245,6 +245,26 @@ class InvitationServiceImplTest {
         }
 
         @Test
+        @DisplayName("스페이스 멤버가 이미 10명이면 MEMBER_LIMIT_EXCEEDED 예외가 발생하고 초대를 저장하지 않는다")
+        void inviteMember_throwsWhenTeamAtMemberLimit() {
+            Team team = teamWithId(TEAM_ID, INVITER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(TEAM_ID)).willReturn(Optional.of(team));
+            given(userRepository.existsById(TARGET_USER_ID)).willReturn(true);
+            given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, TARGET_USER_ID)).willReturn(false);
+            given(invitationRepository.existsByTeamIdAndTargetUserIdAndExpiresAtAfter(
+                    eq(TEAM_ID), eq(TARGET_USER_ID), any(OffsetDateTime.class))).willReturn(false);
+            given(memberRepository.countByTeamId(TEAM_ID)).willReturn(10L);
+
+            assertThatThrownBy(() -> invitationService.inviteMember(
+                    INVITER_ID, TEAM_ID, new RequestInviteMemberDto(TARGET_USER_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEMBER_LIMIT_EXCEEDED);
+            verify(invitationRepository, never()).deleteByTeamIdAndTargetUserId(any(), any());
+            verify(invitationRepository, never()).saveAndFlush(any(Invitation.class));
+        }
+
+        @Test
         @DisplayName("동시 요청으로 유니크 제약(team_id, target_user_id)을 위반하면 INVITATION_ALREADY_PENDING으로 변환된다")
         void inviteMember_translatesUniqueConstraintViolationToPending() {
             Team team = teamWithId(TEAM_ID, INVITER_ID);
@@ -463,6 +483,25 @@ class InvitationServiceImplTest {
                     .isEqualTo(ErrorCode.MEMBER_ALREADY_JOINED);
             verify(memberRepository, never()).save(any(Member.class));
             verify(invitationRepository).delete(invitation);
+        }
+
+        @Test
+        @DisplayName("스페이스 멤버가 이미 10명이면 MEMBER_LIMIT_EXCEEDED 예외가 발생하고, 초대는 지우지 않는다(자리가 나면 재수락 가능해야 함)")
+        void acceptInvitation_throwsWhenTeamAtMemberLimit() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, ACCEPTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+            given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(false);
+            given(memberRepository.countByTeamId(TEAM_ID)).willReturn(10L);
+
+            assertThatThrownBy(
+                    () -> invitationService.acceptInvitation(ACCEPTOR_ID, invitation.getInvitationId().toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEMBER_LIMIT_EXCEEDED);
+            verify(memberRepository, never()).save(any(Member.class));
+            verify(invitationRepository, never()).delete(any(Invitation.class));
         }
     }
 }
