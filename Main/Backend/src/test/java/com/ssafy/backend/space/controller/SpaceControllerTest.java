@@ -118,7 +118,7 @@ class SpaceControllerTest {
         void findSpaceList_returns200WithSpaces() throws Exception {
             ResponseSpaceListDto item =
                     new ResponseSpaceListDto(10L, "팀A", "설명", "#123456", null, 7L, "OWNER", 3L);
-            given(spaceService.findSpaceList(7L)).willReturn(List.of(item));
+            given(spaceService.findSpaceList(7L, null)).willReturn(List.of(item));
 
             mockMvc.perform(get("/api/v1/spaces"))
                     .andExpect(status().isOk())
@@ -131,7 +131,7 @@ class SpaceControllerTest {
         @Test
         @DisplayName("참여 스페이스가 없으면 200과 빈 배열(null 아님)을 반환한다")
         void findSpaceList_returns200WithEmptyArray() throws Exception {
-            given(spaceService.findSpaceList(7L)).willReturn(List.of());
+            given(spaceService.findSpaceList(7L, null)).willReturn(List.of());
 
             mockMvc.perform(get("/api/v1/spaces"))
                     .andExpect(status().isOk())
@@ -139,6 +139,18 @@ class SpaceControllerTest {
                     // FE 계약: 빈 목록은 null이 아니라 [] 로 직렬화된다.
                     .andExpect(jsonPath("$.data").isArray())
                     .andExpect(jsonPath("$.data").isEmpty());
+        }
+
+        @Test
+        @DisplayName("SPACE-03: search 파라미터를 서비스에 전달한다")
+        void findSpaceList_passesSearchParam() throws Exception {
+            given(spaceService.findSpaceList(7L, "기획")).willReturn(List.of());
+
+            mockMvc.perform(get("/api/v1/spaces").param("search", "기획"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+            verify(spaceService).findSpaceList(7L, "기획");
         }
     }
 

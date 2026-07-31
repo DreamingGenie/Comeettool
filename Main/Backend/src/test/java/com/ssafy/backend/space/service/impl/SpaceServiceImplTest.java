@@ -177,9 +177,9 @@ class SpaceServiceImplTest {
         @Test
         @DisplayName("참여 중인 스페이스가 없으면 빈 목록을 반환한다")
         void findSpaceList_returnsEmptyWhenNoneJoined() {
-            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID)).willReturn(List.of());
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null)).willReturn(List.of());
 
-            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID, null);
 
             assertThat(result).isEmpty();
             verify(memberRepository, never()).countMembersByTeamIds(anyList());
@@ -190,19 +190,40 @@ class SpaceServiceImplTest {
         void findSpaceList_fillsMyRoleAndMemberCount() {
             // given
             Team team = teamWithId(TEAM_ID, USER_ID);
-            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID))
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null))
                     .willReturn(List.<Object[]>of(new Object[]{team, MemberAuthority.OWNER}));
             given(memberRepository.countMembersByTeamIds(List.of(TEAM_ID)))
                     .willReturn(List.<Object[]>of(new Object[]{TEAM_ID, 3L}));
 
             // when
-            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID);
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID, null);
 
             // then
             assertThat(result).hasSize(1);
             assertThat(result.get(0).spaceId()).isEqualTo(TEAM_ID);
             assertThat(result.get(0).myAuthority()).isEqualTo("OWNER");
             assertThat(result.get(0).memberCount()).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("SPACE-03: 공백뿐인 검색어는 null로 정규화해 전체 목록을 조회한다")
+        void findSpaceList_blankSearchNormalizedToNull() {
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null)).willReturn(List.of());
+
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID, "   ");
+
+            assertThat(result).isEmpty();
+            verify(memberRepository).findActiveTeamsWithMyAuthority(USER_ID, null);
+        }
+
+        @Test
+        @DisplayName("SPACE-03: 검색어는 앞뒤 공백을 제거해 이름 필터로 전달한다")
+        void findSpaceList_trimsSearchKeyword() {
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, "기획")).willReturn(List.of());
+
+            spaceService.findSpaceList(USER_ID, "  기획  ");
+
+            verify(memberRepository).findActiveTeamsWithMyAuthority(USER_ID, "기획");
         }
     }
 

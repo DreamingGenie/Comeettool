@@ -55,7 +55,11 @@ class MemberRepositoryTest {
     }
 
     private Team persistTeam(Long ownerId, boolean deleted) {
-        Team team = Team.builder().name("팀-" + token()).ownerId(ownerId).color("#123456").build();
+        return persistTeam(ownerId, deleted, "팀-" + token());
+    }
+
+    private Team persistTeam(Long ownerId, boolean deleted, String name) {
+        Team team = Team.builder().name(name).ownerId(ownerId).color("#123456").build();
         if (deleted) {
             team.softDelete(OffsetDateTime.now());
         }
@@ -155,7 +159,7 @@ class MemberRepositoryTest {
             Team team = persistTeam(user.getId(), false);
             persistMember(user.getId(), team.getId(), MemberAuthority.OWNER);
 
-            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId());
+            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), null);
 
             assertThat(rows).hasSize(1);
             assertThat((Team) rows.get(0)[0]).extracting(Team::getId).isEqualTo(team.getId());
@@ -171,7 +175,7 @@ class MemberRepositoryTest {
             persistMember(user.getId(), active.getId(), MemberAuthority.OWNER);
             persistMember(user.getId(), deleted.getId(), MemberAuthority.OWNER);
 
-            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId());
+            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), null);
 
             assertThat(rows).extracting(row -> ((Team) row[0]).getId())
                     .containsExactly(active.getId());
@@ -187,10 +191,43 @@ class MemberRepositoryTest {
             persistMember(me.getId(), myTeam.getId(), MemberAuthority.OWNER);
             persistMember(other.getId(), othersTeam.getId(), MemberAuthority.OWNER);
 
-            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(me.getId());
+            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(me.getId(), null);
 
             assertThat(rows).extracting(row -> ((Team) row[0]).getId())
                     .containsExactly(myTeam.getId());
+        }
+
+        @Test
+        @DisplayName("SPACE-03: search가 있으면 이름 부분 일치(대소문자 무시)로만 반환한다")
+        void filtersByNameWhenSearchGiven() {
+            User user = persistUser();
+            String tag = token();
+            Team planning = persistTeam(user.getId(), false, "기획-" + tag);
+            Team dev = persistTeam(user.getId(), false, "개발-" + tag);
+            persistMember(user.getId(), planning.getId(), MemberAuthority.OWNER);
+            persistMember(user.getId(), dev.getId(), MemberAuthority.OWNER);
+
+            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), "기획");
+
+            assertThat(rows).extracting(row -> ((Team) row[0]).getId())
+                    .contains(planning.getId())
+                    .doesNotContain(dev.getId());
+        }
+
+        @Test
+        @DisplayName("SPACE-03: 영문 이름은 대소문자를 무시하고 매칭한다(lower 적용)")
+        void matchesNameCaseInsensitively() {
+            User user = persistUser();
+            String tag = token();
+            // 대문자가 섞인 이름을 소문자 검색어로 찾을 수 있어야 lower() 필터가 검증된다.
+            Team team = persistTeam(user.getId(), false, "Alpha-" + tag);
+            persistMember(user.getId(), team.getId(), MemberAuthority.OWNER);
+
+            List<Object[]> lower = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), "alpha");
+            List<Object[]> upper = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), "ALPHA");
+
+            assertThat(lower).extracting(row -> ((Team) row[0]).getId()).contains(team.getId());
+            assertThat(upper).extracting(row -> ((Team) row[0]).getId()).contains(team.getId());
         }
     }
 }
