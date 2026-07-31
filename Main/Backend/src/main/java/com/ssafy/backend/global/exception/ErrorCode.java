@@ -35,6 +35,9 @@ public enum ErrorCode {
     SPACE_TRANSFER_TARGET_NOT_ELIGIBLE(HttpStatus.BAD_REQUEST, "SPACE_TRANSFER_TARGET_NOT_ELIGIBLE",
             "게스트에게는 소유권을 위임할 수 없습니다."),
 
+    MEMBER_ALREADY_JOINED(HttpStatus.CONFLICT, "MEMBER_ALREADY_JOINED", "이미 스페이스의 멤버입니다."),
+    INVITATION_ALREADY_PENDING(HttpStatus.CONFLICT, "INVITATION_ALREADY_PENDING", "이미 대기 중인 초대가 있습니다."),
+
     MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_NOT_FOUND", "회의를 찾을 수 없습니다."),
     MEETING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MEETING_ACCESS_DENIED",
             "해당 회의에 접근할 권한이 없습니다."),

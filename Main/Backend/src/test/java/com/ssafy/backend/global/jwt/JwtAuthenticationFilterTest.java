@@ -108,6 +108,14 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("MEMBER-02 멤버 초대 - 토큰 없음 → 401 AUTH_UNAUTHORIZED")
+    void inviteMemberWithoutTokenReturns401Unauthorized() throws Exception {
+        mockMvc.perform(post("/api/v1/spaces/{spaceId}/invitations", 1L))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(containsString("AUTH_UNAUTHORIZED")));
+    }
+
+    @Test
     @DisplayName("보호 경로 - 무효 토큰 → 401 AUTH_TOKEN_INVALID")
     void protectedInvalidTokenReturns401Invalid() throws Exception {
         mockMvc.perform(get(PROTECTED).header("Authorization", "Bearer not.a.jwt"))
