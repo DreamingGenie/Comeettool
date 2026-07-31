@@ -240,8 +240,6 @@ public class MeetingServiceImpl implements MeetingService {
                 participant.getId()
         );
 
-        participant.leaveMeeting();
-
         return new ResponseLeaveMeetingDto(false);
     }
 

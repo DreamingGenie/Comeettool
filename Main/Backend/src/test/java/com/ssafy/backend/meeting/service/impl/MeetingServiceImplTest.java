@@ -565,8 +565,8 @@ class MeetingServiceImplTest {
     }
 
     @Test
-    @DisplayName("입장 중인 참여자가 퇴장하면 LiveKit 연결을 종료하고 상태를 false로 변경한다")
-    void leaveMeeting_disconnectsParticipantAndChangesPresence() {
+    @DisplayName("입장 중인 비호스트가 퇴장하면 LiveKit 연결 종료를 요청한다")
+    void leaveMeeting_disconnectsParticipantWithoutChangingPresence() {
         long participantId = 30L;
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
         Member member = createMemberWithId(
@@ -597,7 +597,7 @@ class MeetingServiceImplTest {
                 meetingService.leaveMeeting(NEXT_HOST_USER_ID, MEETING_ID);
 
         assertThat(response.isKick()).isFalse();
-        assertThat(participant.isInMeeting()).isFalse();
+        assertThat(participant.isInMeeting()).isTrue();
         verify(liveKitParticipantManager)
                 .disconnectParticipant(MEETING_ID, participantId);
     }

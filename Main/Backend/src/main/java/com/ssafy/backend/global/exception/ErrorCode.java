@@ -51,6 +51,11 @@ public enum ErrorCode {
             "팀 스페이스에서 동시에 진행할 수 있는 회의는 최대 3개입니다."),
     MEETING_LIVEKIT_DISCONNECT_FAILED(HttpStatus.BAD_GATEWAY, "MEETING_LIVEKIT_DISCONNECT_FAILED",
             "회의 연결 종료 처리에 실패했습니다."),
+    MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED(
+            HttpStatus.UNAUTHORIZED,
+            "MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED",
+            "유효하지 않은 LiveKit 웹훅 요청입니다."
+    ),
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "해당 문서에 접근할 권한이 없습니다."),
     DOCUMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_CREATE_FORBIDDEN", "문서를 생성할 권한이 없습니다."),

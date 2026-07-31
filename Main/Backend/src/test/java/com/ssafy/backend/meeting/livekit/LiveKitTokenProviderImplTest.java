@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.livekit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
@@ -15,12 +16,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.meeting.livekit.config.LiveKitConfiguration;
 import com.ssafy.backend.meeting.livekit.config.LiveKitProperties;
 
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import io.livekit.server.WebhookReceiver;
+import livekit.LivekitWebhook;
+
 @DisplayName("LiveKit 입장 토큰 발급 테스트")
 class LiveKitTokenProviderImplTest {
 
     private static final String LIVEKIT_URL = "wss://test.livekit.cloud";
     private static final String API_KEY = "test-api-key";
-    private static final String API_SECRET = "test-api-secret-value";
+    private static final String API_SECRET =
+            "test-api-secret-value-at-least-32-bytes";
 
     private final LiveKitProperties liveKitProperties = new LiveKitProperties(
             LIVEKIT_URL,
@@ -80,5 +87,47 @@ class LiveKitTokenProviderImplTest {
         assertThat(new LiveKitConfiguration()
                 .liveKitRoomServiceClient(liveKitProperties))
                 .isNotNull();
+    }
+
+    @Test
+    @DisplayName("LiveKit 웹훅 서명 검증기를 공통 Bean으로 생성할 수 있다")
+    void liveKitWebhookReceiver_createsReceiver() {
+        assertThat(new LiveKitConfiguration()
+                .liveKitWebhookReceiver(liveKitProperties))
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("서명 JWT와 원문 본문 해시가 일치하는 웹훅을 검증한다")
+    void liveKitWebhookReceiver_verifiesSignedRawBody() throws Exception {
+        String rawBody = """
+                {
+                  "id": "event-id",
+                  "event": "participant_left",
+                  "room": {"name": "meeting-100"},
+                  "participant": {"identity": "participant-30"}
+                }
+                """;
+        String bodyHash = Base64.getEncoder().encodeToString(
+                MessageDigest.getInstance("SHA-256")
+                        .digest(rawBody.getBytes(StandardCharsets.UTF_8))
+        );
+        String authorizationHeader = Jwts.builder()
+                .issuer(API_KEY)
+                .claim("sha256", bodyHash)
+                .signWith(Keys.hmacShaKeyFor(
+                        API_SECRET.getBytes(StandardCharsets.UTF_8)
+                ))
+                .compact();
+        WebhookReceiver webhookReceiver = new LiveKitConfiguration()
+                .liveKitWebhookReceiver(liveKitProperties);
+
+        LivekitWebhook.WebhookEvent webhookEvent =
+                webhookReceiver.receive(rawBody, authorizationHeader);
+
+        assertThat(webhookEvent.getEvent()).isEqualTo("participant_left");
+        assertThat(webhookEvent.getRoom().getName()).isEqualTo("meeting-100");
+        assertThat(webhookEvent.getParticipant().getIdentity())
+                .isEqualTo("participant-30");
     }
 }
