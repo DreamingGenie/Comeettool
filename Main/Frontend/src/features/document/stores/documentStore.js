@@ -1,5 +1,10 @@
 import { reactive } from 'vue'
 import { dataSource } from '../../../shared/api/dataSource'
+import {
+  mapCollaborationSession,
+  mapDocumentDetail,
+  mapDocumentSummary
+} from '../model/documentMapper'
 
 const state = reactive({
   documents: [],
@@ -14,22 +19,8 @@ const state = reactive({
   error: ''
 })
 
-function toSummary(document) {
-  if (!document) return null
-
-  return {
-    documentId: document.documentId,
-    teamId: document.teamId,
-    title: document.title,
-    finalVersion: document.finalVersion,
-    updatedAt: document.updatedAt
-  }
-}
-
 function upsertDocument(document) {
-  const summary = toSummary(document)
-  if (!summary) return
-
+  const summary = mapDocumentSummary(document)
   const index = state.documents.findIndex(
     item => item.documentId === summary.documentId
   )
@@ -53,7 +44,9 @@ export const documentStore = {
 
     try {
       const documents = await dataSource.document.getDocumentList(teamId)
-      state.documents = Array.isArray(documents) ? documents : []
+      state.documents = Array.isArray(documents)
+        ? documents.map(mapDocumentSummary)
+        : []
       state.currentTeamId = String(teamId)
       return state.documents
     } catch (error) {
@@ -68,7 +61,8 @@ export const documentStore = {
     state.error = ''
 
     try {
-      const document = await dataSource.document.getDocument(documentId)
+      const response = await dataSource.document.getDocument(documentId)
+      const document = mapDocumentDetail(response)
       state.currentDocument = document
       upsertDocument(document)
       return document
@@ -85,7 +79,8 @@ export const documentStore = {
     state.error = ''
 
     try {
-      const document = await dataSource.document.createDocument(teamId)
+      const response = await dataSource.document.createDocument(teamId)
+      const document = mapDocumentDetail(response)
       state.currentDocument = document
       state.currentTeamId = String(teamId)
       upsertDocument(document)
@@ -102,8 +97,9 @@ export const documentStore = {
     state.error = ''
 
     try {
-      const collaboration =
+      const response =
         await dataSource.document.issueCollaborationToken(documentId)
+      const collaboration = mapCollaborationSession(response)
       state.collaboration = collaboration
       return collaboration
     } catch (error) {
