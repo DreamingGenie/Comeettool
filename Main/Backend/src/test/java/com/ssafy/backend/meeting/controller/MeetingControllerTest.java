@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,16 +32,17 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
-import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
-import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
- * MEET-06 호스트 양도 및 MEET-07 참여자 조회 컨트롤러 테스트.
- * 실제 DB·시큐리티 필터 없이 API 매핑, 인증 userId 전달, 입력 검증과 공통 응답 형식을 검증한다.
+ * 회의 컨트롤러 단위 테스트.
+ * 실제 DB·시큐리티 필터 없이 MEET-01·02·06·07 매핑과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 API 테스트")
@@ -69,6 +71,11 @@ class MeetingControllerTest {
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(HOST_USER_ID, null, List.of()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -166,6 +173,44 @@ class MeetingControllerTest {
     }
 
     @Test
+    @DisplayName("참가 중인 회의 목록을 조회하면 200과 회의 정보를 반환한다")
+    void getParticipatingMeetings_returns200WithMeetingList() throws Exception {
+        ResponseMeetingListDto meeting = new ResponseMeetingListDto(
+                MEETING_ID,
+                SPACE_ID,
+                "데일리 미팅",
+                new ResponseMeetingHostDto(1L),
+                CREATED_AT,
+                2L,
+                false
+        );
+        given(meetingService.getParticipatingMeetings(1L, SPACE_ID))
+                .willReturn(List.of(meeting));
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/meetings", SPACE_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("참가 중인 회의 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data[0].meetingRoomId").value(100))
+                .andExpect(jsonPath("$.data[0].teamId").value(10))
+                .andExpect(jsonPath("$.data[0].meetingRoomName").value("데일리 미팅"))
+                .andExpect(jsonPath("$.data[0].host.userId").value(1))
+                .andExpect(jsonPath("$.data[0].participantCount").value(2))
+                .andExpect(jsonPath("$.data[0].isInMeeting").value(false));
+    }
+
+    @Test
+    @DisplayName("회의 목록 조회 시 스페이스 멤버가 아니면 403을 반환한다")
+    void getParticipatingMeetings_returns403WhenRequesterIsNotSpaceMember() throws Exception {
+        given(meetingService.getParticipatingMeetings(1L, SPACE_ID))
+                .willThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/meetings", SPACE_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+    }
+
+    @Test
     @DisplayName("회의 입장에 성공하면 LiveKit 연결 정보를 반환한다")
     void joinMeeting_returns200WithLiveKitConnectionInfo() throws Exception {
         ResponseJoinMeetingDto response = new ResponseJoinMeetingDto(
@@ -223,6 +268,18 @@ class MeetingControllerTest {
     @DisplayName("새 호스트 Participant ID가 없으면 400을 반환한다")
     void transferHost_returns400WhenParticipantIdIsNull() throws Exception {
         RequestTransferHostDto request = new RequestTransferHostDto(null);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/grant", MEETING_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("새 호스트 Participant ID가 0이면 400을 반환한다")
+    void transferHost_returns400WhenParticipantIdIsZero() throws Exception {
+        RequestTransferHostDto request = new RequestTransferHostDto(0L);
 
         mockMvc.perform(post("/api/v1/meetings/{meetingId}/grant", MEETING_ID)
                         .contentType(MediaType.APPLICATION_JSON)

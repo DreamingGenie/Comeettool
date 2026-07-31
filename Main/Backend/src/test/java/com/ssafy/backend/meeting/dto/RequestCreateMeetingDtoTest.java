@@ -1,4 +1,3 @@
-
 package com.ssafy.backend.meeting.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +14,10 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
+/**
+ * MEET-01 회의 생성 요청 DTO 검증 테스트.
+ * 회의방 이름의 필수 입력, 공백 금지, 최대 길이 규칙을 검증한다.
+ */
 @DisplayName("RequestCreateMeetingDto 검증")
 class RequestCreateMeetingDtoTest {
 

@@ -1,5 +1,6 @@
 package com.ssafy.backend.meeting.service.impl;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -11,9 +12,10 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
-import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
-import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
@@ -34,8 +36,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 회의 도메인 서비스.
- * MEET-06 호스트 양도와 MEET-07 현재 참여자 조회를 처리한다.
- * 회의 생성과 호스트 양도 비즈니스 로직.
+ * MEET-01 생성, MEET-02 목록, MEET-03 RTC 입장,
+ * MEET-06 호스트 양도, MEET-07 현재 참여자 조회를 처리한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -100,6 +102,72 @@ public class MeetingServiceImpl implements MeetingService {
                 requesterUserId,
                 INITIAL_PARTICIPANT_COUNT
         );
+    }
+
+    /**
+     * MEET-02: 로그인 사용자가 참가 권한을 가진 진행 중인 회의 목록 조회.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResponseMeetingListDto> getParticipatingMeetings(
+            Long requesterUserId,
+            Long spaceId
+    ) {
+        // 1. 삭제되지 않은 스페이스인지 확인한다.
+        teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        // 2. 로그인 사용자의 스페이스 Member를 조회하며 접근 권한을 확인한다.
+        Member requesterMember = memberRepository
+                .findByTeamIdAndUserId(spaceId, requesterUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+        // 3. Member가 참가 권한을 가진 Participant를 조회한다.
+        // 일반 퇴장 후 재입장을 허용하므로 isInMeeting 값으로 여기서 제외하지 않는다.
+        List<Participant> myParticipants = participantRepository
+                .findAllByMemberIdOrderByIdAsc(requesterMember.getId());
+        if (myParticipants.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Boolean> myConnectionStateByMeetingRoomId = myParticipants.stream()
+                .collect(Collectors.toMap(
+                        Participant::getMeetingRoomId,
+                        Participant::isInMeeting,
+                        (first, second) -> first || second
+                ));
+
+        // 4. Participant가 참조하는 회의 중 같은 스페이스의 삭제되지 않은 회의만 조회한다.
+        List<MeetingRoom> meetingRooms = meetingRoomRepository.findAllActiveByIdsAndTeamId(
+                List.copyOf(myConnectionStateByMeetingRoomId.keySet()),
+                spaceId
+        );
+        if (meetingRooms.isEmpty()) {
+            return List.of();
+        }
+
+        // 5. 각 회의의 현재 접속자 수를 일괄 집계해 N+1 쿼리를 방지한다.
+        List<Long> activeMeetingRoomIds = meetingRooms.stream()
+                .map(MeetingRoom::getId)
+                .toList();
+
+        Map<Long, Long> participantCountByMeetingRoomId = new HashMap<>();
+        for (Object[] row : participantRepository
+                .countInMeetingParticipantsByMeetingRoomIds(activeMeetingRoomIds)) {
+            participantCountByMeetingRoomId.put((Long) row[0], (Long) row[1]);
+        }
+
+        // 6. 회의 기본 정보, 현재 접속자 수, 내 접속 상태를 목록 응답으로 조립한다.
+        return meetingRooms.stream()
+                .map(meetingRoom -> meetingMapper.toListItem(
+                        meetingRoom,
+                        participantCountByMeetingRoomId.getOrDefault(meetingRoom.getId(), 0L),
+                        myConnectionStateByMeetingRoomId.getOrDefault(
+                                meetingRoom.getId(),
+                                false
+                        )
+                ))
+                .toList();
     }
 
     /**
