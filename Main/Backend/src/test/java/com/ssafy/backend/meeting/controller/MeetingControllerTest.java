@@ -31,6 +31,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
@@ -162,6 +163,41 @@ class MeetingControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEETING_ROOM_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    @DisplayName("회의 입장에 성공하면 LiveKit 연결 정보를 반환한다")
+    void joinMeeting_returns200WithLiveKitConnectionInfo() throws Exception {
+        ResponseJoinMeetingDto response = new ResponseJoinMeetingDto(
+                MEETING_ID,
+                "BE",
+                true,
+                "livekit-token",
+                "wss://test.livekit.cloud"
+        );
+        given(meetingService.joinMeeting(1L, MEETING_ID))
+                .willReturn(response);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/join", MEETING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("회의 입장 성공"))
+                .andExpect(jsonPath("$.data.meetingRoomId").value(100))
+                .andExpect(jsonPath("$.data.role").value("BE"))
+                .andExpect(jsonPath("$.data.isHost").value(true))
+                .andExpect(jsonPath("$.data.token").value("livekit-token"))
+                .andExpect(jsonPath("$.data.url").value("wss://test.livekit.cloud"));
+    }
+
+    @Test
+    @DisplayName("회의에 초대되지 않은 사용자가 입장하면 403을 반환한다")
+    void joinMeeting_returns403WhenAccessIsDenied() throws Exception {
+        given(meetingService.joinMeeting(1L, MEETING_ID))
+                .willThrow(new CustomException(ErrorCode.MEETING_ACCESS_DENIED));
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/join", MEETING_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_ACCESS_DENIED"));
     }
 
     @Test

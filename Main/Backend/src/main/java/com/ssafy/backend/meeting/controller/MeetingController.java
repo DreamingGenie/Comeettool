@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -50,6 +51,19 @@ public class MeetingController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("회의 생성 성공", response));
+    }
+
+    /**
+     * MEET-03: 초대된 참여자의 LiveKit 회의 입장 정보를 발급한다.
+     */
+    @PostMapping("/meetings/{meetingId}/join")
+    public ResponseEntity<ApiResponse<ResponseJoinMeetingDto>> joinMeeting(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId
+    ) {
+        ResponseJoinMeetingDto response =
+                meetingService.joinMeeting(Long.parseLong(userId), meetingId);
+        return ResponseEntity.ok(ApiResponse.success("회의 입장 성공", response));
     }
 
     /**

@@ -26,12 +26,15 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
+import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
@@ -78,6 +81,9 @@ class MeetingServiceImplTest {
 
     @Mock
     private MeetingMapper meetingMapper;
+
+    @Mock
+    private LiveKitTokenProvider liveKitTokenProvider;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -269,6 +275,110 @@ class MeetingServiceImplTest {
         );
         verify(meetingRoomRepository, never()).save(any(MeetingRoom.class));
         verifyNoInteractions(participantRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("초대된 참여자는 LiveKit 입장 정보를 발급받고 입장 상태로 변경된다")
+    void joinMeeting_returnsLiveKitConnectionInfoAndEntersParticipant() {
+        long participantId = 30L;
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "호스트"
+        );
+        Participant participant = createParticipantWithId(
+                participantId,
+                CURRENT_HOST_MEMBER_ID,
+                "BE",
+                false
+        );
+        LiveKitConnectionInfo connectionInfo = new LiveKitConnectionInfo(
+                "livekit-token",
+                "wss://test.livekit.cloud",
+                "meeting-100",
+                "participant-30"
+        );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.of(participant));
+        given(liveKitTokenProvider.generateJoinToken(
+                MEETING_ID,
+                participantId,
+                "호스트"
+        )).willReturn(connectionInfo);
+
+        ResponseJoinMeetingDto response =
+                meetingService.joinMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(response.meetingRoomId()).isEqualTo(MEETING_ID);
+        assertThat(response.role()).isEqualTo("BE");
+        assertThat(response.isHost()).isTrue();
+        assertThat(response.token()).isEqualTo("livekit-token");
+        assertThat(response.url()).isEqualTo("wss://test.livekit.cloud");
+        assertThat(participant.isInMeeting()).isTrue();
+    }
+
+    @Test
+    @DisplayName("삭제되지 않은 회의를 찾을 수 없으면 입장을 거부한다")
+    void joinMeeting_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.joinMeeting(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(participantRepository, memberRepository, liveKitTokenProvider);
+    }
+
+    @Test
+    @DisplayName("요청자가 회의의 상위 팀 멤버가 아니면 입장을 거부한다")
+    void joinMeeting_rejectsRequesterOutsideTeam() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.joinMeeting(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(participantRepository, liveKitTokenProvider);
+    }
+
+    @Test
+    @DisplayName("팀 멤버라도 회의에 초대되지 않았으면 입장을 거부한다")
+    void joinMeeting_rejectsUninvitedRequester() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        Member member = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "요청자"
+        );
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, CURRENT_HOST_USER_ID))
+                .willReturn(Optional.of(member));
+        given(participantRepository.findByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                CURRENT_HOST_MEMBER_ID
+        )).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.joinMeeting(CURRENT_HOST_USER_ID, MEETING_ID),
+                ErrorCode.MEETING_ACCESS_DENIED
+        );
+        verifyNoInteractions(liveKitTokenProvider);
     }
 
     @Test
