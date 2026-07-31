@@ -20,6 +20,7 @@ import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -176,5 +177,24 @@ public class MeetingController {
         }
 
         return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
+
+    /**
+     * MEET-10: 호스트가 회의와 같은 팀의 사용자를 초대한다.
+     */
+    @PostMapping("/meetings/{meetingId}/invitations/users/{inviteeUserId}")
+    public ResponseEntity<ApiResponse<ResponseMeetingInvitationDto>> inviteMember(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @PathVariable Long inviteeUserId
+    ) {
+        ResponseMeetingInvitationDto response = meetingService.inviteMember(
+                Long.parseLong(userId),
+                meetingId,
+                inviteeUserId
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("회의 멤버 초대 성공", response));
     }
 }

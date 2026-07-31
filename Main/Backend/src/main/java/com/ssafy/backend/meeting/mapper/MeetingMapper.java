@@ -4,9 +4,11 @@ import org.springframework.stereotype.Component;
 
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
+import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.user.entity.User;
 
@@ -53,6 +55,20 @@ public class MeetingMapper {
                 member.getNickname(),
                 user.getEmail(),
                 user.getProfileImageUrl()
+        );
+    }
+
+    public ResponseMeetingInvitationDto toInvitationResponse(
+            Participant participant,
+            Member member
+    ) {
+        return new ResponseMeetingInvitationDto(
+                participant.getId(),
+                participant.getMeetingRoomId(),
+                member.getId(),
+                member.getUserId(),
+                participant.getParticipantRole(),
+                participant.isInMeeting()
         );
     }
 }

@@ -63,7 +63,9 @@ public enum ErrorCode {
             HttpStatus.UNAUTHORIZED,
             "MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED",
             "유효하지 않은 LiveKit 웹훅 요청입니다."
-    ),
+    ),    MEETING_ALREADY_INVITED(HttpStatus.CONFLICT, "MEETING_ALREADY_INVITED",
+            "이미 회의에 초대된 멤버입니다."),
+
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "해당 문서에 접근할 권한이 없습니다."),
     DOCUMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_CREATE_FORBIDDEN", "문서를 생성할 권한이 없습니다."),

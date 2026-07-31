@@ -10,8 +10,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
+import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.user.entity.User;
@@ -19,7 +21,8 @@ import com.ssafy.backend.user.entity.User;
 /**
  * MeetingMapper 단위 테스트.
  * MeetingRoom·Member·User 엔티티가
- * MEET-01 생성, MEET-02 목록, MEET-09 초대 후보 응답으로 정확히 변환되는지 검증한다.
+ * MEET-01 생성, MEET-02 목록, MEET-09 초대 후보,
+ * MEET-10 초대 응답으로 정확히 변환되는지 검증한다.
  */
 @DisplayName("회의 Mapper 테스트")
 class MeetingMapperTest {
@@ -95,6 +98,36 @@ class MeetingMapperTest {
         assertThat(response.email()).isEqualTo("backend@example.com");
         assertThat(response.profileImage())
                 .isEqualTo("https://example.com/backend.png");
+    }
+
+    @Test
+    @DisplayName("회의 초대 응답에 Participant와 Member 정보를 매핑한다")
+    void toInvitationResponse_mapsParticipantAndMember() {
+        Member member = Member.builder()
+                .userId(2L)
+                .teamId(TEAM_ID)
+                .authority(MemberAuthority.MEMBER)
+                .nickname("백엔드개발자")
+                .build();
+        ReflectionTestUtils.setField(member, "id", 20L);
+
+        Participant participant = Participant.builder()
+                .meetingRoomId(MEETING_ID)
+                .memberId(member.getId())
+                .participantRole("BE")
+                .isInMeeting(false)
+                .build();
+        ReflectionTestUtils.setField(participant, "id", 30L);
+
+        ResponseMeetingInvitationDto response =
+                meetingMapper.toInvitationResponse(participant, member);
+
+        assertThat(response.participantId()).isEqualTo(30L);
+        assertThat(response.meetingRoomId()).isEqualTo(MEETING_ID);
+        assertThat(response.memberId()).isEqualTo(20L);
+        assertThat(response.userId()).isEqualTo(2L);
+        assertThat(response.participantRole()).isEqualTo("BE");
+        assertThat(response.isInMeeting()).isFalse();
     }
 
     private MeetingRoom createSavedMeetingRoom() {

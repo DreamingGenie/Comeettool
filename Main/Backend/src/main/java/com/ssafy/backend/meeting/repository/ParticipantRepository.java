@@ -50,4 +50,7 @@ public interface ParticipantRepository extends JpaRepository<Participant, Long> 
     int leaveAllByMeetingRoomId(
             @Param("meetingRoomId") Long meetingRoomId
     );
+
+    // MEET-10: 같은 회의에 같은 Member가 이미 초대됐는지 확인한다.
+    boolean existsByMeetingRoomIdAndMemberId(Long meetingRoomId, Long memberId);
 }

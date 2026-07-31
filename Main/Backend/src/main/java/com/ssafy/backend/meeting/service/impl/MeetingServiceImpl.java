@@ -16,6 +16,7 @@ import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -43,7 +44,7 @@ import lombok.RequiredArgsConstructor;
  * 회의 도메인 서비스.
  * MEET-01 생성, MEET-02 목록, MEET-03 RTC 입장,
  * MEET-04 퇴장, MEET-05 종료, MEET-06 호스트 양도, MEET-07 현재 참여자 조회,
- * MEET-09 초대 후보 검색을 처리한다.
+ * MEET-09 초대 후보 검색, MEET-10 회의 초대를 처리한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -426,5 +427,62 @@ public class MeetingServiceImpl implements MeetingService {
                         (User) row[1]
                 ))
                 .toList();
+    }
+
+    /**
+     * MEET-10: 호스트가 같은 팀의 활성 사용자를 회의 Participant로 초대한다.
+     */
+    @Override
+    @Transactional
+    public ResponseMeetingInvitationDto inviteMember(
+            Long requesterUserId,
+            Long meetingId,
+            Long inviteeUserId
+    ) {
+        // 1. 초대와 중복 검사를 순차 처리하도록 활성 회의 행을 잠근다.
+        MeetingRoom meetingRoom = meetingRoomRepository
+                .findActiveByIdForUpdate(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 2. 회의 호스트만 멤버를 초대할 수 있다.
+        if (!meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
+        }
+
+        // 3. 초대 대상은 회의가 속한 팀의 Member여야 한다.
+        Member inviteeMember = memberRepository
+                .findByTeamIdAndUserId(meetingRoom.getTeamId(), inviteeUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_MEMBER_NOT_FOUND));
+
+        // 4. 탈퇴한 사용자는 검색 결과와 동일하게 초대 대상에서 제외한다.
+        User inviteeUser = userRepository.findById(inviteeUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+        if (inviteeUser.isDeleted()) {
+            throw new CustomException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        // 5. 같은 회의에 이미 Participant가 있으면 중복 초대를 거부한다.
+        if (participantRepository.existsByMeetingRoomIdAndMemberId(
+                meetingId,
+                inviteeMember.getId()
+        )) {
+            throw new CustomException(ErrorCode.MEETING_ALREADY_INVITED);
+        }
+
+        // 6. 초대 시점의 팀 역할을 참여자 표시용 프로필로 저장한다.
+        String participantRole = memberRepository
+                .findTeamRoleNameByMemberId(inviteeMember.getId())
+                .orElse(null);
+
+        // 7. Participant 행의 존재가 입장 권한이며, 실제 입장 전이므로 false로 저장한다.
+        Participant participant = Participant.builder()
+                .meetingRoomId(meetingId)
+                .memberId(inviteeMember.getId())
+                .participantRole(participantRole)
+                .isInMeeting(false)
+                .build();
+        Participant savedParticipant = participantRepository.save(participant);
+
+        return meetingMapper.toInvitationResponse(savedParticipant, inviteeMember);
     }
 }

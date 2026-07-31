@@ -7,6 +7,7 @@ import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -55,5 +56,11 @@ public interface MeetingService {
     void endMeeting(
             Long requesterUserId,
             Long meetingId
+    );
+
+    ResponseMeetingInvitationDto inviteMember(
+            Long requesterUserId,
+            Long meetingId,
+            Long inviteeUserId
     );
 }
