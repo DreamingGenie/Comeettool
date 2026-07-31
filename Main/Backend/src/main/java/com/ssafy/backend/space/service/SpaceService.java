@@ -14,8 +14,9 @@ public interface SpaceService {
     // SPACE-01: 스페이스 생성 + 생성자를 Owner 멤버로 등록.
     ResponseCreateSpaceDto addSpace(Long userId, RequestCreateSpaceDto request);
 
-    // SPACE-02: 로그인 사용자가 참여 중인 스페이스 목록(삭제되지 않은 것만).
-    List<ResponseSpaceListDto> findSpaceList(Long userId);
+    // SPACE-02/03: 로그인 사용자가 참여 중인 스페이스 목록(삭제되지 않은 것만).
+    // search가 비어있지 않으면 스페이스 이름 부분 일치(대소문자 무시)로 검색한다(SPACE-03).
+    List<ResponseSpaceListDto> findSpaceList(Long userId, String search);
 
     // SPACE-05: 스페이스 상세(정보 + 참여자). 요청자가 멤버가 아니면 접근 거부.
     ResponseSpaceDetailDto findSpaceDetails(Long userId, Long spaceId);

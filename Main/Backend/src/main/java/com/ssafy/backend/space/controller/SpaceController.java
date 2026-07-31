@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -46,11 +47,12 @@ public class SpaceController {
                 .body(ApiResponse.success("스페이스가 생성되었습니다.", response));
     }
 
-    // SPACE-02: 참여 중인 스페이스 목록
+    // SPACE-02: 참여 중인 스페이스 목록 / SPACE-03: search로 스페이스 이름 검색(부분 일치, 대소문자 무시)
     @GetMapping
     public ResponseEntity<ApiResponse<List<ResponseSpaceListDto>>> findSpaceList(
-            @AuthenticationPrincipal String userId) {
-        List<ResponseSpaceListDto> response = spaceService.findSpaceList(Long.parseLong(userId));
+            @AuthenticationPrincipal String userId,
+            @RequestParam(required = false) String search) {
+        List<ResponseSpaceListDto> response = spaceService.findSpaceList(Long.parseLong(userId), search);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

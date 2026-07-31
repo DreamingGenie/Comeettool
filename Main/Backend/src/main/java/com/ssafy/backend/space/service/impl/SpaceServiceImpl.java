@@ -67,9 +67,12 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ResponseSpaceListDto> findSpaceList(Long userId) {
-        // [Team, 내 권한] 을 한 번의 조인 쿼리로 가져온다.
-        List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(userId);
+    public List<ResponseSpaceListDto> findSpaceList(Long userId, String search) {
+        // SPACE-03: 공백뿐이거나 빈 검색어는 필터 없음(null)으로 정규화 — 전체 목록 반환.
+        String keyword = (search == null || search.isBlank()) ? null : search.trim();
+
+        // [Team, 내 권한] 을 한 번의 조인 쿼리로 가져온다(검색어가 있으면 이름 부분 일치 필터).
+        List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(userId, keyword);
         if (rows.isEmpty()) {
             return List.of();
         }
