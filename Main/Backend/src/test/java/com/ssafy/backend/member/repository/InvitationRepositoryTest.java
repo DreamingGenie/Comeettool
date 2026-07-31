@@ -11,6 +11,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -170,6 +171,89 @@ class InvitationRepositoryTest {
                     UUID.randomUUID(), OffsetDateTime.now());
 
             assertThat(found).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc")
+    class FindByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc {
+
+        @Test
+        @DisplayName("만료되지 않은 초대만 최신순(createdAt desc)으로 반환한다")
+        void returnsOnlyPendingInvitationsOrderedByCreatedAtDesc() {
+            Long targetUserId = uniqueId();
+            OffsetDateTime now = OffsetDateTime.now();
+
+            // 저장 순서와 무관하게 createdAt 역순으로 나오는지 확인하기 위해 오래된 것부터 저장한 뒤 createdAt을 강제로 덮어쓴다.
+            Invitation older = entityManager.persistAndFlush(
+                    invitation(uniqueId(), uniqueId(), targetUserId, now.plusDays(1)));
+            setCreatedAt(older, now.minusHours(2));
+
+            Invitation newer = entityManager.persistAndFlush(
+                    invitation(uniqueId(), uniqueId(), targetUserId, now.plusDays(1)));
+            setCreatedAt(newer, now.minusMinutes(1));
+
+            entityManager.persistAndFlush(
+                    invitation(uniqueId(), uniqueId(), targetUserId, now.minusMinutes(1)));
+
+            List<Invitation> found = invitationRepository
+                    .findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(targetUserId, now);
+
+            // 만료된 초대(마지막에 저장한 것)는 제외되고, 나머지는 createdAt 역순(newer가 먼저)으로 반환된다.
+            assertThat(found).extracting(Invitation::getInvitationId)
+                    .containsExactly(newer.getInvitationId(), older.getInvitationId());
+        }
+
+        @Test
+        @DisplayName("받은 초대가 없으면 빈 목록을 반환한다")
+        void returnsEmptyListWhenNoInvitations() {
+            List<Invitation> found = invitationRepository
+                    .findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(uniqueId(), OffsetDateTime.now());
+
+            assertThat(found).isEmpty();
+        }
+
+        // createdAt은 @CreationTimestamp(updatable=false)라 빌더·엔티티 setter로는 지정할 수 없어,
+        // 정렬 검증을 위해 저장 후 JPQL 벌크 업데이트로 직접 덮어쓴다(정상 흐름에서는 쓰이지 않는 테스트 전용 우회).
+        private void setCreatedAt(Invitation invitation, OffsetDateTime createdAt) {
+            entityManager.getEntityManager()
+                    .createQuery("update Invitation i set i.createdAt = :createdAt where i.invitationId = :id")
+                    .setParameter("createdAt", createdAt)
+                    .setParameter("id", invitation.getInvitationId())
+                    .executeUpdate();
+            entityManager.getEntityManager().clear();
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteByTeamId")
+    class DeleteByTeamId {
+
+        @Test
+        @DisplayName("해당 team_id의 초대를 모두 삭제하고 다른 team_id의 초대는 남긴다")
+        void deletesOnlyInvitationsForGivenTeam() {
+            Long teamId = uniqueId();
+            Long otherTeamId = uniqueId();
+            Invitation toDelete1 = entityManager.persistAndFlush(
+                    invitation(teamId, uniqueId(), uniqueId(), OffsetDateTime.now().plusDays(1)));
+            Invitation toDelete2 = entityManager.persistAndFlush(
+                    invitation(teamId, uniqueId(), uniqueId(), OffsetDateTime.now().plusDays(1)));
+            Invitation toKeep = entityManager.persistAndFlush(
+                    invitation(otherTeamId, uniqueId(), uniqueId(), OffsetDateTime.now().plusDays(1)));
+
+            invitationRepository.deleteByTeamId(teamId);
+            entityManager.flush();
+            entityManager.clear();
+
+            assertThat(invitationRepository.findById(toDelete1.getInvitationId())).isEmpty();
+            assertThat(invitationRepository.findById(toDelete2.getInvitationId())).isEmpty();
+            assertThat(invitationRepository.findById(toKeep.getInvitationId())).isPresent();
+        }
+
+        @Test
+        @DisplayName("해당 team_id의 초대가 없어도 예외 없이 아무 일도 일어나지 않는다")
+        void doesNothingWhenNoInvitationsForTeam() {
+            invitationRepository.deleteByTeamId(uniqueId());
         }
     }
 }

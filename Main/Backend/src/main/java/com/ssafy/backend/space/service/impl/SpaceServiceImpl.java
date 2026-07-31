@@ -13,6 +13,7 @@ import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.document.repository.DocumentRepository;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
+import com.ssafy.backend.member.repository.InvitationRepository;
 import com.ssafy.backend.space.mapper.SpaceMapper;
 import com.ssafy.backend.space.service.SpaceService;
 import com.ssafy.backend.member.repository.MemberRepository;
@@ -41,6 +42,7 @@ public class SpaceServiceImpl implements SpaceService {
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
     private final MeetingRoomRepository meetingRoomRepository;
+    private final InvitationRepository invitationRepository;
     private final SpaceMapper spaceMapper;
 
     @Override
@@ -146,6 +148,8 @@ public class SpaceServiceImpl implements SpaceService {
         team.softDelete(deletedAt);
         documentRepository.softDeleteByTeamId(spaceId, deletedAt);
         meetingRoomRepository.softDeleteByTeamId(spaceId, deletedAt);
+        // invitations는 is_deleted 컬럼이 없는 임시성 데이터라 soft delete 대신 hard delete로 정리한다.
+        invitationRepository.deleteByTeamId(spaceId);
     }
 
     @Override

@@ -16,6 +16,9 @@ public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
     // 수락/거절 시 유효한(만료되지 않은) 초대 조회(다음 작업 범위).
     Optional<Invitation> findByInvitationIdAndExpiresAtAfter(UUID invitationId, OffsetDateTime now);
 
-    // 내 초대함 조회 — 만료되지 않은 초대만(다음 작업 범위).
-    List<Invitation> findByTargetUserIdAndExpiresAtAfter(Long targetUserId, OffsetDateTime now);
+    // MEMBER-03: 내가 받은 초대 목록 — 만료되지 않은 초대만, 최신순.
+    List<Invitation> findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(Long targetUserId, OffsetDateTime now);
+
+    // SPACE-11: 스페이스 삭제 시 관련 초대 정리. invitations는 is_deleted 컬럼이 없는 임시성 데이터라 soft delete 대신 hard delete.
+    void deleteByTeamId(Long teamId);
 }

@@ -5,10 +5,12 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.entity.Invitation;
 import com.ssafy.backend.member.dto.RequestInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseInviteMemberDto;
+import com.ssafy.backend.member.dto.ResponseMyInvitationDto;
 import com.ssafy.backend.member.repository.InvitationRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
+import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,7 +25,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,6 +69,34 @@ class InvitationServiceImplTest {
         Team team = Team.builder().name("팀A").description("설명").ownerId(ownerId).color("#123456").build();
         ReflectionTestUtils.setField(team, "id", id);
         return team;
+    }
+
+    private Team teamNamed(Long id, String name) {
+        Team team = Team.builder().name(name).description("설명").ownerId(1L).color("#123456").build();
+        ReflectionTestUtils.setField(team, "id", id);
+        return team;
+    }
+
+    private User userWithNickname(Long id, String nickname, boolean deleted) {
+        User user = User.builder().email("u" + id + "@test.com").password("enc").build();
+        ReflectionTestUtils.setField(user, "id", id);
+        ReflectionTestUtils.setField(user, "nickname", nickname);
+        if (deleted) {
+            user.withdraw();
+        }
+        return user;
+    }
+
+    private Invitation invitationOf(Long teamId, Long inviterId, Long targetUserId, OffsetDateTime createdAt) {
+        Invitation invitation = Invitation.builder()
+                .invitationId(UUID.randomUUID())
+                .teamId(teamId)
+                .inviterId(inviterId)
+                .targetUserId(targetUserId)
+                .expiresAt(createdAt.plusDays(1))
+                .build();
+        ReflectionTestUtils.setField(invitation, "createdAt", createdAt);
+        return invitation;
     }
 
     @Nested
@@ -199,6 +231,111 @@ class InvitationServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.INVITATION_ALREADY_PENDING);
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-03 내가 받은 초대 목록 조회")
+    class FindMyInvitations {
+
+        private static final long ME_USER_ID = 5L;
+
+        @Test
+        @DisplayName("초대가 있으면 스페이스명·초대자 닉네임을 채워 리포지토리가 반환한 순서 그대로 매핑한다")
+        void findMyInvitations_returnsMappedListInRepositoryOrder() {
+            // given — 리포지토리가 이미 최신순으로 정렬해 반환한다고 가정(정렬 자체는 InvitationRepositoryTest에서 실 DB로 검증).
+            OffsetDateTime now = OffsetDateTime.now();
+            Invitation newer = invitationOf(10L, 1L, ME_USER_ID, now);
+            Invitation older = invitationOf(20L, 2L, ME_USER_ID, now.minusHours(1));
+            given(invitationRepository.findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(
+                    eq(ME_USER_ID), any(OffsetDateTime.class)))
+                    .willReturn(List.of(newer, older));
+            given(teamRepository.findById(10L)).willReturn(Optional.of(teamNamed(10L, "코밋툴")));
+            given(teamRepository.findById(20L)).willReturn(Optional.of(teamNamed(20L, "두번째스페이스")));
+            given(userRepository.findById(1L)).willReturn(Optional.of(userWithNickname(1L, "asd", false)));
+            given(userRepository.findById(2L)).willReturn(Optional.of(userWithNickname(2L, "초대자2", false)));
+
+            // when
+            List<ResponseMyInvitationDto> result = invitationService.findMyInvitations(ME_USER_ID);
+
+            // then
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).invitationId()).isEqualTo(newer.getInvitationId().toString());
+            assertThat(result.get(0).spaceId()).isEqualTo(10L);
+            assertThat(result.get(0).spaceName()).isEqualTo("코밋툴");
+            assertThat(result.get(0).inviterNickname()).isEqualTo("asd");
+            assertThat(result.get(0).createdAt()).isEqualTo(now);
+            assertThat(result.get(1).invitationId()).isEqualTo(older.getInvitationId().toString());
+            assertThat(result.get(1).spaceName()).isEqualTo("두번째스페이스");
+            assertThat(result.get(1).inviterNickname()).isEqualTo("초대자2");
+        }
+
+        @Test
+        @DisplayName("받은 초대가 없으면 빈 리스트를 반환한다")
+        void findMyInvitations_returnsEmptyListWhenNoneReceived() {
+            given(invitationRepository.findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(
+                    eq(ME_USER_ID), any(OffsetDateTime.class)))
+                    .willReturn(List.of());
+
+            List<ResponseMyInvitationDto> result = invitationService.findMyInvitations(ME_USER_ID);
+
+            assertThat(result).isEmpty();
+            verifyNoInteractions(teamRepository);
+            verifyNoInteractions(userRepository);
+        }
+
+        @Test
+        @DisplayName("초대자가 탈퇴했으면 닉네임 대신 fallback 값을 사용한다")
+        void findMyInvitations_usesFallbackNicknameWhenInviterWithdrawn() {
+            OffsetDateTime now = OffsetDateTime.now();
+            Invitation invitation = invitationOf(10L, 1L, ME_USER_ID, now);
+            given(invitationRepository.findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(
+                    eq(ME_USER_ID), any(OffsetDateTime.class)))
+                    .willReturn(List.of(invitation));
+            given(teamRepository.findById(10L)).willReturn(Optional.of(teamNamed(10L, "코밋툴")));
+            given(userRepository.findById(1L)).willReturn(Optional.of(userWithNickname(1L, "탈퇴자", true)));
+
+            List<ResponseMyInvitationDto> result = invitationService.findMyInvitations(ME_USER_ID);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).inviterNickname()).isEqualTo("(알 수 없음)");
+        }
+
+        @Test
+        @DisplayName("초대자를 찾을 수 없으면 닉네임 대신 fallback 값을 사용한다")
+        void findMyInvitations_usesFallbackNicknameWhenInviterNotFound() {
+            OffsetDateTime now = OffsetDateTime.now();
+            Invitation invitation = invitationOf(10L, 1L, ME_USER_ID, now);
+            given(invitationRepository.findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(
+                    eq(ME_USER_ID), any(OffsetDateTime.class)))
+                    .willReturn(List.of(invitation));
+            given(teamRepository.findById(10L)).willReturn(Optional.of(teamNamed(10L, "코밋툴")));
+            given(userRepository.findById(1L)).willReturn(Optional.empty());
+
+            List<ResponseMyInvitationDto> result = invitationService.findMyInvitations(ME_USER_ID);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).inviterNickname()).isEqualTo("(알 수 없음)");
+        }
+
+        @Test
+        @DisplayName("스페이스가 존재하지 않는 초대는 결과에서 제외된다(방어적 처리, 예외 없음)")
+        void findMyInvitations_skipsInvitationWhenTeamNotFound() {
+            OffsetDateTime now = OffsetDateTime.now();
+            Invitation withMissingTeam = invitationOf(10L, 1L, ME_USER_ID, now);
+            Invitation withTeam = invitationOf(20L, 2L, ME_USER_ID, now.minusHours(1));
+            given(invitationRepository.findByTargetUserIdAndExpiresAtAfterOrderByCreatedAtDesc(
+                    eq(ME_USER_ID), any(OffsetDateTime.class)))
+                    .willReturn(List.of(withMissingTeam, withTeam));
+            given(teamRepository.findById(10L)).willReturn(Optional.empty());
+            given(teamRepository.findById(20L)).willReturn(Optional.of(teamNamed(20L, "두번째스페이스")));
+            given(userRepository.findById(2L)).willReturn(Optional.of(userWithNickname(2L, "초대자2", false)));
+
+            List<ResponseMyInvitationDto> result = invitationService.findMyInvitations(ME_USER_ID);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).spaceId()).isEqualTo(20L);
+            verify(userRepository, never()).findById(1L);
         }
     }
 }
