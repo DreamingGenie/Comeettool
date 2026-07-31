@@ -70,4 +70,15 @@ public class Member {
                 .nickname(nickname)
                 .build();
     }
+
+    // MEMBER-03: 초대 수락으로 합류한 사용자를 일반 멤버(MEMBER)로 등록. 역할은 미배정(null).
+    public static Member invited(Long userId, Long teamId, String nickname) {
+        return Member.builder()
+                .userId(userId)
+                .teamId(teamId)
+                .authority(MemberAuthority.MEMBER)
+                .teamRoleId(null)
+                .nickname(nickname)
+                .build();
+    }
 }

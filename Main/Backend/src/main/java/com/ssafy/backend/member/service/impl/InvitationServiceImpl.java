@@ -3,6 +3,7 @@ package com.ssafy.backend.member.service.impl;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.entity.Invitation;
+import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.dto.RequestInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseMyInvitationDto;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * MEMBER-02 멤버 초대. 초대는 invitations 테이블(RDB)에 저장하며, 상태는 expires_at 경과 여부로만 판단한다(별도 상태 필드 없음).
@@ -106,5 +108,32 @@ public class InvitationServiceImpl implements InvitationService {
                 .filter(user -> !user.isDeleted())
                 .map(User::getNickname)
                 .orElse(UNKNOWN_INVITER_NICKNAME);
+    }
+
+    @Override
+    @Transactional
+    public void acceptInvitation(Long userId, String invitationId) {
+        Invitation invitation = invitationRepository
+                .findByInvitationIdAndExpiresAtAfter(UUID.fromString(invitationId), OffsetDateTime.now())
+                .orElseThrow(() -> new CustomException(ErrorCode.INVITATION_NOT_FOUND));
+
+        // 만료/미존재와 동일한 코드로 응답 — 타인의 초대 존재 여부·소유자를 노출하지 않는다.
+        if (!invitation.getTargetUserId().equals(userId)) {
+            throw new CustomException(ErrorCode.INVITATION_NOT_FOUND);
+        }
+
+        Long teamId = invitation.getTeamId();
+        if (memberRepository.existsByTeamIdAndUserId(teamId, userId)) {
+            // 이미 멤버가 됐다는 것은 이 초대가 더 이상 의미 없다는 뜻 — 초대도 함께 정리한다.
+            invitationRepository.delete(invitation);
+            throw new CustomException(ErrorCode.MEMBER_ALREADY_JOINED);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.AUTH_UNAUTHORIZED));
+
+        Member member = Member.invited(userId, teamId, user.getNickname());
+        memberRepository.save(member);
+        invitationRepository.delete(invitation);
     }
 }

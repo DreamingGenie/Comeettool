@@ -1,5 +1,7 @@
 package com.ssafy.backend.member.controller;
 
+import com.ssafy.backend.global.exception.CustomException;
+import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.member.dto.ResponseMyInvitationDto;
 import com.ssafy.backend.member.service.InvitationService;
@@ -21,7 +23,10 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -85,6 +90,46 @@ class MyInvitationControllerTest {
                     .andExpect(jsonPath("$.code").value("SUCCESS"))
                     .andExpect(jsonPath("$.data").isArray())
                     .andExpect(jsonPath("$.data").isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-03 POST /api/v1/invitations/{invitationId}/accept")
+    class AcceptInvitation {
+
+        private static final String INVITATION_ID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+
+        @Test
+        @DisplayName("정상 수락이면 200 SUCCESS와 data=null을 반환한다")
+        void acceptInvitation_returns200() throws Exception {
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/accept", INVITATION_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data").doesNotExist());
+
+            verify(invitationService).acceptInvitation(5L, INVITATION_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 만료됐거나 본인 초대가 아니면 404 INVITATION_NOT_FOUND를 반환한다")
+        void acceptInvitation_returns404WhenNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.INVITATION_NOT_FOUND))
+                    .when(invitationService).acceptInvitation(5L, INVITATION_ID);
+
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/accept", INVITATION_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("INVITATION_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("이미 멤버면 409 MEMBER_ALREADY_JOINED를 반환한다")
+        void acceptInvitation_returns409WhenAlreadyMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.MEMBER_ALREADY_JOINED))
+                    .when(invitationService).acceptInvitation(5L, INVITATION_ID);
+
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/accept", INVITATION_ID))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("MEMBER_ALREADY_JOINED"));
         }
     }
 }

@@ -3,6 +3,8 @@ package com.ssafy.backend.member.service.impl;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.entity.Invitation;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.dto.RequestInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseInviteMemberDto;
 import com.ssafy.backend.member.dto.ResponseMyInvitationDto;
@@ -336,6 +338,89 @@ class InvitationServiceImplTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).spaceId()).isEqualTo(20L);
             verify(userRepository, never()).findById(1L);
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-03 초대 수락")
+    class AcceptInvitation {
+
+        private static final long ACCEPTOR_ID = 5L;
+
+        @Test
+        @DisplayName("정상 수락 시 MEMBER 권한 멤버로 등록되고 초대는 삭제된다")
+        void acceptInvitation_registersMemberAndDeletesInvitation() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, ACCEPTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+            given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(false);
+            given(userRepository.findById(ACCEPTOR_ID))
+                    .willReturn(Optional.of(userWithNickname(ACCEPTOR_ID, "수락자", false)));
+
+            // when
+            invitationService.acceptInvitation(ACCEPTOR_ID, invitation.getInvitationId().toString());
+
+            // then
+            ArgumentCaptor<Member> memberCaptor = ArgumentCaptor.forClass(Member.class);
+            verify(memberRepository).save(memberCaptor.capture());
+            Member saved = memberCaptor.getValue();
+            assertThat(saved.getUserId()).isEqualTo(ACCEPTOR_ID);
+            assertThat(saved.getTeamId()).isEqualTo(TEAM_ID);
+            assertThat(saved.getAuthority()).isEqualTo(MemberAuthority.MEMBER);
+            assertThat(saved.getNickname()).isEqualTo("수락자");
+            verify(invitationRepository).delete(invitation);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 만료된 초대면 INVITATION_NOT_FOUND 예외가 발생하고 부수효과가 없다")
+        void acceptInvitation_throwsWhenInvitationNotFoundOrExpired() {
+            UUID invitationId = UUID.randomUUID();
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(eq(invitationId), any(OffsetDateTime.class)))
+                    .willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> invitationService.acceptInvitation(ACCEPTOR_ID, invitationId.toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verify(memberRepository, never()).save(any(Member.class));
+            verify(invitationRepository, never()).delete(any(Invitation.class));
+        }
+
+        @Test
+        @DisplayName("본인 초대가 아니면 INVITATION_NOT_FOUND 예외가 발생하고 부수효과가 없다(정보 노출 최소화)")
+        void acceptInvitation_throwsWhenNotOwnInvitation() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, ACCEPTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+            long anotherUserId = 999L;
+
+            assertThatThrownBy(
+                    () -> invitationService.acceptInvitation(anotherUserId, invitation.getInvitationId().toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verify(memberRepository, never()).save(any(Member.class));
+            verify(invitationRepository, never()).delete(any(Invitation.class));
+        }
+
+        @Test
+        @DisplayName("이미 멤버면 MEMBER_ALREADY_JOINED 예외가 발생한다 — Member는 저장하지 않되, 의미 없어진 초대는 삭제한다")
+        void acceptInvitation_throwsWhenAlreadyMemberAndDeletesInvitation() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, ACCEPTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+            given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(true);
+
+            assertThatThrownBy(
+                    () -> invitationService.acceptInvitation(ACCEPTOR_ID, invitation.getInvitationId().toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEMBER_ALREADY_JOINED);
+            verify(memberRepository, never()).save(any(Member.class));
+            verify(invitationRepository).delete(invitation);
         }
     }
 }
