@@ -10,9 +10,9 @@ LiveKit egress 회의 폴더 -> STT (화자는 참가자 폴더로 이미 구분
 meeting_dir은 participants/<participant_id>/EG_*.json, TR_*.ogg 를 담은 폴더다.
 
 결과물 (output/<회의폴더명>/ 아래에 저장):
-    transcript.json   (STT 원본 결과)
-    minutes.json      (LLM이 추출한 구조화 회의록)
-    minutes.md        (최종 회의록 문서)
+    meeting_report_transcript.json (STT 원본 결과)
+    meeting_report.json            (LLM이 추출한 구조화 회의록)
+    meeting_report.md              (최종 회의록 문서)
 """
 
 import os
@@ -47,10 +47,10 @@ def main(meeting_dir: str):
     transcript = transcribe_meeting(meeting_dir)
 
     transcript_json = [seg.model_dump() for seg in transcript]
-    (run_dir / "transcript.json").write_text(
+    (run_dir / "meeting_report_transcript.json").write_text(
         json.dumps(transcript_json, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"-> {run_dir}/transcript.json 저장 완료 ({len(transcript)}개 세그먼트)\n")
+    print(f"-> {run_dir}/meeting_report_transcript.json 저장 완료 ({len(transcript)}개 세그먼트)\n")
 
     if not transcript:
         print("경고: 전사 결과가 비어있습니다. 오디오 파일/언어 설정을 확인하세요.")
@@ -78,18 +78,18 @@ def main(meeting_dir: str):
         previous_meetings=[document for _, document in relevant_meetings],
     )
 
-    (run_dir / "minutes.json").write_text(
+    (run_dir / "meeting_report.json").write_text(
         minutes.model_dump_json(indent=2, exclude_none=False), encoding="utf-8"
     )
-    print(f"-> {run_dir}/minutes.json 저장 완료\n")
+    print(f"-> {run_dir}/meeting_report.json 저장 완료\n")
 
     # 3. MD 렌더링
     print("=" * 50)
     print("3단계: 회의록 렌더링")
     print("=" * 50)
     md = render_markdown(minutes, transcript)
-    (run_dir / "minutes.md").write_text(md, encoding="utf-8")
-    print(f"-> {run_dir}/minutes.md 저장 완료\n")
+    (run_dir / "meeting_report.md").write_text(md, encoding="utf-8")
+    print(f"-> {run_dir}/meeting_report.md 저장 완료\n")
 
     # 4. 이번 회의록을 히스토리에 저장 (다음 회의가 참고할 수 있도록)
     print("=" * 50)
@@ -98,7 +98,7 @@ def main(meeting_dir: str):
     save_meeting(meeting_id, md)
     print(f"-> 히스토리에 저장 완료 (id={meeting_id})\n")
 
-    print(f"전체 파이프라인 완료! {run_dir}/minutes.md 를 확인하세요.")
+    print(f"전체 파이프라인 완료! {run_dir}/meeting_report.md 를 확인하세요.")
 
 
 if __name__ == "__main__":
