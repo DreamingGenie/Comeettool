@@ -1,6 +1,7 @@
 package com.ssafy.backend.meeting.repository;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,6 +24,22 @@ public interface MeetingRoomRepository extends JpaRepository<MeetingRoom, Long> 
 
     // MEET-01: 팀 스페이스에서 현재 진행 중인 회의 수를 조회한다.
     long countByTeamIdAndIsDeletedFalse(Long teamId);
+
+    /**
+     * MEET-02: Participant에서 얻은 회의 ID 중 같은 스페이스의 진행 중인 회의만 조회한다.
+     */
+    @Query("""
+            select mr
+            from MeetingRoom mr
+            where mr.id in :meetingRoomIds
+              and mr.teamId = :teamId
+              and mr.isDeleted = false
+            order by mr.createdAt desc, mr.id desc
+            """)
+    List<MeetingRoom> findAllActiveByIdsAndTeamId(
+            @Param("meetingRoomIds") List<Long> meetingRoomIds,
+            @Param("teamId") Long teamId
+    );
 
     /**
      * MEET-06 호스트 양도용 활성 회의 조회.

@@ -52,7 +52,17 @@ class MeetingRoomTest {
 
         assertThatThrownBy(() -> meetingRoom.transferHostTo(null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("새 호스트 ID는 필수입니다.");
+                .hasMessage("새 호스트 ID는 양수여야 합니다.");
+    }
+
+    @Test
+    @DisplayName("새 호스트 userId가 0 이하이면 변경할 수 없다")
+    void transferHostTo_rejectsNonPositiveUserId() {
+        MeetingRoom meetingRoom = createMeetingRoom();
+
+        assertThatThrownBy(() -> meetingRoom.transferHostTo(0L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("새 호스트 ID는 양수여야 합니다.");
     }
 
     private MeetingRoom createMeetingRoom() {
