@@ -417,6 +417,19 @@ class InvitationServiceImplTest {
         }
 
         @Test
+        @DisplayName("invitationId가 UUID 형식이 아니면 500이 아니라 INVITATION_NOT_FOUND(404) 예외가 발생한다")
+        void acceptInvitation_throwsInvitationNotFoundWhenIdIsNotValidUuid() {
+            // UUID.fromString()이 IllegalArgumentException을 던지는 케이스 — CustomException으로 통일해야
+            // GlobalExceptionHandler의 catch-all(500 INTERNAL_ERROR)이 아니라 404로 응답된다.
+            assertThatThrownBy(() -> invitationService.acceptInvitation(ACCEPTOR_ID, "이건-UUID가-아님"))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verifyNoInteractions(invitationRepository);
+            verify(memberRepository, never()).save(any(Member.class));
+        }
+
+        @Test
         @DisplayName("본인 초대가 아니면 INVITATION_NOT_FOUND 예외가 발생하고 부수효과가 없다(정보 노출 최소화)")
         void acceptInvitation_throwsWhenNotOwnInvitation() {
             Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, ACCEPTOR_ID, OffsetDateTime.now());

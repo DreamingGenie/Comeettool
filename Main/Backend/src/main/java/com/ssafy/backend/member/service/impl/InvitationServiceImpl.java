@@ -121,8 +121,16 @@ public class InvitationServiceImpl implements InvitationService {
     // 이 메서드의 모든 CustomException 분기는 그 시점까지 반영해도 되는(오히려 반영돼야 하는) 상태이므로 안전하다.
     @Transactional(noRollbackFor = CustomException.class)
     public void acceptInvitation(Long userId, String invitationId) {
+        UUID id;
+        try {
+            id = UUID.fromString(invitationId);
+        } catch (IllegalArgumentException e) {
+            // UUID 형식이 아닌 값도 "존재하지 않는 초대"와 동일하게 처리 — 형식 오류라고 500을 낼 이유가 없다.
+            throw new CustomException(ErrorCode.INVITATION_NOT_FOUND);
+        }
+
         Invitation invitation = invitationRepository
-                .findByInvitationIdAndExpiresAtAfter(UUID.fromString(invitationId), OffsetDateTime.now())
+                .findByInvitationIdAndExpiresAtAfter(id, OffsetDateTime.now())
                 .orElseThrow(() -> new CustomException(ErrorCode.INVITATION_NOT_FOUND));
 
         // 만료/미존재와 동일한 코드로 응답 — 타인의 초대 존재 여부·소유자를 노출하지 않는다.
