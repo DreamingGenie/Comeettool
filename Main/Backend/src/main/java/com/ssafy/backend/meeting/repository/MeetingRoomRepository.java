@@ -65,4 +65,5 @@ public interface MeetingRoomRepository extends JpaRepository<MeetingRoom, Long> 
               and mr.isDeleted = false
             """)
     Optional<MeetingRoom> findActiveById(@Param("meetingId") Long meetingId);
+
 }

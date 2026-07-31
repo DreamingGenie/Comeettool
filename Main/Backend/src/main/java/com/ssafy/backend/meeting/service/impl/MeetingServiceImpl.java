@@ -14,6 +14,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -25,19 +26,20 @@ import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.meeting.service.MeetingService;
-import com.ssafy.backend.user.entity.User;
-import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.repository.TeamRepository;
+import com.ssafy.backend.user.entity.User;
+import com.ssafy.backend.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
  * 회의 도메인 서비스.
  * MEET-01 생성, MEET-02 목록, MEET-03 RTC 입장,
- * MEET-06 호스트 양도, MEET-07 현재 참여자 조회를 처리한다.
+ * MEET-06 호스트 양도, MEET-07 현재 참여자 조회,
+ * MEET-09 초대 후보 검색을 처리한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -317,6 +319,49 @@ public class MeetingServiceImpl implements MeetingService {
                             participant.isInMeeting()
                     );
                 })
+                .toList();
+    }
+
+    /**
+     * MEET-09: 호스트가 회의에 초대할 수 있는 팀 멤버를 조회한다.
+     *
+     * 검색어가 없으면 초대 가능한 전체 팀 멤버를 반환한다.
+     * 이미 Participant로 등록된 멤버는 조회 대상에서 제외한다.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResponseMeetingInviteCandidateDto> getInviteCandidates(
+            Long requesterUserId,
+            Long meetingId,
+            String query
+    ) {
+        // 1. 삭제되지 않은 회의인지 확인한다.
+        MeetingRoom meetingRoom = meetingRoomRepository.findActiveById(meetingId)
+                .orElseThrow(() ->
+                        new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 2. 요청자가 해당 회의의 호스트인지 확인한다.
+        if (!meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
+        }
+
+        // 3. 검색어가 없으면 전체 후보가 조회되도록 빈 문자열로 정규화한다.
+        String normalizedQuery =
+                query == null || query.isBlank()
+                        ? ""
+                        : query.trim();
+
+        // 4. 팀 멤버와 사용자 정보를 조회하여 응답 DTO로 변환한다.
+        return memberRepository.findMeetingInviteCandidates(
+                        meetingRoom.getTeamId(),
+                        meetingId,
+                        normalizedQuery
+                )
+                .stream()
+                .map(row -> meetingMapper.toInviteCandidate(
+                        (Member) row[0],
+                        (User) row[1]
+                ))
                 .toList();
     }
 }

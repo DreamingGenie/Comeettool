@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.response.ApiResponse;
@@ -17,6 +18,7 @@ import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -111,5 +113,33 @@ public class MeetingController {
         List<ResponseMeetingParticipantDto> response =
                 meetingService.getParticipants(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("회의 참여자 목록을 조회했습니다.", response));
+    }
+
+    /**
+     * MEET-09: 호스트가 회의에 초대할 수 있는 팀 멤버를 조회한다.
+     */
+    @GetMapping("/meetings/{meetingId}/invite-candidates")
+    public ResponseEntity<ApiResponse<List<ResponseMeetingInviteCandidateDto>>> getInviteCandidates(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestParam(defaultValue = "") String keyword
+    ) {
+        List<ResponseMeetingInviteCandidateDto> response =
+                meetingService.getInviteCandidates(
+                        Long.parseLong(userId),
+                        meetingId,
+                        keyword
+                );
+
+        String message;
+        if (response.isEmpty()) {
+            message = keyword.isBlank()
+                    ? "초대 가능한 멤버가 없습니다."
+                    : "유저를 찾지 못했습니다.";
+        } else {
+            message = "초대 가능한 멤버를 조회했습니다.";
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 }

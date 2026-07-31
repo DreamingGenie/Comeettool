@@ -30,6 +30,7 @@ import com.ssafy.backend.meeting.dto.RequestTransferHostDto;
 import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -51,7 +52,7 @@ import com.ssafy.backend.space.repository.TeamRepository;
 /**
  * 회의 서비스 단위 테스트.
  * 저장소와 LiveKit 토큰 발급기를 Mock으로 분리하고
- * MEET-01·02·03·06·07의 정상 흐름과 접근 제한을 검증한다.
+ * MEET-01·02·03·06·07·09의 정상 흐름과 접근 제한을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 서비스 테스트")
@@ -772,6 +773,125 @@ class MeetingServiceImplTest {
                 ErrorCode.MEETING_ACCESS_DENIED
         );
         verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("호스트는 검색어에 맞는 초대 후보 목록을 조회한다")
+    void getInviteCandidates_returnsMappedCandidatesForHost() {
+        Member candidateMember =
+                createMemberWithId(20L, NEXT_HOST_USER_ID, TEAM_ID, "BackendDev");
+        User candidateUser = createUserWithId(
+                NEXT_HOST_USER_ID,
+                "https://example.com/backend.png"
+        );
+        ResponseMeetingInviteCandidateDto expectedResponse =
+                new ResponseMeetingInviteCandidateDto(
+                        candidateMember.getId(),
+                        candidateUser.getId(),
+                        candidateMember.getNickname(),
+                        candidateUser.getEmail(),
+                        candidateUser.getProfileImageUrl()
+                );
+
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findMeetingInviteCandidates(
+                TEAM_ID,
+                MEETING_ID,
+                "backend"
+        )).willReturn(List.<Object[]>of(new Object[]{candidateMember, candidateUser}));
+        given(meetingMapper.toInviteCandidate(candidateMember, candidateUser))
+                .willReturn(expectedResponse);
+
+        List<ResponseMeetingInviteCandidateDto> response =
+                meetingService.getInviteCandidates(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        "  backend  "
+                );
+
+        assertThat(response).containsExactly(expectedResponse);
+        verify(memberRepository).findMeetingInviteCandidates(
+                TEAM_ID,
+                MEETING_ID,
+                "backend"
+        );
+        verify(meetingMapper).toInviteCandidate(candidateMember, candidateUser);
+    }
+
+    @Test
+    @DisplayName("초대 후보 검색어가 공백이면 전체 조회용 빈 문자열로 정규화한다")
+    void getInviteCandidates_normalizesBlankQuery() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findMeetingInviteCandidates(TEAM_ID, MEETING_ID, ""))
+                .willReturn(List.of());
+
+        List<ResponseMeetingInviteCandidateDto> response =
+                meetingService.getInviteCandidates(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        "   "
+                );
+
+        assertThat(response).isEmpty();
+        verify(memberRepository).findMeetingInviteCandidates(TEAM_ID, MEETING_ID, "");
+    }
+
+    @Test
+    @DisplayName("초대 가능한 멤버가 없으면 빈 목록을 반환한다")
+    void getInviteCandidates_returnsEmptyListWhenNoCandidateExists() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findMeetingInviteCandidates(
+                TEAM_ID,
+                MEETING_ID,
+                "nobody"
+        )).willReturn(List.of());
+
+        List<ResponseMeetingInviteCandidateDto> response =
+                meetingService.getInviteCandidates(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        "nobody"
+                );
+
+        assertThat(response).isEmpty();
+        verifyNoInteractions(meetingMapper);
+    }
+
+    @Test
+    @DisplayName("초대 후보 검색 시 회의가 없으면 MEETING_NOT_FOUND 예외가 발생한다")
+    void getInviteCandidates_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.getInviteCandidates(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        ""
+                ),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(memberRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("호스트가 아니면 초대 후보를 검색할 수 없다")
+    void getInviteCandidates_rejectsNonHostRequester() {
+        given(meetingRoomRepository.findActiveById(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+
+        assertErrorCode(
+                () -> meetingService.getInviteCandidates(
+                        NEXT_HOST_USER_ID,
+                        MEETING_ID,
+                        ""
+                ),
+                ErrorCode.MEETING_HOST_REQUIRED
+        );
+        verifyNoInteractions(memberRepository, meetingMapper);
     }
 
     private void assertErrorCode(Runnable action, ErrorCode expectedErrorCode) {
