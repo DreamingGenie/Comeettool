@@ -23,6 +23,7 @@
 
 <script setup>
 import { reactive, ref, watchEffect } from 'vue'
+import { useRouter } from 'vue-router'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { boardStore } from '../stores/boardStore'
@@ -33,6 +34,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'created'])
+const router = useRouter()
 const { notify } = useToast()
 const submitting = ref(false)
 const form = reactive({ name: '', teamId: props.teamId })
@@ -53,6 +55,7 @@ async function submit() {
     notify('회의를 만들었습니다.')
     emit('created', meeting)
     emit('close')
+    await router.push(`/meetings/${meeting.id}`)
   } catch (error) {
     notify(error?.message || '회의를 만들지 못했습니다.')
   } finally {

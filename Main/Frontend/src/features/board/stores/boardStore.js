@@ -18,6 +18,7 @@ const emptyTeam = {
 
 const emptyMeeting = {
   id: '',
+  teamId: '',
   title: '',
   roomTitle: '',
   status: '',
@@ -26,12 +27,16 @@ const emptyMeeting = {
   time: '',
   agendaTime: '',
   participantCount: 0,
-  avatars: []
+  avatars: [],
+  hostId: null,
+  isInMeeting: false
 }
 
 const emptyCalendar = toCalendarViewModel()
 
 const emptyMeetingRoom = {
+  connection: null,
+  connectionStatus: 'disconnected',
   totalParticipants: 0,
   participants: [],
   chatMessages: [],
@@ -47,6 +52,7 @@ const state = reactive({
   workspaces: [],
   team: { ...emptyTeam },
   members: [],
+  meetings: [],
   activeMeeting: { ...emptyMeeting },
   calendar: { ...emptyCalendar },
   archives: {
@@ -74,6 +80,7 @@ function resetState() {
   state.workspaces = []
   state.team = { ...emptyTeam }
   state.members = []
+  state.meetings = []
   state.activeMeeting = { ...emptyMeeting }
   state.calendar = toCalendarViewModel()
   state.archives = {
@@ -90,6 +97,7 @@ function resetState() {
   }
   state.meetingRoom = {
     ...emptyMeetingRoom,
+    connection: null,
     participants: [],
     chatMessages: [],
     directContacts: []
@@ -128,8 +136,8 @@ export const boardStore = {
   state,
   async loadResources(resources = [], context = {}) {
     const {
-      teamId = 'a707',
-      meetingId = 'be-team-meeting',
+      teamId = '',
+      meetingId = '',
       year = state.calendar.year,
       month = state.calendar.month,
       section = 'documents'
@@ -138,7 +146,7 @@ export const boardStore = {
       workspaces: () => boardStore.loadWorkspaces(),
       team: () => boardStore.loadTeam(teamId),
       members: () => boardStore.loadMembers(teamId),
-      activeMeeting: () => boardStore.loadActiveMeeting(teamId),
+      activeMeeting: () => boardStore.loadMeetings(teamId),
       calendar: () => boardStore.loadCalendar(teamId, year, month),
       meetingRoom: () => boardStore.loadMeetingRoom(meetingId),
       inviteMembers: () => boardStore.loadInviteMembers(teamId),
@@ -151,7 +159,14 @@ export const boardStore = {
       throw new Error(`지원하지 않는 board resource입니다: ${unknownResource}`)
     }
 
-    await Promise.all(uniqueResources.map(resource => loaders[resource]()))
+    if (uniqueResources.includes('workspaces')) {
+      await loaders.workspaces()
+    }
+    await Promise.all(
+      uniqueResources
+        .filter(resource => resource !== 'workspaces')
+        .map(resource => loaders[resource]())
+    )
     return state
   },
   async loadWorkspaces() {
@@ -170,11 +185,25 @@ export const boardStore = {
     state.members = members || []
     return state.members
   },
+  async loadMeetings(teamId, options = {}) {
+    const resolvedTeamId =
+      String(teamId || state.currentTeamId || state.workspaces[0]?.id || '')
+    if (!resolvedTeamId) {
+      state.meetings = []
+      state.activeMeeting = { ...emptyMeeting }
+      return state.meetings
+    }
+
+    const requestMeetings = () => dataSource.board.getMeetings(resolvedTeamId)
+    const meetings = options.silent
+      ? await requestMeetings()
+      : await withLoading(requestMeetings)
+    state.meetings = meetings || []
+    state.activeMeeting = state.meetings[0] || { ...emptyMeeting }
+    return state.meetings
+  },
   async loadActiveMeeting(teamId) {
-    const meeting = await withLoading(() =>
-      dataSource.board.getActiveMeeting(teamId)
-    )
-    state.activeMeeting = meeting || { ...emptyMeeting }
+    await boardStore.loadMeetings(teamId)
     return state.activeMeeting
   },
   async loadCalendar(teamId, year, month) {
@@ -185,20 +214,33 @@ export const boardStore = {
     return state.calendar
   },
   async loadMeetingRoom(meetingId) {
-    const [meetingRoom, participants, messages] = await withLoading(() =>
-      Promise.all([
-        dataSource.board.getMeetingRoom(meetingId),
-        dataSource.board.getParticipants(meetingId),
-        dataSource.board.getMessages(meetingId)
-      ])
+    const connection = await withLoading(() =>
+      dataSource.board.joinMeeting(meetingId)
     )
     state.meetingRoom = {
-      ...(meetingRoom || emptyMeetingRoom),
-      participants: participants || meetingRoom?.participants || [],
-      chatMessages: messages || meetingRoom?.chatMessages || []
+      ...emptyMeetingRoom,
+      connection,
+      connectionStatus: 'connecting',
+      participants: [],
+      chatMessages: [],
+      directContacts: []
     }
     state.currentMeetingId = meetingId
+    const selectedMeeting = state.meetings.find(
+      meeting => String(meeting.id) === String(meetingId)
+    )
+    if (selectedMeeting) state.activeMeeting = selectedMeeting
+    await boardStore.loadMeetingParticipants(meetingId)
     return state.meetingRoom
+  },
+  async loadMeetingParticipants(meetingId = state.currentMeetingId) {
+    if (!meetingId) return []
+    const participants = await withLoading(() =>
+      dataSource.board.getParticipants(meetingId)
+    )
+    state.meetingRoom.participants = participants || []
+    state.meetingRoom.totalParticipants = state.meetingRoom.participants.length
+    return state.meetingRoom.participants
   },
   async loadInviteMembers(teamId) {
     const members = await withLoading(() =>
@@ -242,9 +284,57 @@ export const boardStore = {
     return result
   },
   async createMeeting(data) {
-    const meeting = await dataSource.board.createMeeting(data)
-    state.activeMeeting = { ...state.activeMeeting, ...meeting }
+    const meeting = await withLoading(() =>
+      dataSource.board.createMeeting({
+        spaceId: data.teamId,
+        teamId: data.teamId,
+        meetingRoomName: data.name
+      })
+    )
+    state.meetings = [meeting, ...state.meetings]
+    state.activeMeeting = meeting
     return meeting
+  },
+  async leaveMeeting(meetingId = state.currentMeetingId) {
+    const result = await withLoading(() =>
+      dataSource.board.leaveMeeting(meetingId)
+    )
+    state.meetingRoom.connectionStatus = 'leaving'
+    return result
+  },
+  async endMeeting(meetingId = state.currentMeetingId) {
+    await withLoading(() => dataSource.board.endMeeting(meetingId))
+    state.meetings = state.meetings.filter(
+      meeting => String(meeting.id) !== String(meetingId)
+    )
+    state.activeMeeting = state.meetings[0] || { ...emptyMeeting }
+    state.meetingRoom.connectionStatus = 'ending'
+  },
+  async transferMeetingHost(meetingId, nextHostParticipantId) {
+    const result = await withLoading(() =>
+      dataSource.board.transferMeetingHost(
+        meetingId,
+        nextHostParticipantId
+      )
+    )
+    if (state.meetingRoom.connection) {
+      state.meetingRoom.connection.isHost = false
+    }
+    await boardStore.loadMeetingParticipants(meetingId)
+    return result
+  },
+  setMeetingConnectionStatus(status) {
+    state.meetingRoom.connectionStatus = status
+  },
+  clearMeetingRoom() {
+    state.currentMeetingId = ''
+    state.meetingRoom = {
+      ...emptyMeetingRoom,
+      connection: null,
+      participants: [],
+      chatMessages: [],
+      directContacts: []
+    }
   },
   async createEvent(data) {
     const event = await dataSource.board.createEvent(data)

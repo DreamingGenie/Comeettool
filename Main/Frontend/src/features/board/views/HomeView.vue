@@ -51,9 +51,9 @@
         <template v-else>
           <div class="live-label">
             <i></i><b>회의 바로가기</b>
-            <small>{{ boardState.activeMeeting.id ? 1 : 0 }}개의 회의가 진행 중입니다.</small>
+            <small>{{ boardState.meetings.length }}개의 회의가 진행 중입니다.</small>
           </div>
-          <article class="live-card home-live-card">
+          <article v-if="boardState.activeMeeting.id" class="live-card home-live-card">
             <header>
               <div>
                 <h2>
@@ -71,6 +71,9 @@
               　♙ {{ boardState.activeMeeting.participantCount }}명 참여 중
               <button type="button" @click="enterMeeting">회의 입장 →</button>
             </footer>
+          </article>
+          <article v-else class="live-card home-live-card">
+            <header><div><h2>진행 중인 회의가 없습니다.</h2></div></header>
           </article>
           <BoardCalendar
             title="나의 일정"
@@ -125,7 +128,9 @@ const filteredWorkspaces = computed(() => {
   return boardState.workspaces.filter(item => item.name.toLowerCase().includes(keyword))
 })
 
-const enterMeeting = () => router.push(`/meetings/${meetingId.value}`)
+const enterMeeting = () => {
+  if (meetingId.value) router.push(`/meetings/${meetingId.value}`)
+}
 
 async function logout() {
   try {

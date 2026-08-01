@@ -6,6 +6,12 @@ import {
   toTeamViewModel,
   toWorkspaceViewModel
 } from '../mappers/spaceMapper'
+import {
+  toMeetingConnectionViewModel,
+  toMeetingListViewModel,
+  toMeetingParticipantsViewModel,
+  toMeetingViewModel
+} from '../mappers/meetingMapper'
 
 export const boardApi = {
   getDashboard: async () =>
@@ -17,9 +23,35 @@ export const boardApi = {
     ),
   getMembers: async spaceId =>
     toMemberRowsViewModel(await request(`/api/v1/spaces/${spaceId}`)),
-  getActiveMeeting: teamId => request(`/api/teams/${teamId}/meetings/active`),
-  getMeetingRoom: meetingId => request(`/api/rooms/${meetingId}`),
-  getParticipants: meetingId => request(`/api/rooms/${meetingId}/participants`),
+  getMeetings: async spaceId =>
+    toMeetingListViewModel(
+      await request(`/api/v1/spaces/${spaceId}/meetings`)
+    ),
+  joinMeeting: async meetingId =>
+    toMeetingConnectionViewModel(
+      await request(`/api/v1/meetings/${meetingId}/join`, {
+        method: 'POST'
+      })
+    ),
+  leaveMeeting: meetingId =>
+    request(`/api/v1/meetings/${meetingId}/leave`, {
+      method: 'POST'
+    }),
+  endMeeting: meetingId =>
+    request(`/api/v1/meetings/${meetingId}/end`, {
+      method: 'POST'
+    }),
+  getParticipants: async meetingId =>
+    toMeetingParticipantsViewModel(
+      await request(`/api/v1/meetings/${meetingId}/participants`)
+    ),
+  transferMeetingHost: (meetingId, nextHostParticipantId) =>
+    request(`/api/v1/meetings/${meetingId}/grant`, {
+      method: 'POST',
+      body: JSON.stringify({
+        nextHostParticipantId: Number(nextHostParticipantId)
+      })
+    }),
   getInviteMembers: teamId => request(`/api/teams/${teamId}/invite-members`),
   updateTeam: (teamId, data) =>
     request(`/api/teams/${teamId}`, {
@@ -53,11 +85,14 @@ export const boardApi = {
       method: 'PATCH',
       body: JSON.stringify({ newOwnerUserId })
     }),
-  createMeeting: data =>
-    request('/api/rooms', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    }),
+  createMeeting: async data =>
+    toMeetingViewModel(
+      await request(`/api/v1/spaces/${data.spaceId}/meetings`, {
+        method: 'POST',
+        body: JSON.stringify({ meetingRoomName: data.meetingRoomName })
+      }),
+      data
+    ),
   getMessages: code => request(`/api/rooms/${code}/messages`),
   sendMessage: (code, body) =>
     request(`/api/rooms/${code}/messages`, {

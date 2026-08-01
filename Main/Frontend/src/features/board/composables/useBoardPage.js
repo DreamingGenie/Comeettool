@@ -5,9 +5,9 @@ import { boardStore } from '../stores/boardStore'
 export function useBoardPage(options = {}) {
   const route = useRoute()
   const resources = options.resources || []
-  const teamId = computed(() => String(route.params.teamId || 'a707'))
+  const teamId = computed(() => String(route.params.teamId || ''))
   const meetingId = computed(() =>
-    String(route.params.meetingId || boardStore.state.activeMeeting.id || 'be-team-meeting')
+    String(route.params.meetingId || boardStore.state.activeMeeting.id || '')
   )
   const archiveSection = computed(() => {
     const section = typeof options.section === 'function'
