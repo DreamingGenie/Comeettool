@@ -25,7 +25,7 @@ import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.user.entity.User;
 
 /**
- * MEET-02·09 Repository 통합 테스트.
+ * MEET-02·05·09 Repository 통합 테스트.
  * memberId 기반 Participant 조회, 회의별 현재 접속자 집계,
  * 같은 스페이스의 삭제되지 않은 회의 필터와 초대 후보 검색을
  * 실제 PostgreSQL에서 검증한다.
@@ -101,6 +101,58 @@ class MeetingRepositoryTest {
         assertThat(countByMeetingRoomId)
                 .containsEntry(connectedMeeting.getId(), 2L)
                 .doesNotContainKey(disconnectedMeeting.getId());
+    }
+
+    @Test
+    @DisplayName("회의 종료 시 해당 회의의 입장 중인 Participant만 모두 퇴장 처리한다")
+    void leaveAllByMeetingRoomId_disconnectsOnlyRequestedMeeting() {
+        User user = persistUser();
+        Team team = persistTeam(user.getId());
+        Member member = persistMember(user.getId(), team.getId());
+        MeetingRoom requestedMeeting =
+                persistMeeting(team.getId(), user.getId(), "종료 회의", false);
+        MeetingRoom otherMeeting =
+                persistMeeting(team.getId(), user.getId(), "다른 회의", false);
+        Participant connectedParticipant = persistParticipant(
+                requestedMeeting.getId(),
+                member.getId(),
+                true
+        );
+        Participant alreadyLeftParticipant = persistParticipant(
+                requestedMeeting.getId(),
+                persistMember(persistUser().getId(), team.getId()).getId(),
+                false
+        );
+        Participant otherMeetingParticipant = persistParticipant(
+                otherMeeting.getId(),
+                member.getId(),
+                true
+        );
+        OffsetDateTime endedAt =
+                OffsetDateTime.parse("2026-07-31T17:00:00+09:00");
+
+        requestedMeeting.endMeeting(endedAt);
+        int updatedCount = participantRepository
+                .leaveAllByMeetingRoomId(requestedMeeting.getId());
+
+        assertThat(updatedCount).isEqualTo(1);
+        MeetingRoom endedMeeting = meetingRoomRepository
+                .findById(requestedMeeting.getId())
+                .orElseThrow();
+        assertThat(endedMeeting.isDeleted()).isTrue();
+        assertThat(endedMeeting.getDeletedAt()).isEqualTo(endedAt);
+        assertThat(participantRepository.findById(connectedParticipant.getId()))
+                .get()
+                .extracting(Participant::isInMeeting)
+                .isEqualTo(false);
+        assertThat(participantRepository.findById(alreadyLeftParticipant.getId()))
+                .get()
+                .extracting(Participant::isInMeeting)
+                .isEqualTo(false);
+        assertThat(participantRepository.findById(otherMeetingParticipant.getId()))
+                .get()
+                .extracting(Participant::isInMeeting)
+                .isEqualTo(true);
     }
 
     @Test

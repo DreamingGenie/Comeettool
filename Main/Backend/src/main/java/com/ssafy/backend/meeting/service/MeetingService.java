@@ -51,4 +51,9 @@ public interface MeetingService {
             Long requesterUserId,
             Long meetingId
     );
+
+    void endMeeting(
+            Long requesterUserId,
+            Long meetingId
+    );
 }

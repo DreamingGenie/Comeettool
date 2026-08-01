@@ -105,6 +105,24 @@ public class MeetingController {
     }
 
     /**
+     * MEET-05: 호스트가 모든 참여자의 회의를 종료한다.
+     */
+    @PostMapping("/meetings/{meetingId}/end")
+    public ResponseEntity<ApiResponse<Void>> endMeeting(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId
+    ) {
+        meetingService.endMeeting(
+                Long.parseLong(userId),
+                meetingId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("회의가 종료되었습니다.", null)
+        );
+    }
+
+    /**
      * MEET-06: 현재 호스트가 회의 참여자에게 호스트 권한을 양도한다.
      */
     @PostMapping("/meetings/{meetingId}/grant")

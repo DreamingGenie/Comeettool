@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Optional;
@@ -120,6 +121,29 @@ class LiveKitWebhookServiceImplTest {
     }
 
     @Test
+    @DisplayName("room_finished 이벤트는 회의의 모든 Participant를 퇴장 처리한다")
+    void handle_leavesAllParticipantsForRoomFinished() {
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(createRoomFinishedEvent("meeting-100"));
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        verify(participantRepository)
+                .leaveAllByMeetingRoomId(MEETING_ROOM_ID);
+    }
+
+    @Test
+    @DisplayName("프로젝트 형식이 아닌 room_finished 방 이름은 무시한다")
+    void handle_ignoresRoomFinishedWithInvalidRoomName() {
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(createRoomFinishedEvent("unknown-room"));
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        verifyNoInteractions(participantRepository);
+    }
+
+    @Test
     @DisplayName("프로젝트 규칙과 다른 roomName 또는 identity는 무시한다")
     void handle_ignoresInvalidProjectIdentifier() {
         LivekitWebhook.WebhookEvent webhookEvent =
@@ -198,6 +222,17 @@ class LiveKitWebhookServiceImplTest {
                                 .setIdentity("participant-" + PARTICIPANT_ID)
                                 .setDisconnectReason(disconnectReason)
                 )
+                .build();
+    }
+
+    private LivekitWebhook.WebhookEvent createRoomFinishedEvent(
+            String roomName
+    ) {
+        return LivekitWebhook.WebhookEvent.newBuilder()
+                .setId("event-id")
+                .setEvent("room_finished")
+                .setRoom(LivekitModels.Room.newBuilder()
+                        .setName(roomName))
                 .build();
     }
 }

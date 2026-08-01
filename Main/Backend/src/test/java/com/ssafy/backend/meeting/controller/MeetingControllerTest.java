@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -45,7 +46,7 @@ import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
  * 회의 컨트롤러 단위 테스트.
- * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·06·07·09 매핑과 공통 응답 형식을 검증한다.
+ * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·04·05·06·07·09 매핑과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 API 테스트")
@@ -296,6 +297,58 @@ class MeetingControllerTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code")
                         .value("MEETING_LIVEKIT_DISCONNECT_FAILED"));
+    }
+
+    @Test
+    @DisplayName("호스트가 회의를 종료하면 200을 반환한다")
+    void endMeeting_returns200() throws Exception {
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/end", MEETING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message")
+                        .value("회의가 종료되었습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        verify(meetingService).endMeeting(1L, MEETING_ID);
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자가 회의를 종료하면 403을 반환한다")
+    void endMeeting_returns403ForNonHost() throws Exception {
+        willThrow(new CustomException(ErrorCode.MEETING_HOST_REQUIRED))
+                .given(meetingService)
+                .endMeeting(1L, MEETING_ID);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/end", MEETING_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_HOST_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("활성 회의가 없으면 종료 요청에 404를 반환한다")
+    void endMeeting_returns404ForMissingMeeting() throws Exception {
+        willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND))
+                .given(meetingService)
+                .endMeeting(1L, MEETING_ID);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/end", MEETING_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("LiveKit 회의방 종료에 실패하면 502를 반환한다")
+    void endMeeting_returns502ForLiveKitFailure() throws Exception {
+        willThrow(new CustomException(
+                ErrorCode.MEETING_LIVEKIT_ROOM_END_FAILED
+        )).given(meetingService).endMeeting(1L, MEETING_ID);
+
+        mockMvc.perform(post("/api/v1/meetings/{meetingId}/end", MEETING_ID))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_LIVEKIT_ROOM_END_FAILED"));
     }
 
     @Test

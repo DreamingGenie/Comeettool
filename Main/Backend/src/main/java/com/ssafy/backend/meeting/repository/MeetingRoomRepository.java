@@ -42,8 +42,8 @@ public interface MeetingRoomRepository extends JpaRepository<MeetingRoom, Long> 
     );
 
     /**
-     * MEET-06 호스트 양도용 활성 회의 조회.
-     * 동시에 여러 양도 요청이 들어와도 하나씩 처리하도록 비관적 쓰기 잠금을 건다.
+     * MEET-05 종료·MEET-06 호스트 양도용 활성 회의 조회.
+     * 동시에 상태 변경 요청이 들어와도 하나씩 처리하도록 비관적 쓰기 잠금을 건다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

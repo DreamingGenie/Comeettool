@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -34,4 +35,19 @@ public interface ParticipantRepository extends JpaRepository<Participant, Long> 
 
     // MEET-07: 현재 회의에 입장 중인 Participant만 ID 순서대로 조회한다.
     List<Participant> findAllByMeetingRoomIdAndIsInMeetingTrueOrderByIdAsc(Long meetingRoomId);
+
+    // MEET-05: 회의 종료 시 현재 입장 중인 모든 Participant를 일괄 퇴장 처리한다.
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            update Participant p
+            set p.isInMeeting = false
+            where p.meetingRoomId = :meetingRoomId
+              and p.isInMeeting = true
+            """)
+    int leaveAllByMeetingRoomId(
+            @Param("meetingRoomId") Long meetingRoomId
+    );
 }

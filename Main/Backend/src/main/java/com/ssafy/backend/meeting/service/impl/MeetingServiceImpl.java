@@ -1,5 +1,6 @@
 package com.ssafy.backend.meeting.service.impl;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
+import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
 import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
@@ -40,7 +42,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 회의 도메인 서비스.
  * MEET-01 생성, MEET-02 목록, MEET-03 RTC 입장,
- * MEET-06 호스트 양도, MEET-07 현재 참여자 조회,
+ * MEET-04 퇴장, MEET-05 종료, MEET-06 호스트 양도, MEET-07 현재 참여자 조회,
  * MEET-09 초대 후보 검색을 처리한다.
  */
 @Service
@@ -58,6 +60,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final MeetingMapper meetingMapper;
     private final LiveKitTokenProvider liveKitTokenProvider;
     private final LiveKitParticipantManager liveKitParticipantManager;
+    private final LiveKitRoomManager liveKitRoomManager;
 
     /**
      * MEET-01: 회의 생성.
@@ -241,6 +244,32 @@ public class MeetingServiceImpl implements MeetingService {
         );
 
         return new ResponseLeaveMeetingDto(false);
+    }
+
+    /**
+     * MEET-05: 호스트가 회의를 종료한다.
+     */
+    @Override
+    @Transactional
+    public void endMeeting(
+            Long requesterUserId,
+            Long meetingId
+    ) {
+        MeetingRoom meetingRoom = meetingRoomRepository
+                .findActiveByIdForUpdate(meetingId)
+                .orElseThrow(() ->
+                        new CustomException(ErrorCode.MEETING_NOT_FOUND)
+                );
+
+        if (!meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
+        }
+
+        liveKitRoomManager.endRoom(meetingRoom.getId());
+
+        OffsetDateTime endedAt = OffsetDateTime.now();
+        meetingRoom.endMeeting(endedAt);
+        participantRepository.leaveAllByMeetingRoomId(meetingRoom.getId());
     }
 
     /**

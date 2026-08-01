@@ -40,6 +40,7 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
+import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
 import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
@@ -55,7 +56,7 @@ import com.ssafy.backend.space.repository.TeamRepository;
 /**
  * 회의 서비스 단위 테스트.
  * 저장소와 LiveKit 토큰 발급기를 Mock으로 분리하고
- * MEET-01·02·03·04·06·07·09의 정상 흐름과 접근 제한을 검증한다.
+ * MEET-01·02·03·04·05·06·07·09의 정상 흐름과 접근 제한을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 서비스 테스트")
@@ -94,6 +95,9 @@ class MeetingServiceImplTest {
 
     @Mock
     private LiveKitParticipantManager liveKitParticipantManager;
+
+    @Mock
+    private LiveKitRoomManager liveKitRoomManager;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -797,6 +801,80 @@ class MeetingServiceImplTest {
                 ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
         );
         assertThat(participant.isInMeeting()).isTrue();
+    }
+
+    @Test
+    @DisplayName("호스트가 회의를 종료하면 LiveKit 방과 모든 참여자 상태를 정리한다")
+    void endMeeting_endsLiveKitRoomAndSoftDeletesMeeting() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+
+        meetingService.endMeeting(CURRENT_HOST_USER_ID, MEETING_ID);
+
+        assertThat(savedMeetingRoom.isDeleted()).isTrue();
+        assertThat(savedMeetingRoom.getDeletedAt()).isNotNull();
+        verify(liveKitRoomManager).endRoom(MEETING_ID);
+        verify(participantRepository).leaveAllByMeetingRoomId(MEETING_ID);
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자는 회의를 종료할 수 없다")
+    void endMeeting_rejectsNonHost() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+
+        assertErrorCode(
+                () -> meetingService.endMeeting(
+                        NEXT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_HOST_REQUIRED
+        );
+
+        assertThat(savedMeetingRoom.isDeleted()).isFalse();
+        verifyNoInteractions(liveKitRoomManager, participantRepository);
+    }
+
+    @Test
+    @DisplayName("활성 회의를 찾을 수 없으면 종료를 거부한다")
+    void endMeeting_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.endMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+
+        verifyNoInteractions(liveKitRoomManager, participantRepository);
+    }
+
+    @Test
+    @DisplayName("LiveKit 방 종료에 실패하면 회의와 참여자 상태를 변경하지 않는다")
+    void endMeeting_keepsStateWhenLiveKitEndFails() {
+        MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(savedMeetingRoom));
+        willThrow(new CustomException(
+                ErrorCode.MEETING_LIVEKIT_ROOM_END_FAILED
+        )).given(liveKitRoomManager).endRoom(MEETING_ID);
+
+        assertErrorCode(
+                () -> meetingService.endMeeting(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID
+                ),
+                ErrorCode.MEETING_LIVEKIT_ROOM_END_FAILED
+        );
+
+        assertThat(savedMeetingRoom.isDeleted()).isFalse();
+        verify(participantRepository, never())
+                .leaveAllByMeetingRoomId(MEETING_ID);
     }
 
     @Test

@@ -64,6 +64,15 @@ public class MeetingRoom {
         return hostId.equals(requesterUserId);
     }
 
+    public void endMeeting(OffsetDateTime endedAt) {
+        if (endedAt == null) {
+            throw new IllegalArgumentException("회의 종료 시각은 필수입니다.");
+        }
+
+        this.isDeleted = true;
+        this.deletedAt = endedAt;
+    }
+
     // MEET-06: 참여자·팀 검증은 Service에서 완료하고, 엔티티는 Host userId만 변경한다.
     public void transferHostTo(Long nextHostUserId) {
         if (nextHostUserId == null || nextHostUserId <= 0) {
