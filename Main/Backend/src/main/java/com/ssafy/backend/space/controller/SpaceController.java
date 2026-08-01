@@ -3,10 +3,12 @@ package com.ssafy.backend.space.controller;
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
+import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.space.service.SpaceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,16 @@ public class SpaceController {
             @PathVariable Long spaceId) {
         ResponseSpaceDetailDto response = spaceService.findSpaceDetails(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // SPACE-08: 스페이스 정보 수정(Owner 전용, 부분 수정). 전달된 필드만 갱신한다.
+    @PatchMapping("/{spaceId}")
+    public ResponseEntity<ApiResponse<ResponseUpdateSpaceDto>> modifySpace(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @Valid @RequestBody RequestUpdateSpaceDto request) {
+        ResponseUpdateSpaceDto response = spaceService.modifySpace(Long.parseLong(userId), spaceId, request);
+        return ResponseEntity.ok(ApiResponse.success("스페이스 정보가 수정되었습니다.", response));
     }
 
     // SPACE-07: 스페이스 나가기(요청자 본인). Owner는 소유권 위임 후에만 가능(정책 SP-1).
