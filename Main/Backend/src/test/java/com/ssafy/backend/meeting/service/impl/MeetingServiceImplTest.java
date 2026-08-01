@@ -465,8 +465,8 @@ class MeetingServiceImplTest {
     }
 
     @Test
-    @DisplayName("초대된 참여자는 LiveKit 입장 정보를 발급받고 입장 상태로 변경된다")
-    void joinMeeting_returnsLiveKitConnectionInfoAndEntersParticipant() {
+    @DisplayName("초대된 참여자는 DB 상태 변경 없이 LiveKit 입장 정보를 발급받는다")
+    void joinMeeting_returnsLiveKitConnectionInfoWithoutEnteringParticipant() {
         long participantId = 30L;
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
         Member member = createMemberWithId(
@@ -510,7 +510,7 @@ class MeetingServiceImplTest {
         assertThat(response.isHost()).isTrue();
         assertThat(response.token()).isEqualTo("livekit-token");
         assertThat(response.url()).isEqualTo("wss://test.livekit.cloud");
-        assertThat(participant.isInMeeting()).isTrue();
+        assertThat(participant.isInMeeting()).isFalse();
     }
 
     @Test

@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
 
+    private static final String PARTICIPANT_JOINED_EVENT = "participant_joined";
     private static final String PARTICIPANT_LEFT_EVENT = "participant_left";
     private static final String ROOM_FINISHED_EVENT = "room_finished";
 
@@ -33,6 +34,8 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
                 receiveWebhookEvent(rawBody, authorizationHeader);
 
         switch (webhookEvent.getEvent()) {
+            case PARTICIPANT_JOINED_EVENT ->
+                    handleParticipantJoined(webhookEvent);
             case PARTICIPANT_LEFT_EVENT ->
                     handleParticipantLeft(webhookEvent);
             case ROOM_FINISHED_EVENT ->
@@ -41,6 +44,54 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
                 // 현재 처리 대상이 아닌 이벤트는 무시한다.
             }
         }
+    }
+
+    private void handleParticipantJoined(
+            LivekitWebhook.WebhookEvent webhookEvent
+    ) {
+        if (!webhookEvent.hasRoom() || !webhookEvent.hasParticipant()) {
+            log.warn(
+                    "LiveKit participant_joined 필수 정보 누락: eventId={}",
+                    webhookEvent.getId()
+            );
+            return;
+        }
+
+        Long meetingRoomId;
+        Long participantId;
+        try {
+            meetingRoomId = liveKitNameGenerator.parseMeetingRoomId(
+                    webhookEvent.getRoom().getName()
+            );
+            participantId = liveKitNameGenerator.parseParticipantId(
+                    webhookEvent.getParticipant().getIdentity()
+            );
+        } catch (IllegalArgumentException exception) {
+            log.warn(
+                    "회의방 또는 참여자 식별자 규칙과 일치하지 않는 LiveKit 입장 이벤트: "
+                            + "eventId={}, roomName={}, identity={}",
+                    webhookEvent.getId(),
+                    webhookEvent.getRoom().getName(),
+                    webhookEvent.getParticipant().getIdentity()
+            );
+            return;
+        }
+
+        Participant participant = participantRepository
+                .findByIdAndMeetingRoomId(participantId, meetingRoomId)
+                .orElse(null);
+        if (participant == null) {
+            log.warn(
+                    "LiveKit 입장 대상 Participant 없음: "
+                            + "eventId={}, meetingRoomId={}, participantId={}",
+                    webhookEvent.getId(),
+                    meetingRoomId,
+                    participantId
+            );
+            return;
+        }
+
+        participant.enterMeeting();
     }
 
     private LivekitWebhook.WebhookEvent receiveWebhookEvent(

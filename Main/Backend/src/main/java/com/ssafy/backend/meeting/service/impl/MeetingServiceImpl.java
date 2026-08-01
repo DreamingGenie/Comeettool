@@ -203,7 +203,6 @@ public class MeetingServiceImpl implements MeetingService {
                 participant.getId(),
                 member.getNickname()
         );
-        participant.enterMeeting();
 
         return new ResponseJoinMeetingDto(
                 meetingRoom.getId(),
