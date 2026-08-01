@@ -5,6 +5,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
@@ -27,9 +28,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 팀 스페이스(teams/members) 조회·생성 로직 (SPACE-01/02/05).
@@ -88,7 +93,8 @@ public class SpaceServiceImpl implements SpaceService {
             memberCountByTeam.put((Long) row[0], (Long) row[1]);
         }
 
-        return rows.stream()
+        // 쿼리 기본 정렬은 최신순(created_at DESC).
+        List<ResponseSpaceListDto> items = rows.stream()
                 .map(row -> {
                     Team team = (Team) row[0];
                     MemberAuthority authority = (MemberAuthority) row[1];
@@ -96,6 +102,80 @@ public class SpaceServiceImpl implements SpaceService {
                     return spaceMapper.toListItem(team, authority.name(), count);
                 })
                 .toList();
+
+        // SPACE-04: 사용자 커스텀 순서를 적용한다(저장된 순서 없으면 최신순 그대로).
+        String orderCsv = userRepository.findById(userId)
+                .map(User::getSpaceOrder)
+                .orElse(null);
+        return applyCustomOrder(items, orderCsv);
+    }
+
+    @Override
+    @Transactional
+    public List<ResponseSpaceListDto> modifySpaceOrder(Long userId, RequestUpdateSpaceOrderDto request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        // spaceId 목록을 CSV로 저장(빈 목록이면 엔티티에서 null로 정규화 → 최신순 복귀).
+        user.updateSpaceOrder(toCsv(request.spaceOrder()));
+
+        // 저장된 순서로 병합·정렬된 목록을 그대로 반환(FE 재조회 불필요).
+        return findSpaceList(userId, null);
+    }
+
+    // SPACE-04 병합 규칙: (1) 저장 순서대로 (2) 저장에 없는 신규 스페이스는 최신순으로 맨 앞 (3) 없어진 id는 버림.
+    private List<ResponseSpaceListDto> applyCustomOrder(List<ResponseSpaceListDto> items, String orderCsv) {
+        if (orderCsv == null || orderCsv.isBlank()) {
+            return items;
+        }
+        List<Long> stored = parseOrder(orderCsv);
+        Map<Long, ResponseSpaceListDto> byId = new LinkedHashMap<>();
+        for (ResponseSpaceListDto item : items) {
+            byId.put(item.spaceId(), item);
+        }
+        Set<Long> storedSet = new HashSet<>(stored);
+
+        List<ResponseSpaceListDto> result = new ArrayList<>(items.size());
+        // (2) 저장 순서에 없는 신규 스페이스 → 최신순(현재 items 순서) 유지하며 맨 앞에.
+        for (ResponseSpaceListDto item : items) {
+            if (!storedSet.contains(item.spaceId())) {
+                result.add(item);
+            }
+        }
+        // (1) 저장된 순서대로, (3) 실제 존재하는 것만(중복 방지).
+        Set<Long> added = new HashSet<>();
+        for (Long id : stored) {
+            ResponseSpaceListDto item = byId.get(id);
+            if (item != null && added.add(id)) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    // CSV("5,2,9")를 Long 목록으로 파싱(공백·비정상 토큰은 무시).
+    private List<Long> parseOrder(String orderCsv) {
+        List<Long> ids = new ArrayList<>();
+        for (String part : orderCsv.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            try {
+                ids.add(Long.parseLong(token));
+            } catch (NumberFormatException ignored) {
+                // 손상된 토큰은 건너뛴다(정렬은 부가 기능이라 예외로 실패시키지 않는다).
+            }
+        }
+        return ids;
+    }
+
+    // spaceId 목록 → CSV. 빈 목록이면 null(커스텀 순서 해제).
+    private String toCsv(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return null;
+        }
+        return String.join(",", ids.stream().map(String::valueOf).toList());
     }
 
     @Override

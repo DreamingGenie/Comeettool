@@ -4,6 +4,7 @@ import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
@@ -56,6 +57,15 @@ public class SpaceController {
             @RequestParam(required = false) String search) {
         List<ResponseSpaceListDto> response = spaceService.findSpaceList(Long.parseLong(userId), search);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // SPACE-04: 스페이스 정렬 저장(사용자별 커스텀 순서). 저장 후 병합·정렬된 목록을 반환한다.
+    @PatchMapping("/order")
+    public ResponseEntity<ApiResponse<List<ResponseSpaceListDto>>> modifySpaceOrder(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody RequestUpdateSpaceOrderDto request) {
+        List<ResponseSpaceListDto> response = spaceService.modifySpaceOrder(Long.parseLong(userId), request);
+        return ResponseEntity.ok(ApiResponse.success("스페이스 순서가 저장되었습니다.", response));
     }
 
     // SPACE-05: 스페이스 상세(정보 + 참여자)
