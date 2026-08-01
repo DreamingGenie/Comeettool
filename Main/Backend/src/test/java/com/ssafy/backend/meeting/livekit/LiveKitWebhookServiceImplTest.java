@@ -110,10 +110,89 @@ class LiveKitWebhookServiceImplTest {
     }
 
     @Test
-    @DisplayName("이번 범위가 아닌 participant_joined 이벤트는 상태를 변경하지 않는다")
-    void handle_ignoresParticipantJoinedUntilJoinMigration() {
+    @DisplayName("participant_joined 이벤트는 Participant 입장 상태를 true로 변경한다")
+    void handle_changesParticipantPresenceForParticipantJoined() {
+        Participant participant = createParticipant(false);
         given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
                 .willReturn(createWebhookEvent("participant_joined"));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                PARTICIPANT_ID,
+                MEETING_ROOM_ID
+        )).willReturn(Optional.of(participant));
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        assertThat(participant.isInMeeting()).isTrue();
+    }
+
+    @Test
+    @DisplayName("이미 입장한 Participant의 중복 입장 이벤트도 멱등 처리한다")
+    void handle_isIdempotentForAlreadyJoinedParticipant() {
+        Participant participant = createParticipant(true);
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(createWebhookEvent("participant_joined"));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                PARTICIPANT_ID,
+                MEETING_ROOM_ID
+        )).willReturn(Optional.of(participant));
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        assertThat(participant.isInMeeting()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Participant 정보가 없는 participant_joined 이벤트는 무시한다")
+    void handle_ignoresParticipantJoinedWithoutParticipant() {
+        LivekitWebhook.WebhookEvent webhookEvent =
+                LivekitWebhook.WebhookEvent.newBuilder()
+                        .setId("event-id")
+                        .setEvent("participant_joined")
+                        .setRoom(LivekitModels.Room.newBuilder()
+                                .setName("meeting-" + MEETING_ROOM_ID))
+                        .build();
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(webhookEvent);
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        verifyNoInteractions(participantRepository);
+    }
+
+    @Test
+    @DisplayName("등록되지 않은 Participant의 입장 이벤트는 무시한다")
+    void handle_ignoresParticipantJoinedForUnknownParticipant() {
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(createWebhookEvent("participant_joined"));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                PARTICIPANT_ID,
+                MEETING_ROOM_ID
+        )).willReturn(Optional.empty());
+
+        liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
+
+        verify(participantRepository).findByIdAndMeetingRoomId(
+                PARTICIPANT_ID,
+                MEETING_ROOM_ID
+        );
+    }
+
+    @Test
+    @DisplayName("식별자 규칙과 다른 participant_joined 이벤트는 무시한다")
+    void handle_ignoresParticipantJoinedWithInvalidProjectIdentifier() {
+        LivekitWebhook.WebhookEvent webhookEvent =
+                LivekitWebhook.WebhookEvent.newBuilder()
+                        .setId("event-id")
+                        .setEvent("participant_joined")
+                        .setRoom(LivekitModels.Room.newBuilder()
+                                .setName("unknown-room"))
+                        .setParticipant(
+                                LivekitModels.ParticipantInfo.newBuilder()
+                                        .setIdentity("unknown-participant")
+                        )
+                        .build();
+        given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
+                .willReturn(webhookEvent);
 
         liveKitWebhookService.handle(RAW_BODY, AUTHORIZATION_HEADER);
 
