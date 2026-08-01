@@ -57,6 +57,8 @@ public enum ErrorCode {
             "팀 스페이스에서 동시에 진행할 수 있는 회의는 최대 3개입니다."),
     MEETING_LIVEKIT_DISCONNECT_FAILED(HttpStatus.BAD_GATEWAY, "MEETING_LIVEKIT_DISCONNECT_FAILED",
             "회의 연결 종료 처리에 실패했습니다."),
+    MEETING_LIVEKIT_ROOM_END_FAILED(HttpStatus.BAD_GATEWAY, "MEETING_LIVEKIT_ROOM_END_FAILED",
+            "LiveKit 회의방 종료 처리에 실패했습니다."),
     MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED(
             HttpStatus.UNAUTHORIZED,
             "MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED",

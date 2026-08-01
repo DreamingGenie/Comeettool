@@ -3,6 +3,8 @@ package com.ssafy.backend.meeting.entity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.OffsetDateTime;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +35,29 @@ class MeetingRoomTest {
 
         assertThat(meetingRoom.isHost(1L)).isTrue();
         assertThat(meetingRoom.isHost(2L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("회의를 종료하면 soft delete 상태와 종료 시각을 저장한다")
+    void endMeeting_softDeletesMeetingRoom() {
+        MeetingRoom meetingRoom = createMeetingRoom();
+        OffsetDateTime endedAt =
+                OffsetDateTime.parse("2026-07-31T17:00:00+09:00");
+
+        meetingRoom.endMeeting(endedAt);
+
+        assertThat(meetingRoom.isDeleted()).isTrue();
+        assertThat(meetingRoom.getDeletedAt()).isEqualTo(endedAt);
+    }
+
+    @Test
+    @DisplayName("회의 종료 시각이 없으면 종료할 수 없다")
+    void endMeeting_rejectsNullEndedAt() {
+        MeetingRoom meetingRoom = createMeetingRoom();
+
+        assertThatThrownBy(() -> meetingRoom.endMeeting(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("회의 종료 시각은 필수입니다.");
     }
 
     @Test

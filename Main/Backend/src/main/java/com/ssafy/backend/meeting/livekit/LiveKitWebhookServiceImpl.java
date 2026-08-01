@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
 
     private static final String PARTICIPANT_LEFT_EVENT = "participant_left";
+    private static final String ROOM_FINISHED_EVENT = "room_finished";
 
     private final WebhookReceiver webhookReceiver;
     private final LiveKitNameGenerator liveKitNameGenerator;
@@ -31,11 +32,15 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
         LivekitWebhook.WebhookEvent webhookEvent =
                 receiveWebhookEvent(rawBody, authorizationHeader);
 
-        if (!PARTICIPANT_LEFT_EVENT.equals(webhookEvent.getEvent())) {
-            return;
+        switch (webhookEvent.getEvent()) {
+            case PARTICIPANT_LEFT_EVENT ->
+                    handleParticipantLeft(webhookEvent);
+            case ROOM_FINISHED_EVENT ->
+                    handleRoomFinished(webhookEvent);
+            default -> {
+                // 현재 처리 대상이 아닌 이벤트는 무시한다.
+            }
         }
-
-        handleParticipantLeft(webhookEvent);
     }
 
     private LivekitWebhook.WebhookEvent receiveWebhookEvent(
@@ -109,5 +114,33 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
         }
 
         participant.leaveMeeting();
+    }
+
+    private void handleRoomFinished(
+            LivekitWebhook.WebhookEvent webhookEvent
+    ) {
+        if (!webhookEvent.hasRoom()) {
+            log.warn(
+                    "LiveKit room_finished 필수 정보 누락: eventId={}",
+                    webhookEvent.getId()
+            );
+            return;
+        }
+
+        Long meetingRoomId;
+        try {
+            meetingRoomId = liveKitNameGenerator.parseMeetingRoomId(
+                    webhookEvent.getRoom().getName()
+            );
+        } catch (IllegalArgumentException exception) {
+            log.warn(
+                    "회의방 이름 규칙과 일치하지 않는 LiveKit 방: eventId={}, roomName={}",
+                    webhookEvent.getId(),
+                    webhookEvent.getRoom().getName()
+            );
+            return;
+        }
+
+        participantRepository.leaveAllByMeetingRoomId(meetingRoomId);
     }
 }
