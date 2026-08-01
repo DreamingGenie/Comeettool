@@ -82,4 +82,21 @@ public class Team {
     public void changeOwner(Long newOwnerId) {
         this.ownerId = newOwnerId;
     }
+
+    // SPACE-08: 스페이스 정보 부분 수정 — null이 아닌 필드만 갱신한다(전달되지 않은 필드는 유지).
+    // name·color는 NOT NULL이라 공백 여부는 서비스에서 사전 검증한다.
+    public void updateInfo(String name, String description, String color, String profileImageUrl) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (color != null) {
+            this.color = color;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
+    }
 }

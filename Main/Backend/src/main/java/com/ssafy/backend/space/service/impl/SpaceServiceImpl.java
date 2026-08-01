@@ -4,10 +4,12 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
+import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
@@ -108,6 +110,34 @@ public class SpaceServiceImpl implements SpaceService {
 
         List<Member> members = memberRepository.findByTeamId(spaceId);
         return spaceMapper.toDetailResponse(team, members);
+    }
+
+    @Override
+    @Transactional
+    public ResponseUpdateSpaceDto modifySpace(Long userId, Long spaceId, RequestUpdateSpaceDto request) {
+        // 정보 수정도 teams 행을 변경하므로 삭제·위임과 동일하게 잠금 조회(동시 삭제/수정 경합 방지, 없으면 404).
+        Team team = loadActiveTeamForUpdate(spaceId);
+
+        // 정책: 스페이스 정보 수정은 소유자만 가능. 비-Owner는 거부(403).
+        if (!isOwner(team, userId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        // NOT NULL 컬럼(name·color)은 "전달됐다면" 공백일 수 없다(빈 값으로 필수 필드를 지울 수 없음).
+        if (request.teamName() != null && request.teamName().isBlank()) {
+            throw new CustomException(ErrorCode.VALIDATION_FAILED);
+        }
+        if (request.teamColor() != null && request.teamColor().isBlank()) {
+            throw new CustomException(ErrorCode.VALIDATION_FAILED);
+        }
+
+        team.updateInfo(
+                request.teamName(),
+                request.teamDescription(),
+                request.teamColor(),
+                request.teamProfileImage()
+        );
+        return spaceMapper.toUpdateResponse(team);
     }
 
     @Override

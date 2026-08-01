@@ -4,10 +4,12 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
+import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
@@ -381,6 +383,108 @@ class SpaceServiceImplTest {
 
             // then
             verify(memberRepository).delete(guest);
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-08 스페이스 정보 수정")
+    class ModifySpace {
+
+        @Test
+        @DisplayName("소유자면 전달된 필드를 갱신하고 수정 결과를 반환한다")
+        void modifySpace_updatesFields() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            RequestUpdateSpaceDto request =
+                    new RequestUpdateSpaceDto("새이름", "새설명", "#ABCDEF", "img.png");
+
+            ResponseUpdateSpaceDto result = spaceService.modifySpace(USER_ID, TEAM_ID, request);
+
+            assertThat(team.getName()).isEqualTo("새이름");
+            assertThat(team.getDescription()).isEqualTo("새설명");
+            assertThat(team.getColor()).isEqualTo("#ABCDEF");
+            assertThat(team.getProfileImageUrl()).isEqualTo("img.png");
+            assertThat(result.teamName()).isEqualTo("새이름");
+            assertThat(result.spaceId()).isEqualTo(TEAM_ID);
+        }
+
+        @Test
+        @DisplayName("부분 수정: 전달되지 않은(null) 필드는 기존 값을 유지한다")
+        void modifySpace_keepsUnspecifiedFields() {
+            Team team = teamWithId(TEAM_ID, USER_ID); // name=팀A, description=설명, color=#123456
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            RequestUpdateSpaceDto request =
+                    new RequestUpdateSpaceDto("새이름", null, null, null);
+
+            spaceService.modifySpace(USER_ID, TEAM_ID, request);
+
+            assertThat(team.getName()).isEqualTo("새이름");
+            assertThat(team.getDescription()).isEqualTo("설명");
+            assertThat(team.getColor()).isEqualTo("#123456");
+        }
+
+        @Test
+        @DisplayName("빈 문자열로 설명을 비울 수 있다")
+        void modifySpace_clearsDescriptionWithEmptyString() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            spaceService.modifySpace(USER_ID, TEAM_ID, new RequestUpdateSpaceDto(null, "", null, null));
+
+            assertThat(team.getDescription()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생한다")
+        void modifySpace_throwsNotFoundWhenAbsent() {
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> spaceService.modifySpace(
+                    USER_ID, TEAM_ID, new RequestUpdateSpaceDto("새이름", null, null, null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 수정하지 않는다")
+        void modifySpace_throwsForNonOwner() {
+            Team team = teamWithId(TEAM_ID, 99L);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() -> spaceService.modifySpace(
+                    USER_ID, TEAM_ID, new RequestUpdateSpaceDto("새이름", null, null, null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            assertThat(team.getName()).isEqualTo("팀A");
+        }
+
+        @Test
+        @DisplayName("이름을 공백으로 넘기면 VALIDATION_FAILED 예외가 발생한다(필수 필드는 비울 수 없음)")
+        void modifySpace_throwsWhenNameBlank() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() -> spaceService.modifySpace(
+                    USER_ID, TEAM_ID, new RequestUpdateSpaceDto("   ", null, null, null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            assertThat(team.getName()).isEqualTo("팀A");
+        }
+
+        @Test
+        @DisplayName("색상을 공백으로 넘기면 VALIDATION_FAILED 예외가 발생한다")
+        void modifySpace_throwsWhenColorBlank() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() -> spaceService.modifySpace(
+                    USER_ID, TEAM_ID, new RequestUpdateSpaceDto(null, null, "  ", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
         }
     }
 

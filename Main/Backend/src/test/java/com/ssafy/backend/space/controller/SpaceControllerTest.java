@@ -6,11 +6,13 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseSpaceMemberDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
+import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.space.service.SpaceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -287,6 +289,59 @@ class SpaceControllerTest {
                     .when(spaceService).removeSpace(7L, 99L);
 
             mockMvc.perform(delete("/api/v1/spaces/{spaceId}", 99L))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-08 PATCH /api/v1/spaces/{spaceId}")
+    class ModifySpace {
+
+        @Test
+        @DisplayName("수정에 성공하면 200 SUCCESS와 수정 결과를 반환한다")
+        void modifySpace_returns200() throws Exception {
+            ResponseUpdateSpaceDto response =
+                    new ResponseUpdateSpaceDto(10L, "새이름", "새설명", "#ABCDEF", "img.png", 7L);
+            given(spaceService.modifySpace(eq(7L), eq(10L), any(RequestUpdateSpaceDto.class)))
+                    .willReturn(response);
+            RequestUpdateSpaceDto request =
+                    new RequestUpdateSpaceDto("새이름", "새설명", "#ABCDEF", "img.png");
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.teamName").value("새이름"));
+
+            verify(spaceService).modifySpace(eq(7L), eq(10L), any(RequestUpdateSpaceDto.class));
+        }
+
+        @Test
+        @DisplayName("소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void modifySpace_returns403ForNonOwner() throws Exception {
+            given(spaceService.modifySpace(eq(7L), eq(10L), any(RequestUpdateSpaceDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestUpdateSpaceDto("새이름", null, null, null))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void modifySpace_returns404WhenAbsent() throws Exception {
+            given(spaceService.modifySpace(eq(7L), eq(99L), any(RequestUpdateSpaceDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}", 99L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestUpdateSpaceDto("새이름", null, null, null))))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
         }
