@@ -446,19 +446,6 @@ function syncTitleFromEditor() {
   titleStateFrame = window.requestAnimationFrame(() => {
     titleStateFrame = null
     if (!titleEditor.value || !currentDocument.value) return
-function readTitleEditorText() {
-  return titleEditor.value
-    ?.getText({ blockSeparator: ' ' })
-    .replace(/\s+/g, ' ')
-    .slice(0, 1000) || ''
-}
-
-function syncTitleFromEditor() {
-  if (titleStateFrame !== null) return
-
-  titleStateFrame = window.requestAnimationFrame(() => {
-    titleStateFrame = null
-    if (!titleEditor.value || !currentDocument.value) return
 
     collaborativeTitle.value = readTitleEditorText()
     titleReady.value = true
@@ -501,33 +488,8 @@ function destroyEditor() {
     titleStateFrame = null
   }
 
-function normalizeDocumentTitle() {
-  if (
-    !canEdit.value ||
-    !collaborationSynced.value ||
-    !titleEditor.value ||
-    readTitleEditorText().trim()
-  ) return
-
-  titleEditor.value.commands.insertContent('새 문서')
-}
-
-function destroyEditor() {
-  connectionGeneration += 1
-
-  if (editorStateFrame !== null) {
-    window.cancelAnimationFrame(editorStateFrame)
-    editorStateFrame = null
-  }
-  if (titleStateFrame !== null) {
-    window.cancelAnimationFrame(titleStateFrame)
-    titleStateFrame = null
-  }
-
   editor.value?.destroy()
   editor.value = null
-  titleEditor.value?.destroy()
-  titleEditor.value = null
   titleEditor.value?.destroy()
   titleEditor.value = null
 
@@ -573,14 +535,6 @@ async function resolveCollaborationToken(documentId, generation) {
       collaboration.permission === 'WRITE' &&
       collaborationSynced.value
     )
-    editor.value?.setEditable(
-      collaboration.permission === 'WRITE' &&
-      collaborationSynced.value
-    )
-    titleEditor.value?.setEditable(
-      collaboration.permission === 'WRITE' &&
-      collaborationSynced.value
-    )
     touchEditorState()
   }
 
@@ -603,7 +557,6 @@ async function createCollaborativeEditor(document, generation) {
     autoConnect: false,
     name: `document:${document.documentId}:epoch:${document.stateEpoch}`,
     document: collaborationDocument,
-    flushDelay: 30,
     flushDelay: 30,
     token: () =>
       resolveCollaborationToken(document.documentId, generation),
@@ -715,84 +668,6 @@ async function createCollaborativeEditor(document, generation) {
     onBlur: normalizeDocumentTitle
   })
 
-  titleEditor.value = new Editor({
-    extensions: [
-      StarterKit.configure({
-        undoRedo: false,
-        heading: false,
-        blockquote: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-        codeBlock: false,
-        horizontalRule: false,
-        hardBreak: false,
-        bold: false,
-        italic: false,
-        strike: false,
-        code: false
-      }),
-      Collaboration.configure({
-        document: collaborationDocument,
-        field: 'title-content'
-      }),
-      CollaborationCaret.configure({
-        provider: collaborationProvider,
-        user: currentAwarenessUser.value
-      }),
-      Placeholder.configure({
-        placeholder: '새 문서'
-      })
-    ],
-    editable: false,
-    editorProps: {
-      attributes: {
-        class: 'document-title-prose',
-        role: 'textbox',
-        'aria-label': '문서 제목',
-        'aria-multiline': 'false'
-      },
-      handleKeyDown: (_view, event) => event.key === 'Enter',
-      handleTextInput: (view, from, to, text) => {
-        const selectedLength = view.state.doc.textBetween(from, to).length
-        const availableLength =
-          1000 - (view.state.doc.textContent.length - selectedLength)
-
-        if (text.length <= availableLength) return false
-        if (availableLength > 0) {
-          view.dispatch(
-            view.state.tr.insertText(text.slice(0, availableLength), from, to)
-          )
-        }
-        return true
-      },
-      handlePaste: (view, event) => {
-        const clipboardText = event.clipboardData
-          ?.getData('text/plain')
-          .replace(/\s+/g, ' ')
-
-        if (!clipboardText) return true
-
-        event.preventDefault()
-        const { from, to } = view.state.selection
-        const selectedLength = view.state.doc.textBetween(from, to).length
-        const availableLength =
-          1000 - (view.state.doc.textContent.length - selectedLength)
-        const text = clipboardText.slice(0, Math.max(availableLength, 0))
-
-        if (!text) return true
-
-        view.dispatch(
-          view.state.tr.insertText(text, from, to)
-        )
-        return true
-      }
-    },
-    onCreate: syncTitleFromEditor,
-    onTransaction: syncTitleFromEditor,
-    onBlur: normalizeDocumentTitle
-  })
-
   editor.value = new Editor({
     extensions: [
       StarterKit.configure({
@@ -814,7 +689,6 @@ async function createCollaborativeEditor(document, generation) {
       })
     ],
     editable: false,
-    editable: false,
     editorProps: {
       attributes: {
         class: 'document-prose',
@@ -822,7 +696,6 @@ async function createCollaborativeEditor(document, generation) {
       }
     },
     onCreate: touchEditorState,
-    onTransaction: touchEditorState
     onTransaction: touchEditorState
   })
 
@@ -835,7 +708,6 @@ function isActive(name, attributes) {
 }
 
 function runCommand(command) {
-  if (!canEdit.value || !collaborationSynced.value || !editor.value) return
   if (!canEdit.value || !collaborationSynced.value || !editor.value) return
   command(editor.value.chain().focus()).run()
   touchEditorState()
@@ -889,15 +761,10 @@ function goBack() {
 watch([canEdit, collaborationSynced], ([editable, synced]) => {
   editor.value?.setEditable(editable && synced)
   titleEditor.value?.setEditable(editable && synced)
-watch([canEdit, collaborationSynced], ([editable, synced]) => {
-  editor.value?.setEditable(editable && synced)
-  titleEditor.value?.setEditable(editable && synced)
   touchEditorState()
 })
 watch(currentAwarenessUser, user => {
   collaborationProvider?.setAwarenessField('user', user)
-  titleEditor.value?.commands.updateUser(user)
-  editor.value?.commands.updateUser(user)
   titleEditor.value?.commands.updateUser(user)
   editor.value?.commands.updateUser(user)
 })
@@ -994,13 +861,9 @@ onBeforeUnmount(() => {
 }
 
 .document-title-editor {
-.document-title-editor {
   display: block;
   width: min(520px, 48vw);
   margin: 4px 0 0;
-}
-
-.document-title-editor :deep(.document-title-prose) {
 }
 
 .document-title-editor :deep(.document-title-prose) {
@@ -1014,15 +877,8 @@ onBeforeUnmount(() => {
   outline: none;
   overflow: hidden;
   white-space: nowrap;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
-.document-title-editor :deep(.document-title-prose p) {
-  margin: 0;
-}
-
-.document-title-editor:not(.readonly):focus-within {
 .document-title-editor :deep(.document-title-prose p) {
   margin: 0;
 }
@@ -1031,7 +887,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 0 var(--blue);
 }
 
-.document-title-editor.readonly {
 .document-title-editor.readonly {
   cursor: default;
 }

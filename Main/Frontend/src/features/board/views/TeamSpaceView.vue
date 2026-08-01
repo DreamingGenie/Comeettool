@@ -10,16 +10,16 @@
     </header>
     <div class="live-label">
       <i></i><b>진행 중인 회의</b>
-      <small>{{ boardState.activeMeeting.id ? 1 : 0 }}개의 회의가 진행 중입니다.</small>
+      <small>{{ boardState.meetings.length }}개의 회의가 진행 중입니다.</small>
     </div>
     <div class="meeting-cards">
-      <article class="live-card">
-        <h2>{{ boardState.activeMeeting.title }}　<small style="color:#15a866">{{ boardState.activeMeeting.status }}</small></h2>
-        <p>{{ boardState.activeMeeting.description }}</p>
+      <article v-for="meeting in boardState.meetings" :key="meeting.id" class="live-card">
+        <h2>{{ meeting.title }}　<small style="color:#15a866">{{ meeting.status }}</small></h2>
+        <p>{{ meeting.description }}</p>
         <footer>
-          ◷ {{ boardState.activeMeeting.date }} · {{ boardState.activeMeeting.time }}
-          　♙ {{ boardState.activeMeeting.participantCount }}명 참여 중
-          <button type="button" @click="$router.push(`/meetings/${meetingId}`)">회의 입장 →</button>
+          ◷ {{ meeting.date }} · {{ meeting.time }}
+          　♙ {{ meeting.participantCount }}명 참여 중
+          <button type="button" @click="$router.push(`/meetings/${meeting.id}`)">회의 입장 →</button>
         </footer>
       </article>
       <button class="create-card" type="button" @click="showMeeting = true">
@@ -43,14 +43,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import BoardCalendar from '../components/BoardCalendar.vue'
 import InviteModal from '../components/InviteModal.vue'
 import NewMeetingModal from '../components/NewMeetingModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { boardStore } from '../stores/boardStore'
 
-const { boardState, teamId, meetingId, changeMonth, reloadBoard } = useBoardPage({
+const { boardState, teamId, changeMonth, reloadBoard } = useBoardPage({
   resources: [
     'workspaces',
     'team',
@@ -61,4 +62,15 @@ const { boardState, teamId, meetingId, changeMonth, reloadBoard } = useBoardPage
 })
 const showInvite = ref(false)
 const showMeeting = ref(false)
+let meetingCountRefreshTimer = null
+
+onMounted(() => {
+  meetingCountRefreshTimer = window.setInterval(() => {
+    boardStore.loadMeetings(teamId.value, { silent: true }).catch(() => undefined)
+  }, 5000)
+})
+
+onBeforeUnmount(() => {
+  if (meetingCountRefreshTimer) window.clearInterval(meetingCountRefreshTimer)
+})
 </script>

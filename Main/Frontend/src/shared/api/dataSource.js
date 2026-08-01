@@ -18,6 +18,7 @@ export const mockMode = {
   auth: getMockMode(import.meta.env.VITE_USE_MOCK_AUTH_API),
   board: getMockMode(import.meta.env.VITE_USE_MOCK_BOARD_API),
   document: getMockMode(import.meta.env.VITE_USE_MOCK_DOCUMENT_API),
+  meeting: getMockMode(import.meta.env.VITE_USE_MOCK_MEETING_API),
   passwordReset: getMockMode(
     import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API
   ),
@@ -29,6 +30,7 @@ export const mockMode = {
 
 const authSource = mockMode.auth ? authMockApi : authApi
 const boardSource = mockMode.board ? boardMockApi : boardApi
+const meetingSource = mockMode.meeting ? boardMockApi : boardApi
 const spaceSource = mockMode.space ? boardMockApi : boardApi
 const documentSource = mockMode.document ? documentMockApi : documentApi
 const userSource = mockMode.user ? userMockApi : userApi
@@ -48,7 +50,14 @@ export const dataSource = {
     createWorkspace: spaceSource.createWorkspace,
     leaveWorkspace: spaceSource.leaveWorkspace,
     deleteWorkspace: spaceSource.deleteWorkspace,
-    transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership
+    transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership,
+    getMeetings: meetingSource.getMeetings,
+    joinMeeting: meetingSource.joinMeeting,
+    leaveMeeting: meetingSource.leaveMeeting,
+    endMeeting: meetingSource.endMeeting,
+    getParticipants: meetingSource.getParticipants,
+    transferMeetingHost: meetingSource.transferMeetingHost,
+    createMeeting: meetingSource.createMeeting
   },
   document: documentSource,
   user: {

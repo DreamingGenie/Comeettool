@@ -40,6 +40,13 @@ export const boardMockApi = {
     mockResponse(boardMockDatabase.membersByTeam[teamId] || []),
   getActiveMeeting: () =>
     mockResponse(boardMockDatabase.activeMeetings[0] || null),
+  getMeetings: teamId =>
+    mockResponse(
+      boardMockDatabase.activeMeetings.filter(
+        meeting =>
+          !meeting.teamId || String(meeting.teamId) === String(teamId)
+      )
+    ),
   getEvents: (teamId, year, month) => {
     const source =
       boardMockDatabase.calendars[teamId] ||
@@ -66,6 +73,28 @@ export const boardMockApi = {
       boardMockDatabase.meetingRooms[meetingId] ||
         Object.values(boardMockDatabase.meetingRooms)[0]
     ),
+  joinMeeting: meetingId =>
+    mockResponse({
+      meetingId,
+      role: 'MEMBER',
+      isHost: true,
+      token: `mock-livekit-token-${meetingId}`,
+      url: 'ws://127.0.0.1:7880'
+    }),
+  leaveMeeting: () => mockResponse({ isKick: false }),
+  endMeeting: meetingId => {
+    const meetingIndex = boardMockDatabase.activeMeetings.findIndex(
+      meeting => String(meeting.id) === String(meetingId)
+    )
+    if (meetingIndex >= 0) boardMockDatabase.activeMeetings.splice(meetingIndex, 1)
+    return mockResponse(null)
+  },
+  transferMeetingHost: (meetingId, nextHostParticipantId) =>
+    mockResponse({
+      meetingId,
+      previousHostId: null,
+      nextHostId: nextHostParticipantId
+    }),
   getParticipants: meetingId =>
     mockResponse(
       (
@@ -192,8 +221,9 @@ export const boardMockApi = {
   createMeeting: data => {
     const meeting = {
       id: createId('meeting'),
-      title: data.title || data.name,
-      roomTitle: data.roomTitle || data.title || data.name,
+      teamId: data.spaceId,
+      title: data.meetingRoomName || data.title || data.name,
+      roomTitle: data.meetingRoomName || data.roomTitle || data.title || data.name,
       status: 'LIVE',
       description: data.description || '새 회의',
       date: data.date || '오늘',
