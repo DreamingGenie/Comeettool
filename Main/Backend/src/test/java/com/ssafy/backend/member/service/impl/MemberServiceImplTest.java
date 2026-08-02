@@ -2,6 +2,8 @@ package com.ssafy.backend.member.service.impl;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
@@ -18,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -135,6 +138,136 @@ class MemberServiceImplTest {
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.CANNOT_KICK_SELF);
             verify(memberRepository, never()).delete(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-07 멤버 권한 변경")
+    class ChangeMemberAuthority {
+
+        private RequestChangeAuthorityDto requestOf(String authority) {
+            return new RequestChangeAuthorityDto(authority);
+        }
+
+        @Test
+        @DisplayName("MEMBER를 GUEST로 변경하면 권한이 갱신되고 저장된다")
+        void changeMemberAuthority_updatesMemberToGuest() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+            ResponseChangeAuthorityDto response =
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("GUEST"));
+
+            assertThat(response.memberId()).isEqualTo(MEMBER_ID);
+            assertThat(response.authority()).isEqualTo("GUEST");
+            assertThat(member.getAuthority()).isEqualTo(MemberAuthority.GUEST);
+            verify(memberRepository).save(member);
+        }
+
+        @Test
+        @DisplayName("GUEST를 MEMBER로 변경하면 권한이 갱신되고 저장된다")
+        void changeMemberAuthority_updatesMemberToMember() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.GUEST);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+            ResponseChangeAuthorityDto response =
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("MEMBER"));
+
+            assertThat(response.authority()).isEqualTo("MEMBER");
+            assertThat(member.getAuthority()).isEqualTo(MemberAuthority.MEMBER);
+            verify(memberRepository).save(member);
+        }
+
+        @Test
+        @DisplayName("이미 같은 권한으로 재요청하면 200으로 응답하되 저장은 호출하지 않는다(멱등)")
+        void changeMemberAuthority_isIdempotentWhenAuthorityUnchanged() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.GUEST);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+            ResponseChangeAuthorityDto response =
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("GUEST"));
+
+            assertThat(response.authority()).isEqualTo("GUEST");
+            verify(memberRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 멤버 조회를 시도하지 않는다")
+        void changeMemberAuthority_throwsWhenSpaceNotFound() {
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("GUEST")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 멤버 조회를 시도하지 않는다")
+        void changeMemberAuthority_throwsWhenRequesterIsNotOwner() {
+            Long nonOwnerId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    memberService.changeMemberAuthority(nonOwnerId, SPACE_ID, MEMBER_ID, requestOf("GUEST")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("authority=OWNER로 요청하면 CANNOT_SET_OWNER_AUTHORITY 예외가 발생하고 멤버 조회를 시도하지 않는다")
+        void changeMemberAuthority_throwsWhenRequestedAuthorityIsOwner() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("OWNER")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.CANNOT_SET_OWNER_AUTHORITY);
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("memberId가 존재하지 않거나 해당 스페이스 소속이 아니면 SPACE_MEMBER_NOT_FOUND 예외가 발생하고 저장하지 않는다")
+        void changeMemberAuthority_throwsWhenMemberNotFoundOrBelongsToDifferentSpace() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("GUEST")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_MEMBER_NOT_FOUND);
+            verify(memberRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("대상이 오너 본인이면 CANNOT_CHANGE_OWNER_AUTHORITY 예외가 발생하고 저장하지 않는다")
+        void changeMemberAuthority_throwsWhenTargetIsOwner() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member ownerMember = memberOf(MEMBER_ID, SPACE_ID, OWNER_ID, MemberAuthority.OWNER);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(ownerMember));
+
+            assertThatThrownBy(() ->
+                    memberService.changeMemberAuthority(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf("GUEST")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.CANNOT_CHANGE_OWNER_AUTHORITY);
+            verify(memberRepository, never()).save(any());
         }
     }
 }

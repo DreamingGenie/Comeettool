@@ -37,6 +37,9 @@ public enum ErrorCode {
 
     MEMBER_ALREADY_JOINED(HttpStatus.CONFLICT, "MEMBER_ALREADY_JOINED", "이미 스페이스의 멤버입니다."),
     CANNOT_KICK_SELF(HttpStatus.CONFLICT, "CANNOT_KICK_SELF", "본인을 강퇴할 수 없습니다."),
+    CANNOT_CHANGE_OWNER_AUTHORITY(HttpStatus.CONFLICT, "CANNOT_CHANGE_OWNER_AUTHORITY", "오너의 권한은 변경할 수 없습니다."),
+    CANNOT_SET_OWNER_AUTHORITY(HttpStatus.BAD_REQUEST, "CANNOT_SET_OWNER_AUTHORITY",
+            "오너 권한으로는 변경할 수 없습니다. 위임은 SPACE-12(오너 위임 API)를 이용하세요."),
     INVITATION_ALREADY_PENDING(HttpStatus.CONFLICT, "INVITATION_ALREADY_PENDING", "이미 대기 중인 초대가 있습니다."),
     // 만료/미존재/본인 초대가 아닌 경우를 모두 동일 코드로 응답 — 타인의 초대 존재 여부가 노출되지 않도록 404로 통합.
     INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "INVITATION_NOT_FOUND", "유효한 초대를 찾을 수 없습니다."),
