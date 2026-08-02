@@ -124,6 +124,27 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
+    @Transactional
+    public void rejectInvitation(Long userId, String invitationId) {
+        UUID id;
+        try {
+            id = UUID.fromString(invitationId);
+        } catch (IllegalArgumentException e) {
+            throw new CustomException(ErrorCode.INVITATION_NOT_FOUND);
+        }
+
+        Invitation invitation = invitationRepository
+                .findByInvitationIdAndExpiresAtAfter(id, OffsetDateTime.now())
+                .orElseThrow(() -> new CustomException(ErrorCode.INVITATION_NOT_FOUND));
+
+        if (!invitation.getTargetUserId().equals(userId)) {
+            throw new CustomException(ErrorCode.INVITATION_NOT_FOUND);
+        }
+
+        invitationRepository.delete(invitation);
+    }
+
+    @Override
     // noRollbackFor: "이미 멤버" 분기(중복 수락 등으로 도달)는 정리(invitation 삭제) 후 예외를 던지는데,
     // CustomException은 RuntimeException이라 기본 규칙대로면 트랜잭션 전체가 롤백돼 방금 한 삭제까지 무효화된다.
     // 이 메서드의 모든 CustomException 분기는 그 시점까지 반영해도 되는(오히려 반영돼야 하는) 상태이므로 안전하다.

@@ -16,4 +16,7 @@ public interface InvitationService {
 
     // MEMBER-03: 받은 초대를 수락해 스페이스 멤버(MEMBER 권한)로 등록하고, 처리된 초대는 삭제한다.
     void acceptInvitation(Long userId, String invitationId);
+
+    // MEMBER-03: 받은 초대를 거절하고 초대 레코드를 삭제한다.
+    void rejectInvitation(Long userId, String invitationId);
 }
