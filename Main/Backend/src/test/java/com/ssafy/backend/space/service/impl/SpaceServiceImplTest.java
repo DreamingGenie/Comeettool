@@ -5,6 +5,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
@@ -230,6 +231,74 @@ class SpaceServiceImplTest {
             spaceService.findSpaceList(USER_ID, "  기획  ");
 
             verify(memberRepository).findActiveTeamsWithMyAuthority(USER_ID, "기획");
+        }
+
+        @Test
+        @DisplayName("SPACE-04: 저장된 커스텀 순서를 적용하고, 신규 스페이스는 최신순으로 앞에, 없어진 id는 무시한다")
+        void findSpaceList_appliesCustomOrder() {
+            // 쿼리는 최신순(30, 20, 10) 반환. 20은 저장 순서에 없는 신규.
+            Team t30 = teamWithId(30L, USER_ID);
+            Team t20 = teamWithId(20L, USER_ID);
+            Team t10 = teamWithId(10L, USER_ID);
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null))
+                    .willReturn(List.<Object[]>of(
+                            new Object[]{t30, MemberAuthority.OWNER},
+                            new Object[]{t20, MemberAuthority.MEMBER},
+                            new Object[]{t10, MemberAuthority.OWNER}));
+            given(memberRepository.countMembersByTeamIds(anyList()))
+                    .willReturn(List.<Object[]>of(
+                            new Object[]{30L, 1L}, new Object[]{20L, 1L}, new Object[]{10L, 1L}));
+            User user = userWithNickname("진", "u@e.com");
+            user.updateSpaceOrder("10,999,30"); // 999는 멤버 아님 → 무시
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+            List<ResponseSpaceListDto> result = spaceService.findSpaceList(USER_ID, null);
+
+            // 신규(20) → 최신순 앞 / 저장 순서(10,30) 뒤 / 999 무시
+            assertThat(result).extracting(ResponseSpaceListDto::spaceId)
+                    .containsExactly(20L, 10L, 30L);
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-04 스페이스 정렬 저장")
+    class ModifySpaceOrder {
+
+        @Test
+        @DisplayName("전달된 순서를 CSV로 저장한다")
+        void modifySpaceOrder_savesCsv() {
+            User user = userWithNickname("진", "u@e.com");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null)).willReturn(List.of());
+
+            spaceService.modifySpaceOrder(USER_ID, new RequestUpdateSpaceOrderDto(List.of(5L, 2L, 9L)));
+
+            assertThat(user.getSpaceOrder()).isEqualTo("5,2,9");
+        }
+
+        @Test
+        @DisplayName("빈 목록이면 커스텀 순서를 해제(null)한다")
+        void modifySpaceOrder_clearsWhenEmpty() {
+            User user = userWithNickname("진", "u@e.com");
+            user.updateSpaceOrder("1,2");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(memberRepository.findActiveTeamsWithMyAuthority(USER_ID, null)).willReturn(List.of());
+
+            spaceService.modifySpaceOrder(USER_ID, new RequestUpdateSpaceOrderDto(List.of()));
+
+            assertThat(user.getSpaceOrder()).isNull();
+        }
+
+        @Test
+        @DisplayName("사용자가 없으면 USER_NOT_FOUND 예외가 발생한다")
+        void modifySpaceOrder_throwsWhenUserAbsent() {
+            given(userRepository.findById(USER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> spaceService.modifySpaceOrder(
+                    USER_ID, new RequestUpdateSpaceOrderDto(List.of(1L))))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
         }
     }
 

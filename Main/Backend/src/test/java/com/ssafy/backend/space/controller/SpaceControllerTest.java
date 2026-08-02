@@ -7,6 +7,7 @@ import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
+import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
@@ -153,6 +154,40 @@ class SpaceControllerTest {
                     .andExpect(jsonPath("$.code").value("SUCCESS"));
 
             verify(spaceService).findSpaceList(7L, "기획");
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-04 PATCH /api/v1/spaces/order")
+    class ModifySpaceOrder {
+
+        @Test
+        @DisplayName("정렬 저장에 성공하면 200 SUCCESS와 정렬된 목록을 반환한다")
+        void modifySpaceOrder_returns200() throws Exception {
+            ResponseSpaceListDto item =
+                    new ResponseSpaceListDto(5L, "팀A", "설명", "#123456", null, 7L, "OWNER", 2L);
+            given(spaceService.modifySpaceOrder(eq(7L), any(RequestUpdateSpaceOrderDto.class)))
+                    .willReturn(List.of(item));
+
+            mockMvc.perform(patch("/api/v1/spaces/order")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestUpdateSpaceOrderDto(List.of(5L, 2L)))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data[0].spaceId").value(5));
+
+            verify(spaceService).modifySpaceOrder(eq(7L), any(RequestUpdateSpaceOrderDto.class));
+        }
+
+        @Test
+        @DisplayName("spaceOrder가 없으면 400 VALIDATION_FAILED를 반환한다")
+        void modifySpaceOrder_returns400WhenNull() throws Exception {
+            mockMvc.perform(patch("/api/v1/spaces/order")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
         }
     }
 

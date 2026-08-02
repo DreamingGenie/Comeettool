@@ -59,6 +59,10 @@ public class User {
     @Column(name = "user_color", insertable = false)
     private String displayColor;
 
+    // SPACE-04: 사용자별 스페이스 표시 순서(spaceId CSV, 예 "5,2,9"). null이면 커스텀 순서 없음 → 최신순.
+    @Column(name = "space_order")
+    private String spaceOrder;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -115,6 +119,11 @@ public class User {
     // AUTH-07 비밀번호 변경 — 영속 엔티티 필드 변경 → 더티 체킹으로 자동 UPDATE, save() 불필요.
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    // SPACE-04 스페이스 정렬 저장 — spaceId CSV(빈 값이면 null로 정규화해 최신순 기본으로 되돌린다).
+    public void updateSpaceOrder(String spaceOrder) {
+        this.spaceOrder = (spaceOrder == null || spaceOrder.isBlank()) ? null : spaceOrder;
     }
 
     // AUTH-11 프로필 사진 변경 — 더티 체킹으로 자동 UPDATE.
