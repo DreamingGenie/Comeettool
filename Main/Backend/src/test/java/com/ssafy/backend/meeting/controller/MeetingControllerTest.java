@@ -21,6 +21,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -46,7 +47,7 @@ import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
  * 회의 컨트롤러 단위 테스트.
- * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·04·05·06·07·09·10 매핑과 공통 응답 형식을 검증한다.
+ * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·04·05·06·07·08·09·10 매핑과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 API 테스트")
@@ -297,6 +298,61 @@ class MeetingControllerTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code")
                         .value("MEETING_LIVEKIT_DISCONNECT_FAILED"));
+    }
+
+    @Test
+    @DisplayName("호스트가 참여자를 강퇴하면 isKick=true를 반환한다")
+    void kickParticipant_returns200WithKickResult() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willReturn(new ResponseLeaveMeetingDto(true));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("참여자를 강퇴했습니다."))
+                .andExpect(jsonPath("$.data.isKick").value(true));
+
+        verify(meetingService).kickParticipant(1L, MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자가 강퇴하면 403을 반환한다")
+    void kickParticipant_returns403WhenRequesterIsNotHost() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_REQUIRED));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("회의 호스트 자신을 강퇴하면 409를 반환한다")
+    void kickParticipant_returns409WhenTargetIsHost() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willThrow(new CustomException(
+                        ErrorCode.MEETING_HOST_CANNOT_BE_KICKED
+                ));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_HOST_CANNOT_BE_KICKED"));
     }
 
     @Test

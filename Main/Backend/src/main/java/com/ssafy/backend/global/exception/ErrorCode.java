@@ -51,6 +51,8 @@ public enum ErrorCode {
             "이미 해당 회의의 호스트입니다."),
     MEETING_HOST_CANNOT_LEAVE(HttpStatus.CONFLICT, "MEETING_HOST_CANNOT_LEAVE",
             "호스트는 권한을 양도하거나 회의를 종료해야 합니다."),
+    MEETING_HOST_CANNOT_BE_KICKED(HttpStatus.CONFLICT, "MEETING_HOST_CANNOT_BE_KICKED",
+            "회의 호스트는 강퇴할 수 없습니다."),
     MEETING_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "MEETING_CREATE_FORBIDDEN",
             "게스트는 회의를 생성할 수 없습니다."),
     MEETING_ROOM_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "MEETING_ROOM_LIMIT_EXCEEDED",

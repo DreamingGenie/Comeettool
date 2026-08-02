@@ -26,6 +26,7 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
     private final WebhookReceiver webhookReceiver;
     private final LiveKitNameGenerator liveKitNameGenerator;
     private final ParticipantRepository participantRepository;
+    private final LiveKitParticipantManager liveKitParticipantManager;
 
     @Override
     @Transactional
@@ -82,9 +83,15 @@ public class LiveKitWebhookServiceImpl implements LiveKitWebhookService {
                 .orElse(null);
         if (participant == null) {
             log.warn(
-                    "LiveKit 입장 대상 Participant 없음: "
+                    "입장 권한이 없는 LiveKit Participant 연결 종료: "
                             + "eventId={}, meetingRoomId={}, participantId={}",
                     webhookEvent.getId(),
+                    meetingRoomId,
+                    participantId
+            );
+            // 셀프 호스팅 LiveKit은 RemoveParticipant만으로 기존 토큰을 폐기하지 않는다.
+            // 강퇴로 DB 행이 삭제된 identity가 기존 토큰으로 재접속하면 다시 제거한다.
+            liveKitParticipantManager.disconnectParticipant(
                     meetingRoomId,
                     participantId
             );

@@ -41,6 +41,9 @@ class LiveKitWebhookServiceImplTest {
     @Mock
     private ParticipantRepository participantRepository;
 
+    @Mock
+    private LiveKitParticipantManager liveKitParticipantManager;
+
     private final LiveKitNameGenerator liveKitNameGenerator =
             new LiveKitNameGenerator();
 
@@ -52,7 +55,8 @@ class LiveKitWebhookServiceImplTest {
         liveKitWebhookService = new LiveKitWebhookServiceImpl(
                 webhookReceiver,
                 liveKitNameGenerator,
-                participantRepository
+                participantRepository,
+                liveKitParticipantManager
         );
     }
 
@@ -160,8 +164,8 @@ class LiveKitWebhookServiceImplTest {
     }
 
     @Test
-    @DisplayName("등록되지 않은 Participant의 입장 이벤트는 무시한다")
-    void handle_ignoresParticipantJoinedForUnknownParticipant() {
+    @DisplayName("등록되지 않은 Participant가 기존 토큰으로 입장하면 즉시 연결을 종료한다")
+    void handle_disconnectsParticipantJoinedWithoutPermission() {
         given(webhookReceiver.receive(RAW_BODY, AUTHORIZATION_HEADER))
                 .willReturn(createWebhookEvent("participant_joined"));
         given(participantRepository.findByIdAndMeetingRoomId(
@@ -174,6 +178,10 @@ class LiveKitWebhookServiceImplTest {
         verify(participantRepository).findByIdAndMeetingRoomId(
                 PARTICIPANT_ID,
                 MEETING_ROOM_ID
+        );
+        verify(liveKitParticipantManager).disconnectParticipant(
+                MEETING_ROOM_ID,
+                PARTICIPANT_ID
         );
     }
 

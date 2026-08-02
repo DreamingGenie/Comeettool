@@ -53,6 +53,12 @@ public interface MeetingService {
             Long meetingId
     );
 
+    ResponseLeaveMeetingDto kickParticipant(
+            Long requesterUserId,
+            Long meetingId,
+            Long participantId
+    );
+
     void endMeeting(
             Long requesterUserId,
             Long meetingId

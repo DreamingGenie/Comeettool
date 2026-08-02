@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -149,6 +150,26 @@ public class MeetingController {
         List<ResponseMeetingParticipantDto> response =
                 meetingService.getParticipants(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("회의 참여자 목록을 조회했습니다.", response));
+    }
+
+    /**
+     * MEET-08: 호스트가 지정한 참여자를 회의에서 강퇴한다.
+     */
+    @DeleteMapping("/meetings/{meetingId}/participants/{participantId}")
+    public ResponseEntity<ApiResponse<ResponseLeaveMeetingDto>> kickParticipant(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @PathVariable Long participantId
+    ) {
+        ResponseLeaveMeetingDto response = meetingService.kickParticipant(
+                Long.parseLong(userId),
+                meetingId,
+                participantId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("참여자를 강퇴했습니다.", response)
+        );
     }
 
     /**

@@ -44,7 +44,7 @@ import lombok.RequiredArgsConstructor;
  * 회의 도메인 서비스.
  * MEET-01 생성, MEET-02 목록, MEET-03 RTC 입장,
  * MEET-04 퇴장, MEET-05 종료, MEET-06 호스트 양도, MEET-07 현재 참여자 조회,
- * MEET-09 초대 후보 검색, MEET-10 회의 초대를 처리한다.
+ * MEET-08 강퇴, MEET-09 초대 후보 검색, MEET-10 회의 초대를 처리한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -244,6 +244,58 @@ public class MeetingServiceImpl implements MeetingService {
         );
 
         return new ResponseLeaveMeetingDto(false);
+    }
+
+    /**
+     * MEET-08: 호스트가 지정한 참여자의 LiveKit 연결과 DB 입장 권한을 제거한다.
+     */
+    @Override
+    @Transactional
+    public ResponseLeaveMeetingDto kickParticipant(
+            Long requesterUserId,
+            Long meetingId,
+            Long participantId
+    ) {
+        // 1. 호스트 양도·회의 종료와 동시에 실행되지 않도록 활성 회의 행을 잠근다.
+        MeetingRoom meetingRoom = meetingRoomRepository.findActiveByIdForUpdate(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 2. 강퇴는 현재 회의 호스트만 실행할 수 있다.
+        if (!meetingRoom.isHost(requesterUserId)) {
+            throw new CustomException(ErrorCode.MEETING_HOST_REQUIRED);
+        }
+
+        // 3. 대상 Participant가 현재 회의에 등록되어 있는지 확인한다.
+        Participant participant = participantRepository
+                .findByIdAndMeetingRoomId(participantId, meetingId)
+                .orElseThrow(() ->
+                        new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND)
+                );
+
+        // 4. Participant가 참조하는 Member와 회의 상위 팀의 일치 여부를 확인한다.
+        Member participantMember = memberRepository.findById(participant.getMemberId())
+                .orElseThrow(() ->
+                        new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND)
+                );
+        if (!meetingRoom.getTeamId().equals(participantMember.getTeamId())) {
+            throw new CustomException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND);
+        }
+
+        // 5. 호스트 자신은 강퇴할 수 없으며 양도 또는 회의 종료를 사용해야 한다.
+        if (meetingRoom.isHost(participantMember.getUserId())) {
+            throw new CustomException(ErrorCode.MEETING_HOST_CANNOT_BE_KICKED);
+        }
+
+        // 6. LiveKit에서 연결을 종료한다. 미접속 대상의 404는 Manager가 성공 처리한다.
+        liveKitParticipantManager.disconnectParticipant(
+                meetingRoom.getId(),
+                participant.getId()
+        );
+
+        // 7. Participant 행의 존재가 입장 권한이므로 하드 딜리트한다.
+        participantRepository.delete(participant);
+
+        return new ResponseLeaveMeetingDto(true);
     }
 
     /**
