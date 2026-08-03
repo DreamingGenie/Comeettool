@@ -10,11 +10,25 @@
         <small>MY WORKSPACES</small>
         <nav>
           <button
-            v-for="workspace in filteredWorkspaces"
+            v-for="workspace in boardState.workspaces"
             :key="workspace.id"
             class="workspace-item"
+            :class="{
+              dragging: draggingWorkspaceId === String(workspace.id),
+              'drop-shift-up':
+                dropTargetWorkspaceId === String(workspace.id) && dragDirection === 'down',
+              'drop-shift-down':
+                dropTargetWorkspaceId === String(workspace.id) && dragDirection === 'up'
+            }"
             type="button"
-            @click="router.push(`/teams/${workspace.id}/schedule`)"
+            :draggable="!query"
+            :aria-grabbed="draggingWorkspaceId === String(workspace.id)"
+            @click="openWorkspace(workspace.id)"
+            @dragstart="startWorkspaceDrag($event, workspace.id)"
+            @dragend="endWorkspaceDrag"
+            @dragenter.prevent="previewWorkspaceDrop(workspace.id)"
+            @dragover.prevent
+            @drop.prevent="dropWorkspace(workspace.id)"
           >
             <i :style="workspace.color ? { backgroundColor: workspace.color } : undefined">
               {{ workspace.badge }}
@@ -98,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppTopbar from '../../../shared/components/AppTopbar.vue'
 import AsyncState from '../../../shared/components/AsyncState.vue'
@@ -123,10 +137,90 @@ const query = ref('')
 const showNewTeam = ref(false)
 const showMeeting = ref(false)
 const showHelp = ref(false)
-const filteredWorkspaces = computed(() => {
-  const keyword = query.value.toLowerCase()
-  return boardState.workspaces.filter(item => item.name.toLowerCase().includes(keyword))
+const draggingWorkspaceId = ref('')
+const dropTargetWorkspaceId = ref('')
+const dragDirection = ref('')
+let searchTimer
+let suppressWorkspaceClick = false
+
+watch(query, keyword => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(async () => {
+    try {
+      await boardStore.loadWorkspaces(keyword)
+    } catch (error) {
+      notify(error?.message || '스페이스를 검색하지 못했습니다.')
+    }
+  }, 250)
 })
+
+onBeforeUnmount(() => clearTimeout(searchTimer))
+
+const openWorkspace = workspaceId => {
+  if (suppressWorkspaceClick) return
+  router.push(`/teams/${workspaceId}/schedule`)
+}
+
+const startWorkspaceDrag = (event, workspaceId) => {
+  if (query.value) {
+    event.preventDefault()
+    return
+  }
+  draggingWorkspaceId.value = String(workspaceId)
+  suppressWorkspaceClick = true
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', draggingWorkspaceId.value)
+}
+
+const endWorkspaceDrag = () => {
+  draggingWorkspaceId.value = ''
+  dropTargetWorkspaceId.value = ''
+  dragDirection.value = ''
+  setTimeout(() => {
+    suppressWorkspaceClick = false
+  }, 0)
+}
+
+const previewWorkspaceDrop = targetWorkspaceId => {
+  const sourceId = draggingWorkspaceId.value
+  const targetId = String(targetWorkspaceId)
+  if (!sourceId || sourceId === targetId) {
+    dropTargetWorkspaceId.value = ''
+    dragDirection.value = ''
+    return
+  }
+
+  const workspaceIds = boardState.workspaces.map(workspace => String(workspace.id))
+  const sourceIndex = workspaceIds.indexOf(sourceId)
+  const targetIndex = workspaceIds.indexOf(targetId)
+  if (sourceIndex < 0 || targetIndex < 0) return
+
+  dropTargetWorkspaceId.value = targetId
+  dragDirection.value = sourceIndex < targetIndex ? 'down' : 'up'
+}
+
+const dropWorkspace = async targetWorkspaceId => {
+  if (query.value) return
+  const sourceId = draggingWorkspaceId.value
+  const targetId = String(targetWorkspaceId)
+  if (!sourceId || sourceId === targetId) return
+
+  const nextOrder = boardState.workspaces.map(workspace => String(workspace.id))
+  const sourceIndex = nextOrder.indexOf(sourceId)
+  const targetIndex = nextOrder.indexOf(targetId)
+  if (sourceIndex < 0 || targetIndex < 0) return
+
+  nextOrder.splice(sourceIndex, 1)
+  nextOrder.splice(targetIndex, 0, sourceId)
+  try {
+    await boardStore.reorderWorkspaces(nextOrder)
+    notify('스페이스 순서를 저장했습니다.')
+  } catch (error) {
+    notify(error?.message || '스페이스 순서를 저장하지 못했습니다.')
+  } finally {
+    endWorkspaceDrag()
+  }
+}
 
 const enterMeeting = () => {
   if (meetingId.value) router.push(`/meetings/${meetingId.value}`)
@@ -193,5 +287,32 @@ async function logout() {
 
 .workspace-add:hover > span {
   transform: rotate(90deg) scale(1.08);
+}
+
+.workspace-item[draggable='true'] {
+  cursor: grab;
+}
+
+.workspace-item[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.workspace-item.dragging {
+  opacity: 0.45;
+}
+
+.workspace-item {
+  transition: transform 0.18s ease, opacity 0.18s ease,
+    background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.workspace-item.drop-shift-up {
+  transform: translateY(-8px);
+  box-shadow: 0 10px 20px rgba(15, 24, 48, 0.18);
+}
+
+.workspace-item.drop-shift-down {
+  transform: translateY(8px);
+  box-shadow: 0 -10px 20px rgba(15, 24, 48, 0.18);
 }
 </style>

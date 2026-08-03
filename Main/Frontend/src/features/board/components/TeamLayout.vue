@@ -5,6 +5,7 @@
         :workspaces="boardState.workspaces"
         :active-team-id="teamId"
         @select="selectTeam"
+        @reorder="reorderWorkspaces"
         @create="showNewTeam = true"
         @profile="$router.push('/profile')"
         @help="showHelp = true"
@@ -35,6 +36,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../../../shared/components/AppShell.vue'
 import AsyncState from '../../../shared/components/AsyncState.vue'
 import HelpSupportModal from '../../../shared/components/HelpSupportModal.vue'
+import { useToast } from '../../../shared/composables/useToast'
 import { teamMenu } from '../constants/teamMenu'
 import { useUserPage } from '../../user/composables/useUserPage'
 import { boardStore } from '../stores/boardStore'
@@ -54,7 +56,17 @@ const showHelp = ref(false)
 const boardState = boardStore.state
 const teamId = computed(() => String(route.params.teamId || boardState.team.id || 'a707'))
 const { userState } = useUserPage()
+const { notify } = useToast()
 
 const selectTeam = id => router.push(`/teams/${id}/schedule`)
 const navigateSection = section => router.push(`/teams/${teamId.value}/${section}`)
+
+const reorderWorkspaces = async spaceOrder => {
+  try {
+    await boardStore.reorderWorkspaces(spaceOrder)
+    notify('스페이스 순서를 저장했습니다.')
+  } catch (error) {
+    notify(error?.message || '스페이스 순서를 저장하지 못했습니다.')
+  }
+}
 </script>
