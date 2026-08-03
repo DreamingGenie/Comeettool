@@ -70,24 +70,35 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
 
 <style scoped>
 .calendar {
+  border: 1px solid #c8d3f5;
+  background: #fff;
+  box-shadow:
+    0 14px 34px #314c8d14,
+    0 0 0 1px #7086e80a;
   transition:
     border-color 0.28s ease,
     box-shadow 0.28s ease;
 }
 
 .calendar:hover {
-  border-color: #aebbed;
+  border-color: #aebced;
   box-shadow:
-    0 10px 26px #263b761c,
-    0 0 0 1px #7188ff1c;
+    0 16px 38px #314c8d1c,
+    0 0 0 1px #7086e817;
 }
 
 .calendar-head {
+  border-bottom-color: #d9e0f1;
+  background: #fdfdff;
   transition: background-color 0.22s ease;
 }
 
+.calendar-head h2 {
+  color: #7086e8;
+}
+
 .calendar:hover .calendar-head {
-  background: #fafbff;
+  background: #f8faff;
 }
 
 .month-ctrl button {
@@ -95,6 +106,9 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
   place-items: center;
   min-width: 28px;
   min-height: 28px;
+  border-color: #d8deed;
+  background: #fbfcff;
+  color: #26324b;
   transition:
     color 0.18s ease,
     background-color 0.18s ease,
@@ -104,8 +118,8 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
 }
 
 .month-ctrl button:hover {
-  border-color: #7188ff;
-  background: #6277e8;
+  border-color: #7086e8;
+  background: #7086e8;
   color: #fff;
   box-shadow: 0 5px 12px #4059ca38;
   transform: translateY(-2px) scale(1.05);
@@ -117,7 +131,7 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
 }
 
 .month-ctrl button:focus-visible {
-  outline: 2px solid #7188ff;
+  outline: 2px solid #7086e8;
   outline-offset: 3px;
 }
 
@@ -125,14 +139,25 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
   position: relative;
   z-index: 0;
   background: #fff;
+  border-color: #dce2ef;
   transition:
     background-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
 .day:not(.muted):hover {
-  background: #f7f8fe;
-  box-shadow: inset 0 0 0 1px #7188ff66;
+  background: #f8faff;
+  box-shadow: inset 0 0 0 1px #7086e85c;
+}
+
+.calendar-grid > b {
+  border-bottom-color: #dce2ef;
+  color: #8a91a2;
+  background: #fdfdff;
+}
+
+.day.muted {
+  background: #f7f8fb;
 }
 
 .day-number {
@@ -148,14 +173,14 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
 }
 
 .day:not(.muted):hover .day-number {
-  background: #6679ea;
+  background: #7086e8;
   color: #fff;
   font-weight: 700;
   transform: scale(1.08);
 }
 
 .day.has-events .day-number {
-  color: #4d63d8;
+  color: #5870dc;
   font-weight: 700;
 }
 

@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
   border-radius: 9px;
   background: #f8f9fc;
   color: #687184;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .invite-form label {
@@ -366,20 +366,21 @@ onBeforeUnmount(() => {
 
 .invite-email > label {
   color: #4f586a;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .invite-form input,
 .invite-form select {
   width: 100%;
-  height: 44px;
-  border: 1px solid #d5dae5;
-  border-radius: 9px;
+  height: 48px;
+  border: 1px solid #cfd6e6;
+  border-radius: 12px;
   outline: none;
   background: #fff;
-  padding: 0 12px;
-  font-size: 12px;
+  padding: 0 16px;
+  color: #222c43;
+  font-size: 14px;
 }
 
 .invite-form input:focus,
@@ -390,24 +391,24 @@ onBeforeUnmount(() => {
 
 .invite-search-results {
   position: absolute;
-  top: calc(100% + 5px);
+  top: calc(100% + 8px);
   right: 0;
   left: 0;
   z-index: 8;
-  max-height: 210px;
+  max-height: 248px;
   overflow-y: auto;
-  padding: 6px;
-  border: 1px solid #d9deea;
-  border-radius: 10px;
+  padding: 8px;
+  border: 1px solid #cfd6e6;
+  border-radius: 14px;
   background: #fff;
-  box-shadow: 0 14px 34px #1d2c4d29;
+  box-shadow: 0 16px 36px #1d2c4d24;
 }
 
 .invite-search-results > p {
   margin: 0;
   padding: 12px 10px;
   color: #778095;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -417,30 +418,30 @@ onBeforeUnmount(() => {
 
 .invite-search-results > button {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
+  gap: 14px;
   width: 100%;
-  min-height: 46px;
-  padding: 6px 8px;
+  min-height: 64px;
+  padding: 8px 12px;
   border: 0;
-  border-radius: 8px;
-  background: #fff;
+  border-radius: 12px;
+  background: #f5f6fb;
   text-align: left;
 }
 
 .invite-search-results > button:hover {
-  background: #f3f5fc;
+  background: #eceffd;
 }
 
 .invite-search-results > button > i {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   color: #fff;
-  font-size: 10px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 800;
 }
@@ -448,17 +449,20 @@ onBeforeUnmount(() => {
 .invite-search-results > button > span {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 4px;
 }
 
 .invite-search-results b {
-  font-size: 10px;
+  color: #20283d;
+  font-size: 14px;
+  line-height: 1.25;
 }
 
 .invite-search-results small {
   overflow: hidden;
   color: #788194;
-  font-size: 9px;
+  font-size: 12px;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

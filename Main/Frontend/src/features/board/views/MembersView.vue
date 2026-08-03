@@ -70,35 +70,23 @@
         </div>
 
         <template v-if="activeTab === 'authority'">
-          <select
+          <AppSelect
             v-model="authorityDrafts[member.memberId]"
             class="member-select"
+            :options="authorityOptions"
+            aria-label="멤버 권한"
             :disabled="!canManage || member.authority === 'OWNER' || savingAuthority"
-          >
-            <option value="OWNER">Owner</option>
-            <option value="MEMBER">Member</option>
-            <option value="GUEST">Guest</option>
-          </select>
+          />
         </template>
 
         <template v-else-if="activeTab === 'job'">
-          <select
+          <AppSelect
             v-model="jobDrafts[member.memberId]"
             class="member-select"
+            :options="teamRoleOptions"
+            aria-label="멤버 직무"
             :disabled="!canManage || savingJobs || !boardState.teamRoles.length"
-          >
-            <option v-if="!boardState.teamRoles.length" value="" disabled>
-              저장된 직무가 없습니다.
-            </option>
-            <option v-else value="">직무 없음</option>
-            <option
-              v-for="role in boardState.teamRoles"
-              :key="role.teamRoleId"
-              :value="String(role.teamRoleId)"
-            >
-              {{ role.roleName }}
-            </option>
-          </select>
+          />
         </template>
 
         <template v-else>
@@ -141,28 +129,7 @@
       </article>
 
       <footer class="table-foot member-pagination">
-        <span>
-          Showing {{ rangeStart }}–{{ rangeEnd }} of {{ filteredMembers.length }} members
-        </span>
-        <nav v-if="totalPages > 1" aria-label="멤버 목록 페이지">
-          <button
-            type="button"
-            aria-label="이전 페이지"
-            :disabled="currentPage === 1"
-            @click="currentPage -= 1"
-          >
-            ‹
-          </button>
-          <b>{{ currentPage }} / {{ totalPages }}</b>
-          <button
-            type="button"
-            aria-label="다음 페이지"
-            :disabled="currentPage === totalPages"
-            @click="currentPage += 1"
-          >
-            ›
-          </button>
-        </nav>
+        <span>총 {{ filteredMembers.length }}명의 멤버</span>
       </footer>
 
       <div v-if="canManage && activeTab !== 'all'" class="member-save-bar">
@@ -208,6 +175,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import InviteModal from '../components/InviteModal.vue'
 import TeamRoleManager from '../components/TeamRoleManager.vue'
@@ -229,8 +197,23 @@ const savingAuthority = ref(false)
 const savingJobs = ref(false)
 const authorityDrafts = ref({})
 const jobDrafts = ref({})
-const currentPage = ref(1)
-const pageSize = 4
+const authorityOptions = [
+  { value: 'OWNER', label: 'Owner' },
+  { value: 'MEMBER', label: 'Member' },
+  { value: 'GUEST', label: 'Guest' }
+]
+const teamRoleOptions = computed(() => {
+  if (!boardState.teamRoles.length) {
+    return [{ value: '', label: '저장된 직무가 없습니다.', disabled: true }]
+  }
+  return [
+    { value: '', label: '직무 없음' },
+    ...boardState.teamRoles.map((role) => ({
+      value: String(role.teamRoleId),
+      label: role.roleName
+    }))
+  ]
+})
 const filteredMembers = computed(() => {
   const keyword = query.value.toLowerCase()
   const rows = boardState.members.filter((member) => {
@@ -254,17 +237,7 @@ const jobChanges = computed(() =>
 )
 const authorityChangeCount = computed(() => authorityChanges.value.length)
 const jobChangeCount = computed(() => jobChanges.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredMembers.value.length / pageSize)))
-const visibleMembers = computed(() => {
-  const offset = (currentPage.value - 1) * pageSize
-  return filteredMembers.value.slice(offset, offset + pageSize)
-})
-const rangeStart = computed(() =>
-  filteredMembers.value.length ? (currentPage.value - 1) * pageSize + 1 : 0
-)
-const rangeEnd = computed(() =>
-  Math.min(currentPage.value * pageSize, filteredMembers.value.length)
-)
+const visibleMembers = computed(() => filteredMembers.value.slice(0, 10))
 
 function jobName(teamRoleId) {
   if (teamRoleId === null || teamRoleId === undefined || teamRoleId === '') return '직무 없음'
@@ -283,10 +256,6 @@ function jobStyle(teamRoleId) {
     color: '#fff'
   }
 }
-
-watch([query, reverse, authorityFilter, activeTab], () => {
-  currentPage.value = 1
-})
 
 watch(
   () => boardState.members.map((member) => [member.memberId, member.authority, member.teamRoleId]),
@@ -387,9 +356,6 @@ function kickMember(member) {
   )
 }
 
-watch(totalPages, (pages) => {
-  if (currentPage.value > pages) currentPage.value = pages
-})
 </script>
 
 <style scoped>
@@ -402,6 +368,7 @@ watch(totalPages, (pages) => {
   border: 1px solid #dde2ec;
   border-radius: 12px;
   background: #f0f2f7;
+  font-family: 'Noto Sans KR', sans-serif;
 }
 
 .member-tabs button {
@@ -427,6 +394,7 @@ watch(totalPages, (pages) => {
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 5px 20px #25335408;
+  font-family: 'Noto Sans KR', sans-serif;
 }
 
 .member-row.all-row {
@@ -457,19 +425,13 @@ watch(totalPages, (pages) => {
   min-height: 44px;
   background: #fafbfc;
   color: #788196;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .member-select {
   width: 100%;
-  min-height: 36px;
-  border: 1px solid #d5dae5;
-  border-radius: 8px;
-  background: #fff;
-  padding: 0 8px;
-  color: #35405a;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .member-value {
@@ -549,48 +511,6 @@ watch(totalPages, (pages) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.member-pagination nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.member-pagination nav button {
-  display: grid;
-  width: 29px;
-  height: 29px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid #d7dce7;
-  border-radius: 7px;
-  background: #fff;
-  color: #35405a;
-  font-size: 19px;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.member-pagination nav button:not(:disabled):hover {
-  border-color: var(--blue);
-  background: #eef1ff;
-  color: var(--blue);
-  transform: translateY(-1px);
-}
-
-.member-pagination nav button:disabled {
-  cursor: default;
-  opacity: 0.38;
-}
-
-.member-pagination nav b {
-  min-width: 36px;
-  color: #697287;
-  text-align: center;
-  font-size: 11px;
 }
 
 .member-save-bar {
