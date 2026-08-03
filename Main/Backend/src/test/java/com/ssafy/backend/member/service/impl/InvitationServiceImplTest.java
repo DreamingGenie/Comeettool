@@ -504,4 +504,86 @@ class InvitationServiceImplTest {
             verify(invitationRepository, never()).delete(any(Invitation.class));
         }
     }
+
+    @Nested
+    @DisplayName("MEMBER-03 초대 거절")
+    class RejectInvitation {
+
+        private static final long REJECTOR_ID = 5L;
+
+        @Test
+        @DisplayName("정상 거절 시 초대가 삭제되고, 멤버 관련 Repository에는 접근하지 않는다")
+        void rejectInvitation_deletesInvitationAndHasNoMemberSideEffects() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, REJECTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+
+            invitationService.rejectInvitation(REJECTOR_ID, invitation.getInvitationId().toString());
+
+            verify(invitationRepository).delete(invitation);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(userRepository);
+        }
+
+        @Test
+        @DisplayName("invitationId가 UUID 형식이 아니면 500이 아니라 INVITATION_NOT_FOUND(404) 예외가 발생한다")
+        void rejectInvitation_throwsInvitationNotFoundWhenIdIsNotValidUuid() {
+            assertThatThrownBy(() -> invitationService.rejectInvitation(REJECTOR_ID, "이건-UUID가-아님"))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verifyNoInteractions(invitationRepository);
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 초대면 INVITATION_NOT_FOUND 예외가 발생하고 삭제하지 않는다")
+        void rejectInvitation_throwsWhenInvitationNotFound() {
+            UUID invitationId = UUID.randomUUID();
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(eq(invitationId), any(OffsetDateTime.class)))
+                    .willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> invitationService.rejectInvitation(REJECTOR_ID, invitationId.toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verify(invitationRepository, never()).delete(any(Invitation.class));
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("만료된 초대면 INVITATION_NOT_FOUND 예외가 발생하고 삭제하지 않는다")
+        void rejectInvitation_throwsWhenInvitationExpired() {
+            UUID invitationId = UUID.randomUUID();
+            // findByInvitationIdAndExpiresAtAfter는 만료된 초대를 반환하지 않으므로 empty로 재현한다.
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(eq(invitationId), any(OffsetDateTime.class)))
+                    .willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> invitationService.rejectInvitation(REJECTOR_ID, invitationId.toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verify(invitationRepository, never()).delete(any(Invitation.class));
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("본인 초대가 아니면 INVITATION_NOT_FOUND 예외가 발생한다 — accept와 동일 에러코드로 타인 초대 존재 여부를 노출하지 않는다")
+        void rejectInvitation_throwsWhenNotOwnInvitation() {
+            Invitation invitation = invitationOf(TEAM_ID, INVITER_ID, REJECTOR_ID, OffsetDateTime.now());
+            given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
+                    eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
+                    .willReturn(Optional.of(invitation));
+            long anotherUserId = 999L;
+
+            assertThatThrownBy(
+                    () -> invitationService.rejectInvitation(anotherUserId, invitation.getInvitationId().toString()))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
+            verify(invitationRepository, never()).delete(any(Invitation.class));
+            verifyNoInteractions(memberRepository);
+        }
+    }
 }

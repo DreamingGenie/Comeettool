@@ -42,4 +42,13 @@ public class MyInvitationController {
         invitationService.acceptInvitation(Long.parseLong(userId), invitationId);
         return ResponseEntity.ok(ApiResponse.success("초대 수락 성공", null));
     }
+
+    // MEMBER-03: 받은 초대를 거절하고 초대 레코드를 삭제한다.
+    @PostMapping("/{invitationId}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectInvitation(
+            @AuthenticationPrincipal String userId,
+            @PathVariable String invitationId) {
+        invitationService.rejectInvitation(Long.parseLong(userId), invitationId);
+        return ResponseEntity.ok(ApiResponse.success("초대 거절 성공", null));
+    }
 }

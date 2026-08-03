@@ -60,6 +60,11 @@ public class Member {
         this.authority = authority;
     }
 
+    // MEMBER-06: 커스텀 역할 배정. teamRoleId가 null이면 해제.
+    public void assignTeamRole(Long teamRoleId) {
+        this.teamRoleId = teamRoleId;
+    }
+
     // SPACE-01: 생성자를 Owner 권한 멤버로 등록. 역할은 미배정(null).
     public static Member owner(Long userId, Long teamId, String nickname) {
         return Member.builder()

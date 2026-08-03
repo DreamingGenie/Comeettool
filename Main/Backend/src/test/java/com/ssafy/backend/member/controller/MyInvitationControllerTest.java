@@ -132,4 +132,46 @@ class MyInvitationControllerTest {
                     .andExpect(jsonPath("$.code").value("MEMBER_ALREADY_JOINED"));
         }
     }
+
+    @Nested
+    @DisplayName("MEMBER-03 POST /api/v1/invitations/{invitationId}/reject")
+    class RejectInvitation {
+
+        private static final String INVITATION_ID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+
+        @Test
+        @DisplayName("정상 거절이면 200 SUCCESS, message='초대 거절 성공', data=null을 반환한다")
+        void rejectInvitation_returns200() throws Exception {
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/reject", INVITATION_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("초대 거절 성공"))
+                    .andExpect(jsonPath("$.data").doesNotExist());
+
+            verify(invitationService).rejectInvitation(5L, INVITATION_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 만료됐거나 본인 초대가 아니면 404 INVITATION_NOT_FOUND를 반환한다")
+        void rejectInvitation_returns404WhenNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.INVITATION_NOT_FOUND))
+                    .when(invitationService).rejectInvitation(5L, INVITATION_ID);
+
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/reject", INVITATION_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("INVITATION_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("잘못된 UUID 형식 path variable이면 서비스에서 INVITATION_NOT_FOUND를 발생시켜 404를 반환한다")
+        void rejectInvitation_returns404WhenInvalidUuidFormat() throws Exception {
+            String invalidId = "not-a-uuid";
+            doThrow(new CustomException(ErrorCode.INVITATION_NOT_FOUND))
+                    .when(invitationService).rejectInvitation(5L, invalidId);
+
+            mockMvc.perform(post("/api/v1/invitations/{invitationId}/reject", invalidId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("INVITATION_NOT_FOUND"));
+        }
+    }
 }
