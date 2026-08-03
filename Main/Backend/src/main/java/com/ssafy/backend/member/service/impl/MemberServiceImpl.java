@@ -31,7 +31,9 @@ public class MemberServiceImpl implements MemberService {
     @Override
     @Transactional
     public void kickMember(Long requesterId, Long spaceId, Long memberId) {
-        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
+        // 강퇴도 소유자 상태 변경(위임·삭제)과 같은 급의 쓰기 작업이라 잠금 조회로 동시 요청을 직렬화한다.
+        // (예: 소유권 위임 대상자를 동시에 강퇴하면 teams.team_owner_id가 멤버 아닌 사용자를 가리키는 상태가 될 수 있다.)
+        Team team = teamRepository.findActiveByIdForUpdate(spaceId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
 
         if (!team.getOwnerId().equals(requesterId)) {
