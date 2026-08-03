@@ -42,11 +42,7 @@
       <div class="document-tools">
         <label class="document-search">
           <span>⌕</span>
-          <input
-            v-model.trim="query"
-            type="search"
-            placeholder="문서 제목 검색"
-          />
+          <input v-model.trim="query" type="search" placeholder="문서 제목 검색" />
         </label>
         <select v-model="sort">
           <option value="recent">최근 수정 순</option>
@@ -55,18 +51,10 @@
       </div>
 
       <AsyncState
-        v-if="
-          documentState.loadingList ||
-          documentState.error ||
-          visibleDocuments.length === 0
-        "
+        v-if="documentState.loadingList || documentState.error || visibleDocuments.length === 0"
         :loading="documentState.loadingList"
         :error="documentState.error"
-        :empty="
-          !documentState.loadingList &&
-          !documentState.error &&
-          visibleDocuments.length === 0
-        "
+        :empty="!documentState.loadingList && !documentState.error && visibleDocuments.length === 0"
         :retry="loadDocuments"
       />
 
@@ -103,27 +91,17 @@
             >
               삭제
             </button>
-            <button
-              class="open-button"
-              type="button"
-              @click.stop="openDocument(document)"
-            >
+            <button class="open-button" type="button" @click.stop="openDocument(document)">
               열기 →
             </button>
           </div>
         </article>
       </div>
 
-      <footer class="document-footer">
-        총 {{ visibleDocuments.length }}개의 문서
-      </footer>
+      <footer class="document-footer">총 {{ visibleDocuments.length }}개의 문서</footer>
     </section>
 
-    <BaseModal
-      v-if="deleteTarget"
-      modal-class="document-delete-modal"
-      @close="closeDeleteModal"
-    >
+    <BaseModal v-if="deleteTarget" modal-class="document-delete-modal" @close="closeDeleteModal">
       <span class="delete-modal-eyebrow">DELETE DOCUMENT</span>
       <h2>문서를 삭제할까요?</h2>
       <p>
@@ -131,12 +109,7 @@
         문서는 삭제 후 목록과 실시간 편집에서 사용할 수 없습니다.
       </p>
       <div class="delete-modal-actions">
-        <button
-          class="outline-btn"
-          type="button"
-          :disabled="isDeleting"
-          @click="closeDeleteModal"
-        >
+        <button class="outline-btn" type="button" :disabled="isDeleting" @click="closeDeleteModal">
           취소
         </button>
         <button
@@ -172,12 +145,8 @@ const query = ref('')
 const sort = ref('recent')
 const deleteTarget = ref(null)
 
-const authority = computed(() =>
-  String(boardState.team.role || '').toUpperCase()
-)
-const canCreate = computed(() =>
-  authority.value === 'OWNER' || authority.value === 'MEMBER'
-)
+const authority = computed(() => String(boardState.team.role || '').toUpperCase())
+const canCreate = computed(() => authority.value === 'OWNER' || authority.value === 'MEMBER')
 const canDelete = computed(() => authority.value === 'OWNER')
 const isGuest = computed(() => authority.value === 'GUEST')
 const authorityLabel = computed(() => {
@@ -196,12 +165,10 @@ const latestDocument = computed(() => documentState.documents[0] || null)
 const latestUpdatedAt = computed(() =>
   latestDocument.value ? formatDate(latestDocument.value.updatedAt) : '-'
 )
-const latestDocumentTitle = computed(() =>
-  latestDocument.value?.title || '아직 문서가 없습니다.'
-)
+const latestDocumentTitle = computed(() => latestDocument.value?.title || '아직 문서가 없습니다.')
 const visibleDocuments = computed(() => {
   const keyword = query.value.toLocaleLowerCase()
-  const filtered = documentState.documents.filter(document =>
+  const filtered = documentState.documents.filter((document) =>
     document.title.toLocaleLowerCase().includes(keyword)
   )
 
@@ -209,15 +176,10 @@ const visibleDocuments = computed(() => {
     return [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'ko'))
   }
 
-  return [...filtered].sort(
-    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-  )
+  return [...filtered].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 })
 const isDeleting = computed(() =>
-  Boolean(
-    deleteTarget.value &&
-    documentState.deletingDocumentId === deleteTarget.value.documentId
-  )
+  Boolean(deleteTarget.value && documentState.deletingDocumentId === deleteTarget.value.documentId)
 )
 
 function formatDate(value) {
@@ -300,56 +262,256 @@ watch(teamId, loadDocuments)
 </script>
 
 <style scoped>
-.document-heading{margin-bottom:18px}
-.document-heading-actions{display:flex;align-items:center;gap:10px}
-.document-heading-actions .primary:disabled{cursor:wait;opacity:.65}
-.read-only-badge{padding:7px 11px;border-radius:18px;background:#eef1f7;color:#697287;font-size:10px;font-weight:700}
-.document-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
-.document-stats article{display:grid;grid-template-columns:1fr auto;align-items:end;min-height:82px;padding:15px 18px;border:1px solid var(--line);border-radius:11px;background:#fff}
-.document-stats span{color:var(--muted);font-size:10px}
-.document-stats b{grid-row:1/3;grid-column:2;max-width:190px;overflow:hidden;font-size:17px;text-overflow:ellipsis;white-space:nowrap}
-.document-stats small{margin-top:5px;color:#7d8596;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.document-panel{overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#fff}
-.document-tools{display:flex;justify-content:flex-end;gap:9px;min-height:58px;padding:10px 16px;border-bottom:1px solid var(--line)}
-.document-search{display:flex;align-items:center;width:min(320px,100%);padding:7px 10px;border:1px solid var(--line);border-radius:7px;color:#8a92a2}
-.document-search input{flex:1;min-width:0;margin-left:6px;border:0;outline:0}
-.document-tools select{padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
-.document-list{min-height:80px}
-.document-row{display:grid;grid-template-columns:42px minmax(180px,2fr) minmax(80px,.6fr) minmax(160px,1fr) auto;gap:12px;align-items:center;min-height:72px;padding:9px 16px;border-bottom:1px solid #e3e6ed;outline:0;transition:background .15s ease}
-.document-row:hover,.document-row:focus-visible{background:#f8f9ff}
-.document-icon{display:grid;place-items:center;width:35px;height:35px;border-radius:9px;background:#edf1ff;color:var(--blue);font-style:normal;font-weight:800}
-.document-title,.document-meta{display:grid;gap:3px;min-width:0}
-.document-title b{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
-.document-title span{overflow:hidden;color:#8a92a2;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
-.document-meta small{color:#8a92a2;font-size:9px}
-.document-meta b{font-size:10px}
-.document-row-actions{display:flex;align-items:center;gap:5px}
-.document-row-actions button{padding:6px 8px;border:0;border-radius:6px;background:transparent;font-size:10px;font-weight:700}
-.open-button{color:var(--blue2)}
-.delete-button{color:#c83a3a}
-.delete-button:hover{background:#fff0f0}
-.open-button:hover{background:#eef1ff}
-.document-footer{height:48px;padding:16px;background:#f5f6f9;color:#666f80;font-size:10px}
-:deep(.async-state){min-height:230px}
-:deep(.document-delete-modal){width:min(430px,calc(100vw - 24px));padding:38px 30px 28px}
-.delete-modal-eyebrow{color:#cf3c3c;font-size:9px;font-weight:800;letter-spacing:1px}
-.document-delete-modal h2{margin:7px 0 12px}
-.document-delete-modal p{margin:0;color:#697287;line-height:1.7}
-.document-delete-modal p strong{display:block;color:var(--text)}
-.delete-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:26px}
-.delete-modal-actions button:disabled{cursor:wait;opacity:.6}
-.confirm-delete-button{padding:8px 17px;border:0;border-radius:7px;background:#cf3c3c;color:#fff}
-@media(max-width:900px){
-  .document-row{grid-template-columns:38px minmax(160px,1fr) minmax(130px,.7fr) auto}
-  .document-row>.document-meta:first-of-type{display:none}
+.document-heading {
+  margin-bottom: 18px;
 }
-@media(max-width:720px){
-  .document-heading{align-items:flex-start;gap:12px}
-  .document-stats{grid-template-columns:1fr}
-  .document-tools{align-items:stretch;flex-direction:column}
-  .document-search{width:100%}
-  .document-row{grid-template-columns:38px minmax(0,1fr) auto}
-  .document-row>.document-meta{display:none}
+.document-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.document-heading-actions .primary:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.read-only-badge {
+  padding: 7px 11px;
+  border-radius: 18px;
+  background: #eef1f7;
+  color: #697287;
+  font-size: 10px;
+  font-weight: 700;
+}
+.document-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.document-stats article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  min-height: 82px;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+.document-stats span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.document-stats b {
+  grid-row: 1/3;
+  grid-column: 2;
+  max-width: 190px;
+  overflow: hidden;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-stats small {
+  margin-top: 5px;
+  color: #7d8596;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.document-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  min-height: 58px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.document-search {
+  display: flex;
+  align-items: center;
+  width: min(320px, 100%);
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #8a92a2;
+}
+.document-search input {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+  border: 0;
+  outline: 0;
+}
+.document-tools select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.document-list {
+  min-height: 80px;
+}
+.document-row {
+  display: grid;
+  grid-template-columns: 42px minmax(180px, 2fr) minmax(80px, 0.6fr) minmax(160px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 72px;
+  padding: 9px 16px;
+  border-bottom: 1px solid #e3e6ed;
+  outline: 0;
+  transition: background 0.15s ease;
+}
+.document-row:hover,
+.document-row:focus-visible {
+  background: #f8f9ff;
+}
+.document-icon {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  border-radius: 9px;
+  background: #edf1ff;
+  color: var(--blue);
+  font-style: normal;
+  font-weight: 800;
+}
+.document-title,
+.document-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.document-title b {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-title span {
+  overflow: hidden;
+  color: #8a92a2;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-meta small {
+  color: #8a92a2;
+  font-size: 9px;
+}
+.document-meta b {
+  font-size: 10px;
+}
+.document-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.document-row-actions button {
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+}
+.open-button {
+  color: var(--blue2);
+}
+.delete-button {
+  color: #c83a3a;
+}
+.delete-button:hover {
+  background: #fff0f0;
+}
+.open-button:hover {
+  background: #eef1ff;
+}
+.document-footer {
+  height: 48px;
+  padding: 16px;
+  background: #f5f6f9;
+  color: #666f80;
+  font-size: 10px;
+}
+:deep(.async-state) {
+  min-height: 230px;
+}
+:deep(.document-delete-modal) {
+  width: min(430px, calc(100vw - 24px));
+  padding: 38px 30px 28px;
+}
+.delete-modal-eyebrow {
+  color: #cf3c3c;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.document-delete-modal h2 {
+  margin: 7px 0 12px;
+}
+.document-delete-modal p {
+  margin: 0;
+  color: #697287;
+  line-height: 1.7;
+}
+.document-delete-modal p strong {
+  display: block;
+  color: var(--text);
+}
+.delete-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 26px;
+}
+.delete-modal-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.confirm-delete-button {
+  padding: 8px 17px;
+  border: 0;
+  border-radius: 7px;
+  background: #cf3c3c;
+  color: #fff;
+}
+@media (max-width: 900px) {
+  .document-row {
+    grid-template-columns: 38px minmax(160px, 1fr) minmax(130px, 0.7fr) auto;
+  }
+  .document-row > .document-meta:first-of-type {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .document-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .document-stats {
+    grid-template-columns: 1fr;
+  }
+  .document-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .document-search {
+    width: 100%;
+  }
+  .document-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+  .document-row > .document-meta {
+    display: none;
+  }
 }
 
 /* 코밋툴 공통 80% 스케일에 맞춘 문서 화면 */

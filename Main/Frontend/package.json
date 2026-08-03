@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "format": "prettier --write \"src/assets/styles/ui-app.css\" \"src/assets/styles/archive-pages.css\" \"src/features/document/views/DocumentListView.vue\"",
+    "format:check": "prettier --check \"src/assets/styles/ui-app.css\" \"src/assets/styles/archive-pages.css\" \"src/features/document/views/DocumentListView.vue\""
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.4.0",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "2.3.4",
+    "prettier": "^3.9.6",
     "vite": "2.9.16"
   }
 }

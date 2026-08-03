@@ -72,7 +72,12 @@
           <label class="field">
             닉네임
             <div class="input-with-meta">
-              <span>♙</span>
+              <img
+                class="input-leading-icon"
+                src="/assets/icons/person.svg"
+                alt=""
+                aria-hidden="true"
+              />
               <input v-model.trim="form.nickname" :maxlength="nicknameMaxLength" />
               <small>{{ form.nickname.length }}/{{ nicknameMaxLength }}</small>
             </div>

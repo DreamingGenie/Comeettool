@@ -83,7 +83,7 @@
   box-shadow:0 12px 26.4px #324d9e16;
 }
 .create-card i,.workspace-add,.floating-add{transition:transform .24s ease,box-shadow .24s ease,background-color .24s ease}
-.create-card:hover i,.workspace-add:hover,.floating-add:hover{transform:rotate(90deg) scale(1.08)}
+.create-card:hover i,.workspace-add:hover{transform:rotate(90deg) scale(1.08)}
 .workspace-item:hover{transform:translateX(3.2px);box-shadow:0 8px 17.6px #0b153b45}
 .workspace-item>i,.team-bubble{transition:transform .2s ease,filter .2s ease,box-shadow .2s ease}
 .workspace-item:hover>i,.team-bubble:hover{transform:scale(1.07)}
