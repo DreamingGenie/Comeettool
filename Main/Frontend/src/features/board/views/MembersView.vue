@@ -9,6 +9,9 @@
       <button class="primary" type="button" @click="showInvite = true">＋ 멤버 초대</button>
     </header>
     <nav class="member-tabs" aria-label="멤버 관리 메뉴">
+      <button type="button" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">
+        전체
+      </button>
       <button
         type="button"
         :class="{ active: activeTab === 'authority' }"
@@ -44,17 +47,20 @@
       </div>
 
       <div v-if="activeTab === 'authority'" class="member-row authority-row head">
-        <span>이름</span><span>멤버 역할</span><span>상태</span><span>관리</span>
+        <span>멤버</span><span>역할</span><span>관리</span>
       </div>
-      <div v-else class="member-row job-row head">
-        <span>이름</span><span>직무</span><span>상태</span>
+      <div v-else-if="activeTab === 'job'" class="member-row job-row head">
+        <span>멤버</span><span>직무</span>
+      </div>
+      <div v-else class="member-row all-row head">
+        <span>멤버</span><span>역할</span><span>직무</span>
       </div>
 
       <article
         v-for="member in visibleMembers"
         :key="`${activeTab}-${member.memberId}`"
         class="member-row"
-        :class="activeTab === 'authority' ? 'authority-row' : 'job-row'"
+        :class="`${activeTab}-row`"
       >
         <div class="person">
           <i class="avatar">{{ member.avatarText }}</i>
@@ -75,7 +81,7 @@
           </select>
         </template>
 
-        <template v-else>
+        <template v-else-if="activeTab === 'job'">
           <select
             v-model="jobDrafts[member.memberId]"
             class="member-select"
@@ -95,12 +101,10 @@
           </select>
         </template>
 
-        <span
-          class="status"
-          :class="{ away: member.status === 'Away', off: member.status === 'Offline' }"
-        >
-          {{ member.status }}
-        </span>
+        <template v-else>
+          <span class="member-value authority-value">{{ member.authorityLabel }}</span>
+          <span class="member-value job-value">{{ jobName(member.teamRoleId) }}</span>
+        </template>
 
         <span v-if="activeTab === 'authority'" class="member-actions">
           <template v-if="canManage && member.authority !== 'OWNER'">
@@ -152,7 +156,7 @@
         </nav>
       </footer>
 
-      <div v-if="canManage" class="member-save-bar">
+      <div v-if="canManage && activeTab !== 'all'" class="member-save-bar">
         <span v-if="activeTab === 'authority'">
           Owner 변경은 선택한 멤버에게 소유권을 위임합니다.
         </span>
@@ -206,7 +210,7 @@ const { boardState, teamId, reloadBoard } = useBoardPage({
   resources: ['workspaces', 'team', 'members', 'teamRoles']
 })
 const { notify } = useToast()
-const activeTab = ref('authority')
+const activeTab = ref('all')
 const query = ref('')
 const reverse = ref(false)
 const authorityFilter = ref('ALL')
@@ -223,7 +227,9 @@ const filteredMembers = computed(() => {
   const rows = boardState.members.filter((member) => {
     const matchesKeyword = Object.values(member).join(' ').toLowerCase().includes(keyword)
     const matchesAuthority =
-      authorityFilter.value === 'ALL' || member.authority === authorityFilter.value
+      activeTab.value !== 'authority' ||
+      authorityFilter.value === 'ALL' ||
+      member.authority === authorityFilter.value
     return matchesKeyword && matchesAuthority
   })
   return reverse.value ? [...rows].reverse() : rows
@@ -250,6 +256,14 @@ const rangeStart = computed(() =>
 const rangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize, filteredMembers.value.length)
 )
+
+function jobName(teamRoleId) {
+  if (teamRoleId === null || teamRoleId === undefined || teamRoleId === '') return '직무 없음'
+  return (
+    boardState.teamRoles.find((role) => String(role.teamRoleId) === String(teamRoleId))?.roleName ||
+    '삭제된 직무'
+  )
+}
 
 watch([query, reverse, authorityFilter, activeTab], () => {
   currentPage.value = 1
@@ -362,16 +376,18 @@ watch(totalPages, (pages) => {
 <style scoped>
 .member-tabs {
   display: flex;
-  gap: 8px;
-  margin: 18px 0 12px;
-  padding: 5px;
-  border-radius: 11px;
-  background: #e9ecf4;
+  width: fit-content;
+  gap: 4px;
+  margin: 20px 0 14px;
+  padding: 4px;
+  border: 1px solid #dde2ec;
+  border-radius: 12px;
+  background: #f0f2f7;
 }
 
 .member-tabs button {
-  min-width: 128px;
-  min-height: 40px;
+  min-width: 112px;
+  min-height: 38px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -383,30 +399,79 @@ watch(totalPages, (pages) => {
 .member-tabs button.active {
   background: #fff;
   color: var(--blue);
-  box-shadow: 0 3px 10px #27365714;
+  box-shadow: 0 2px 8px #27365714;
+}
+
+.member-table {
+  overflow: hidden;
+  border: 1px solid #dfe3ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 5px 20px #25335408;
+}
+
+.member-row.all-row {
+  grid-template-columns: minmax(230px, 2fr) minmax(140px, 0.9fr) minmax(180px, 1.2fr);
+  gap: 18px;
+  padding: 0 30px;
 }
 
 .member-row.authority-row {
-  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) 0.7fr minmax(150px, 1fr);
-  gap: 12px;
-  padding: 0 28px;
+  grid-template-columns: minmax(230px, 2fr) minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 18px;
+  padding: 0 30px;
 }
 
 .member-row.job-row {
-  grid-template-columns: minmax(220px, 2fr) minmax(200px, 1.35fr) 0.7fr;
-  gap: 12px;
-  padding: 0 28px;
+  grid-template-columns: minmax(230px, 2fr) minmax(240px, 1.4fr);
+  gap: 18px;
+  padding: 0 30px;
+}
+
+.member-row:not(.head) {
+  min-height: 78px;
+}
+
+.member-row.head {
+  min-height: 44px;
+  background: #fafbfc;
+  color: #788196;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .member-select {
   width: 100%;
-  min-height: 32px;
+  min-height: 36px;
   border: 1px solid #d5dae5;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #fff;
   padding: 0 8px;
   color: #35405a;
+  font-size: 11px;
+}
+
+.member-value {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 76px;
+  min-height: 29px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 12px;
   font-size: 10px;
+  font-weight: 700;
+}
+
+.authority-value {
+  background: #eef1ff;
+  color: #566ee1;
+}
+
+.job-value {
+  background: #f1f5f4;
+  color: #557568;
 }
 
 .member-select:disabled {
@@ -440,7 +505,7 @@ watch(totalPages, (pages) => {
 
 .member-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
 }
 
@@ -511,7 +576,7 @@ watch(totalPages, (pages) => {
   align-items: center;
   justify-content: flex-end;
   gap: 18px;
-  padding: 14px 24px;
+  padding: 16px 24px;
   border-top: 1px solid #e2e5ed;
   background: #f8f9fc;
 }
@@ -533,7 +598,7 @@ watch(totalPages, (pages) => {
   .member-row,
   .table-tools,
   .table-foot {
-    min-width: 760px;
+    min-width: 700px;
   }
 }
 </style>
