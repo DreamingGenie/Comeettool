@@ -595,4 +595,54 @@ class MemberControllerTest {
                     .andExpect(jsonPath("$.code").value("TEAM_ROLE_NAME_DUPLICATED"));
         }
     }
+
+    @Nested
+    @DisplayName("MEMBER-17 DELETE /api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}")
+    class DeleteTeamRole {
+
+        @Test
+        @DisplayName("정상 삭제이면 200 SUCCESS, message='역할이 삭제되었습니다.', data=null을 반환한다")
+        void deleteTeamRole_returns200() throws Exception {
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("역할이 삭제되었습니다."))
+                    .andExpect(jsonPath("$.data").doesNotExist());
+
+            verify(memberService).deleteTeamRole(1L, SPACE_ID, TEAM_ROLE_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void deleteTeamRole_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(memberService).deleteTeamRole(1L, SPACE_ID, TEAM_ROLE_ID);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void deleteTeamRole_returns403WhenNotOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY))
+                    .when(memberService).deleteTeamRole(1L, SPACE_ID, TEAM_ROLE_ID);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("해당 스페이스에 없는 teamRoleId면 404 TEAM_ROLE_NOT_FOUND를 반환한다")
+        void deleteTeamRole_returns404WhenTeamRoleNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.TEAM_ROLE_NOT_FOUND))
+                    .when(memberService).deleteTeamRole(1L, SPACE_ID, TEAM_ROLE_ID);
+
+            mockMvc.perform(delete("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TEAM_ROLE_NOT_FOUND"));
+        }
+    }
 }

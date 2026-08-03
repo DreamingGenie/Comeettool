@@ -860,4 +860,77 @@ class MemberServiceImplTest {
             verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
         }
     }
+
+    @Nested
+    @DisplayName("MEMBER-17 팀 역할 삭제")
+    class DeleteTeamRole {
+
+        @Test
+        @DisplayName("정상 삭제 시 해당 teamRoleId의 TeamRole이 삭제된다")
+        void deleteTeamRole_deletesTeamRole() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            TeamRole teamRole = teamRoleOf(TEAM_ROLE_ID, SPACE_ID, "프론트엔드");
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.of(teamRole));
+
+            memberService.deleteTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID);
+
+            ArgumentCaptor<TeamRole> captor = ArgumentCaptor.forClass(TeamRole.class);
+            verify(teamRoleRepository).delete(captor.capture());
+            assertThat(captor.getValue().getId()).isEqualTo(TEAM_ROLE_ID);
+        }
+
+        @Test
+        @DisplayName("역할을 배정받은 멤버가 있어도 memberRepository는 건드리지 않는다(FK ON DELETE SET NULL에 위임)")
+        void deleteTeamRole_doesNotTouchMemberRepository() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            TeamRole teamRole = teamRoleOf(TEAM_ROLE_ID, SPACE_ID, "프론트엔드");
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.of(teamRole));
+
+            memberService.deleteTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID);
+
+            verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 역할 조회를 시도하지 않는다")
+        void deleteTeamRole_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> memberService.deleteTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 역할 조회를 시도하지 않는다")
+        void deleteTeamRole_throwsWhenRequesterIsNotOwner() {
+            Long nonOwnerId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() -> memberService.deleteTeamRole(nonOwnerId, SPACE_ID, TEAM_ROLE_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 다른 스페이스 소속 teamRoleId면 TEAM_ROLE_NOT_FOUND 예외가 발생하고 삭제하지 않는다")
+        void deleteTeamRole_throwsWhenTeamRoleNotFound() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> memberService.deleteTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NOT_FOUND);
+            verify(teamRoleRepository, never()).delete(any(TeamRole.class));
+        }
+    }
 }

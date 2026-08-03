@@ -33,4 +33,7 @@ public interface MemberService {
     // MEMBER-16: 스페이스 소유자가 커스텀 팀 역할을 부분 수정한다(roleName/color 각각 null이면 유지).
     ResponseTeamRoleDto updateTeamRole(
             Long requesterId, Long spaceId, Long teamRoleId, RequestUpdateTeamRoleDto request);
+
+    // MEMBER-17: 스페이스 소유자가 커스텀 팀 역할을 삭제한다.
+    void deleteTeamRole(Long requesterId, Long spaceId, Long teamRoleId);
 }

@@ -229,4 +229,22 @@ public class MemberServiceImpl implements MemberService {
         return new ResponseTeamRoleDto(
                 teamRole.getId(), teamRole.getRoleName(), teamRole.getColor(), teamRole.getCreatedAt());
     }
+
+    @Override
+    @Transactional
+    public void deleteTeamRole(Long requesterId, Long spaceId, Long teamRoleId) {
+        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        if (!team.getOwnerId().equals(requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        TeamRole teamRole = teamRoleRepository.findByIdAndTeamId(teamRoleId, spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.TEAM_ROLE_NOT_FOUND));
+
+        // members.team_role_id는 이 테이블을 FK ON DELETE SET NULL로 참조하므로, 이 역할이 배정된 멤버들의
+        // team_role_id는 DB가 삭제와 함께 자동으로 null 처리한다 — 애플리케이션에서 memberRepository를 별도로 건드리지 않는다.
+        teamRoleRepository.delete(teamRole);
+    }
 }

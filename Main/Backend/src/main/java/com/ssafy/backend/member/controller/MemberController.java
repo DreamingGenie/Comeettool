@@ -98,4 +98,14 @@ public class MemberController {
                 memberService.updateTeamRole(Long.parseLong(userId), spaceId, teamRoleId, request);
         return ResponseEntity.ok(ApiResponse.success("역할이 수정되었습니다.", response));
     }
+
+    // MEMBER-17: 스페이스 소유자가 커스텀 팀 역할을 삭제한다.
+    @DeleteMapping("/team-roles/{teamRoleId}")
+    public ResponseEntity<ApiResponse<Void>> deleteTeamRole(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @PathVariable Long teamRoleId) {
+        memberService.deleteTeamRole(Long.parseLong(userId), spaceId, teamRoleId);
+        return ResponseEntity.ok(ApiResponse.success("역할이 삭제되었습니다.", null));
+    }
 }
