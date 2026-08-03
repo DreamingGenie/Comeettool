@@ -1,6 +1,6 @@
 import { teamCreateColors } from '../constants/teamCreateColors'
 
-const authorityLabel = authority => {
+const authorityLabel = (authority) => {
   const normalized = String(authority || '').toUpperCase()
   if (normalized === 'OWNER') return 'Owner'
   if (normalized === 'GUEST') return 'Guest'
@@ -8,7 +8,7 @@ const authorityLabel = authority => {
   return authority || 'Member'
 }
 
-const initials = value => {
+const initials = (value) => {
   const name = String(value || '').trim()
   if (!name) return 'TS'
 
@@ -16,7 +16,7 @@ const initials = value => {
   if (words.length > 1) {
     return words
       .slice(0, 2)
-      .map(word => word[0])
+      .map((word) => word[0])
       .join('')
       .toUpperCase()
   }
@@ -24,7 +24,7 @@ const initials = value => {
   return name.slice(0, 2).toUpperCase()
 }
 
-export const toWorkspaceViewModel = space => ({
+export const toWorkspaceViewModel = (space) => ({
   id: String(space?.spaceId ?? ''),
   badge: initials(space?.teamName),
   name: space?.teamName || '',
@@ -37,13 +37,11 @@ export const toWorkspaceViewModel = space => ({
   ownerId: space?.ownerId ?? null
 })
 
-export const toDashboardViewModel = spaces => ({
-  workspaces: Array.isArray(spaces)
-    ? spaces.map(toWorkspaceViewModel)
-    : []
+export const toDashboardViewModel = (spaces) => ({
+  workspaces: Array.isArray(spaces) ? spaces.map(toWorkspaceViewModel) : []
 })
 
-export const toUpdatedWorkspaceViewModel = space => {
+export const toUpdatedWorkspaceViewModel = (space) => {
   const workspace = toWorkspaceViewModel(space)
   return {
     id: workspace.id,
@@ -58,10 +56,8 @@ export const toUpdatedWorkspaceViewModel = space => {
 
 export const toTeamViewModel = (space, currentUserId) => {
   const members = Array.isArray(space?.members) ? space.members : []
-  const currentMember = members.find(
-    member => String(member.userId) === String(currentUserId)
-  )
-  const memberViewModels = members.map(member => {
+  const currentMember = members.find((member) => String(member.userId) === String(currentUserId))
+  const memberViewModels = members.map((member) => {
     const name = member.nickname || `사용자 ${member.userId}`
     return {
       id: String(member.memberId ?? member.userId ?? ''),
@@ -88,27 +84,31 @@ export const toTeamViewModel = (space, currentUserId) => {
   }
 }
 
-export const toMemberRowsViewModel = space =>
-  (Array.isArray(space?.members) ? space.members : []).map(member => {
+export const toMemberRowsViewModel = (space) =>
+  (Array.isArray(space?.members) ? space.members : []).map((member) => {
     const name = member.nickname || `사용자 ${member.userId}`
-    return [
-      initials(name),
+    return {
+      memberId: String(member.memberId ?? ''),
+      userId: member.userId ?? null,
+      avatarText: initials(name),
       name,
-      `사용자 #${member.userId}`,
-      authorityLabel(member.authority),
-      'Active',
-      '현재 참여 중'
-    ]
+      identifier: `사용자 #${member.userId}`,
+      authority: String(member.authority || 'MEMBER').toUpperCase(),
+      authorityLabel: authorityLabel(member.authority),
+      teamRoleId: member.teamRoleId ?? null,
+      status: 'Active',
+      activity: '현재 참여 중'
+    }
   })
 
-export const toCreateSpaceRequest = workspace => ({
+export const toCreateSpaceRequest = (workspace) => ({
   teamName: workspace?.name || '',
   teamDescription: workspace?.description || '',
   teamColor: workspace?.color || '',
   teamProfileImage: workspace?.profileImage || null
 })
 
-export const toUpdateSpaceRequest = workspace =>
+export const toUpdateSpaceRequest = (workspace) =>
   Object.fromEntries(
     Object.entries({
       teamName: workspace?.name,

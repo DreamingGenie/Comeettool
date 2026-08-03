@@ -5,6 +5,7 @@ const state = reactive({
   invitations: [],
   loading: false,
   acceptingId: '',
+  rejectingId: '',
   error: ''
 })
 
@@ -31,7 +32,7 @@ export const notificationStore = {
     try {
       await dataSource.notification.acceptInvitation(invitationId)
       state.invitations = state.invitations.filter(
-        invitation => invitation.invitationId !== invitationId
+        (invitation) => invitation.invitationId !== invitationId
       )
     } catch (error) {
       state.error = error?.message || '초대를 수락하지 못했습니다.'
@@ -40,10 +41,26 @@ export const notificationStore = {
       state.acceptingId = ''
     }
   },
+  async rejectInvitation(invitationId) {
+    state.rejectingId = invitationId
+    state.error = ''
+    try {
+      await dataSource.notification.rejectInvitation(invitationId)
+      state.invitations = state.invitations.filter(
+        (invitation) => invitation.invitationId !== invitationId
+      )
+    } catch (error) {
+      state.error = error?.message || '초대를 거절하지 못했습니다.'
+      throw error
+    } finally {
+      state.rejectingId = ''
+    }
+  },
   reset() {
     state.invitations = []
     state.loading = false
     state.acceptingId = ''
+    state.rejectingId = ''
     state.error = ''
   }
 }

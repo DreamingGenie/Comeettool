@@ -22,9 +22,7 @@ export const mockMode = {
   document: getMockMode(import.meta.env.VITE_USE_MOCK_DOCUMENT_API),
   meeting: getMockMode(import.meta.env.VITE_USE_MOCK_MEETING_API),
   notification: getMockMode(import.meta.env.VITE_USE_MOCK_NOTIFICATION_API),
-  passwordReset: getMockMode(
-    import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API
-  ),
+  passwordReset: getMockMode(import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API),
   space: getMockMode(import.meta.env.VITE_USE_MOCK_SPACE_API),
   user: getMockMode(import.meta.env.VITE_USE_MOCK_USER_API),
   userSearch: getMockMode(import.meta.env.VITE_USE_MOCK_USER_SEARCH_API),
@@ -36,23 +34,27 @@ const boardSource = mockMode.board ? boardMockApi : boardApi
 const meetingSource = mockMode.meeting ? boardMockApi : boardApi
 const spaceSource = mockMode.space ? boardMockApi : boardApi
 const documentSource = mockMode.document ? documentMockApi : documentApi
-const notificationSource = mockMode.notification
-  ? notificationMockApi
-  : notificationApi
+const notificationSource = mockMode.notification ? notificationMockApi : notificationApi
 const userSource = mockMode.user ? userMockApi : userApi
 
 export const dataSource = {
   auth: {
     ...authSource,
-    resetPassword: mockMode.passwordReset
-      ? authMockApi.resetPassword
-      : authApi.resetPassword
+    resetPassword: mockMode.passwordReset ? authMockApi.resetPassword : authApi.resetPassword
   },
   board: {
     ...boardSource,
     getDashboard: spaceSource.getDashboard,
     getTeam: spaceSource.getTeam,
     getMembers: spaceSource.getMembers,
+    getTeamRoles: spaceSource.getTeamRoles,
+    inviteMember: spaceSource.inviteMember,
+    kickMember: spaceSource.kickMember,
+    changeMemberAuthority: spaceSource.changeMemberAuthority,
+    assignTeamRole: spaceSource.assignTeamRole,
+    createTeamRole: spaceSource.createTeamRole,
+    updateTeamRole: spaceSource.updateTeamRole,
+    deleteTeamRole: spaceSource.deleteTeamRole,
     createWorkspace: spaceSource.createWorkspace,
     updateTeam: spaceSource.updateTeam,
     reorderWorkspaces: spaceSource.reorderWorkspaces,
@@ -71,11 +73,7 @@ export const dataSource = {
   notification: notificationSource,
   user: {
     ...userSource,
-    searchUsers: mockMode.userSearch
-      ? userMockApi.searchUsers
-      : userApi.searchUsers,
-    withdraw: mockMode.userWithdraw
-      ? userMockApi.withdraw
-      : userApi.withdraw
+    searchUsers: mockMode.userSearch ? userMockApi.searchUsers : userApi.searchUsers,
+    withdraw: mockMode.userWithdraw ? userMockApi.withdraw : userApi.withdraw
   }
 }
