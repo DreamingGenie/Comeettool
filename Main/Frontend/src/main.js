@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './app/App.vue'
 import router from './app/router'
 import { boardStore } from './features/board/stores/boardStore'
+import { notificationStore } from './features/notification/stores/notificationStore'
 import { userStore } from './features/user/stores/userStore'
 import './assets/styles/ui-app.css'
 import './assets/styles/archive-pages.css'
@@ -9,6 +10,7 @@ import './assets/styles/motion.css'
 
 window.addEventListener('auth:expired', () => {
   boardStore.reset()
+  notificationStore.reset()
   userStore.reset()
   if (router.currentRoute.value.name !== 'login') {
     router
