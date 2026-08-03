@@ -2,7 +2,7 @@
   <RouterLink class="logo" :to="to" aria-label="코밋툴 홈">
     <img
       class="logo-mark"
-      :src="variant === 'blue' ? '/assets/comeetblue.svg' : '/assets/comeetwhite.svg?v=20260728-1254'"
+      :src="variant === 'blue' ? '/assets/comeetblue.svg' : '/assets/comeetwhite.svg?v=20260803-1050'"
       alt=""
       aria-hidden="true"
     />
