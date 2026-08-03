@@ -53,7 +53,7 @@
         <span>멤버</span><span>직무</span>
       </div>
       <div v-else class="member-row all-row head">
-        <span>멤버</span><span>역할</span><span>직무</span>
+        <span>멤버</span><span>역할</span><span>직무</span><span>관리</span>
       </div>
 
       <article
@@ -106,6 +106,21 @@
           <span class="member-value job-value">{{ jobName(member.teamRoleId) }}</span>
         </template>
 
+        <span v-if="activeTab === 'all'" class="member-actions">
+          <button
+            v-if="canManage && member.authority !== 'OWNER'"
+            class="member-kick"
+            type="button"
+            :disabled="pendingMemberId === member.memberId"
+            @click="kickMember(member)"
+          >
+            추방
+          </button>
+          <span v-else class="member-owner-label">{{
+            member.authority === 'OWNER' ? '현재 소유자' : '-'
+          }}</span>
+        </span>
+
         <span v-if="activeTab === 'authority'" class="member-actions">
           <template v-if="canManage && member.authority !== 'OWNER'">
             <button
@@ -115,14 +130,6 @@
               @click="prepareDelegation(member)"
             >
               위임
-            </button>
-            <button
-              class="member-kick"
-              type="button"
-              :disabled="pendingMemberId === member.memberId || savingAuthority"
-              @click="kickMember(member)"
-            >
-              추방
             </button>
           </template>
           <span v-else class="member-owner-label">{{
@@ -411,7 +418,9 @@ watch(totalPages, (pages) => {
 }
 
 .member-row.all-row {
-  grid-template-columns: minmax(230px, 2fr) minmax(140px, 0.9fr) minmax(180px, 1.2fr);
+  grid-template-columns:
+    minmax(230px, 2fr) minmax(130px, 0.8fr) minmax(170px, 1.1fr)
+    minmax(80px, 0.5fr);
   gap: 18px;
   padding: 0 30px;
 }
