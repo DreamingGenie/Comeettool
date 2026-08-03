@@ -5,6 +5,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
 import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
+import com.ssafy.backend.member.dto.RequestUpdateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
@@ -641,6 +642,222 @@ class MemberServiceImplTest {
             List<ResponseTeamRoleSummaryDto> result = memberService.getTeamRoles(TARGET_USER_ID, SPACE_ID);
 
             assertThat(result).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-16 팀 역할 수정")
+    class UpdateTeamRole {
+
+        private TeamRole existingRole() {
+            TeamRole teamRole = TeamRole.builder().teamId(SPACE_ID).roleName("프론트엔드").color("#3B82F6").build();
+            ReflectionTestUtils.setField(teamRole, "id", TEAM_ROLE_ID);
+            return teamRole;
+        }
+
+        private RequestUpdateTeamRoleDto requestOf(String roleName, String color) {
+            return new RequestUpdateTeamRoleDto(roleName, color);
+        }
+
+        private void stubSpaceAndRole(TeamRole teamRole) {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.of(teamRole));
+        }
+
+        @Test
+        @DisplayName("roleName만 수정하면 roleName만 바뀌고 color는 유지된다")
+        void updateTeamRole_updatesRoleNameOnly() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            given(teamRoleRepository.existsByTeamIdAndRoleNameAndIdNot(SPACE_ID, "백엔드", TEAM_ROLE_ID))
+                    .willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class)))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            ResponseTeamRoleDto response =
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null));
+
+            assertThat(response.roleName()).isEqualTo("백엔드");
+            assertThat(response.color()).isEqualTo("#3B82F6");
+            ArgumentCaptor<TeamRole> captor = ArgumentCaptor.forClass(TeamRole.class);
+            verify(teamRoleRepository).saveAndFlush(captor.capture());
+            assertThat(captor.getValue().getRoleName()).isEqualTo("백엔드");
+            assertThat(captor.getValue().getColor()).isEqualTo("#3B82F6");
+        }
+
+        @Test
+        @DisplayName("color만 수정하면 color만 바뀌고 roleName은 유지된다")
+        void updateTeamRole_updatesColorOnly() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class)))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            ResponseTeamRoleDto response =
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf(null, "#10B981"));
+
+            assertThat(response.roleName()).isEqualTo("프론트엔드");
+            assertThat(response.color()).isEqualTo("#10B981");
+            verify(teamRoleRepository, never()).existsByTeamIdAndRoleNameAndIdNot(any(), any(), any());
+            ArgumentCaptor<TeamRole> captor = ArgumentCaptor.forClass(TeamRole.class);
+            verify(teamRoleRepository).saveAndFlush(captor.capture());
+            assertThat(captor.getValue().getRoleName()).isEqualTo("프론트엔드");
+            assertThat(captor.getValue().getColor()).isEqualTo("#10B981");
+        }
+
+        @Test
+        @DisplayName("roleName·color를 함께 수정하면 둘 다 반영된다")
+        void updateTeamRole_updatesBoth() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            given(teamRoleRepository.existsByTeamIdAndRoleNameAndIdNot(SPACE_ID, "백엔드", TEAM_ROLE_ID))
+                    .willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class)))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            ResponseTeamRoleDto response =
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", "#10B981"));
+
+            assertThat(response.roleName()).isEqualTo("백엔드");
+            assertThat(response.color()).isEqualTo("#10B981");
+            verify(teamRoleRepository).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("roleName·color 둘 다 안 보내면 변경 사항이 없어 저장을 호출하지 않는다")
+        void updateTeamRole_skipsSaveWhenNothingChanges() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+
+            ResponseTeamRoleDto response =
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf(null, null));
+
+            assertThat(response.roleName()).isEqualTo("프론트엔드");
+            assertThat(response.color()).isEqualTo("#3B82F6");
+            verify(teamRoleRepository, never()).existsByTeamIdAndRoleNameAndIdNot(any(), any(), any());
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("roleName을 기존 값과 동일하게 보내면 중복 체크 없이 정상 처리된다(자기 자신 제외)")
+        void updateTeamRole_doesNotCheckDuplicateWhenRoleNameUnchanged() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+
+            ResponseTeamRoleDto response =
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("프론트엔드", null));
+
+            assertThat(response.roleName()).isEqualTo("프론트엔드");
+            verify(teamRoleRepository, never()).existsByTeamIdAndRoleNameAndIdNot(any(), any(), any());
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("다른 역할과 이름이 중복되면 TEAM_ROLE_NAME_DUPLICATED 예외가 발생하고 저장하지 않는다")
+        void updateTeamRole_throwsWhenNameDuplicated() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            given(teamRoleRepository.existsByTeamIdAndRoleNameAndIdNot(SPACE_ID, "백엔드", TEAM_ROLE_ID))
+                    .willReturn(true);
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("사전 체크는 통과했지만 저장 시 유니크 제약을 위반하면 TEAM_ROLE_NAME_DUPLICATED로 변환된다(동시성 방어)")
+        void updateTeamRole_translatesUniqueConstraintViolationToDuplicated() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            given(teamRoleRepository.existsByTeamIdAndRoleNameAndIdNot(SPACE_ID, "백엔드", TEAM_ROLE_ID))
+                    .willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class)))
+                    .willThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 역할 조회를 시도하지 않는다")
+        void updateTeamRole_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 역할 조회를 시도하지 않는다")
+        void updateTeamRole_throwsWhenRequesterIsNotOwner() {
+            Long nonOwnerId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(nonOwnerId, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 다른 스페이스 소속 teamRoleId면 TEAM_ROLE_NOT_FOUND 예외가 발생하고 저장하지 않는다")
+        void updateTeamRole_throwsWhenTeamRoleNotFound() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("백엔드", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NOT_FOUND);
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("roleName이 20자를 초과하면 VALIDATION_FAILED 예외가 발생하고 저장하지 않는다")
+        void updateTeamRole_throwsWhenRoleNameTooLong() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+            String tooLong = "가".repeat(21);
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf(tooLong, null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verify(teamRoleRepository, never()).existsByTeamIdAndRoleNameAndIdNot(any(), any(), any());
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("roleName이 공백만으로 구성되면 VALIDATION_FAILED 예외가 발생하고 저장하지 않는다")
+        void updateTeamRole_throwsWhenRoleNameBlank() {
+            TeamRole teamRole = existingRole();
+            stubSpaceAndRole(teamRole);
+
+            assertThatThrownBy(() ->
+                    memberService.updateTeamRole(OWNER_ID, SPACE_ID, TEAM_ROLE_ID, requestOf("   ", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verify(teamRoleRepository, never()).existsByTeamIdAndRoleNameAndIdNot(any(), any(), any());
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
         }
     }
 }

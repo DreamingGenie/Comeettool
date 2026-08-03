@@ -4,6 +4,7 @@ import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
 import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
+import com.ssafy.backend.member.dto.RequestUpdateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
@@ -84,5 +85,17 @@ public class MemberController {
             @PathVariable Long spaceId) {
         List<ResponseTeamRoleSummaryDto> response = memberService.getTeamRoles(Long.parseLong(userId), spaceId);
         return ResponseEntity.ok(ApiResponse.success("역할 목록 조회 성공", response));
+    }
+
+    // MEMBER-16: 스페이스 소유자가 커스텀 팀 역할을 부분 수정한다(roleName/color 각각 null이면 유지).
+    @PatchMapping("/team-roles/{teamRoleId}")
+    public ResponseEntity<ApiResponse<ResponseTeamRoleDto>> updateTeamRole(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @PathVariable Long teamRoleId,
+            @RequestBody RequestUpdateTeamRoleDto request) {
+        ResponseTeamRoleDto response =
+                memberService.updateTeamRole(Long.parseLong(userId), spaceId, teamRoleId, request);
+        return ResponseEntity.ok(ApiResponse.success("역할이 수정되었습니다.", response));
     }
 }

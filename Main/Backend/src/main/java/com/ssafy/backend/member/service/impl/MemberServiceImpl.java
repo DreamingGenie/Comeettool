@@ -5,6 +5,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
 import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
+import com.ssafy.backend.member.dto.RequestUpdateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
@@ -182,5 +183,50 @@ public class MemberServiceImpl implements MemberService {
                 .map(teamRole -> new ResponseTeamRoleSummaryDto(
                         teamRole.getId(), teamRole.getRoleName(), teamRole.getColor()))
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public ResponseTeamRoleDto updateTeamRole(
+            Long requesterId, Long spaceId, Long teamRoleId, RequestUpdateTeamRoleDto request
+    ) {
+        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        if (!team.getOwnerId().equals(requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        TeamRole teamRole = teamRoleRepository.findByIdAndTeamId(teamRoleId, spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.TEAM_ROLE_NOT_FOUND));
+
+        String requestedRoleName = request.roleName();
+        boolean roleNameChanged = requestedRoleName != null && !requestedRoleName.equals(teamRole.getRoleName());
+        if (roleNameChanged) {
+            if (requestedRoleName.isBlank() || requestedRoleName.length() > 20) {
+                throw new CustomException(ErrorCode.VALIDATION_FAILED);
+            }
+            if (teamRoleRepository.existsByTeamIdAndRoleNameAndIdNot(spaceId, requestedRoleName, teamRoleId)) {
+                throw new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+            }
+        }
+
+        String requestedColor = request.color();
+        boolean colorChanged = requestedColor != null && !requestedColor.equals(teamRole.getColor());
+
+        // 멱등/무변경 처리: roleName·color 둘 다 실질적인 변경이 없으면 쓰기 없이 현재 상태 그대로 응답한다.
+        if (roleNameChanged || colorChanged) {
+            teamRole.updateRole(requestedRoleName, requestedColor);
+            try {
+                // saveAndFlush로 즉시 INSERT/UPDATE를 실행해, 유니크 제약 위반을 이 트랜잭션 안에서 바로 잡아낸다(생성과 동일 패턴).
+                teamRoleRepository.saveAndFlush(teamRole);
+            } catch (DataIntegrityViolationException e) {
+                // (team_id, role_name) 유니크 제약 위반 — 위 existsBy 체크 이후 동시에 들어온 요청이 먼저 커밋된 경우의 race condition 방어.
+                throw new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+            }
+        }
+
+        return new ResponseTeamRoleDto(
+                teamRole.getId(), teamRole.getRoleName(), teamRole.getColor(), teamRole.getCreatedAt());
     }
 }

@@ -7,6 +7,7 @@ import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
 import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
+import com.ssafy.backend.member.dto.RequestUpdateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
@@ -495,6 +496,103 @@ class MemberControllerTest {
             mockMvc.perform(get("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-16 PATCH /api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}")
+    class UpdateTeamRole {
+
+        @Test
+        @DisplayName("정상 수정이면 200 SUCCESS, message='역할이 수정되었습니다.', data에 수정된 역할을 반환한다")
+        void updateTeamRole_returns200() throws Exception {
+            given(memberService.updateTeamRole(eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class)))
+                    .willReturn(new ResponseTeamRoleDto(TEAM_ROLE_ID, "백엔드", "#10B981", OffsetDateTime.now()));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestUpdateTeamRoleDto("백엔드", "#10B981"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("역할이 수정되었습니다."))
+                    .andExpect(jsonPath("$.data.teamRoleId").value(TEAM_ROLE_ID))
+                    .andExpect(jsonPath("$.data.roleName").value("백엔드"))
+                    .andExpect(jsonPath("$.data.color").value("#10B981"));
+
+            verify(memberService).updateTeamRole(
+                    eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+        }
+
+        @Test
+        @DisplayName("roleName이 20자를 초과하면 400 VALIDATION_FAILED를 반환한다")
+        void updateTeamRole_returns400WhenRoleNameTooLong() throws Exception {
+            doThrow(new CustomException(ErrorCode.VALIDATION_FAILED))
+                    .when(memberService).updateTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+            String tooLong = "가".repeat(21);
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestUpdateTeamRoleDto(tooLong, null))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void updateTeamRole_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(memberService).updateTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestUpdateTeamRoleDto("백엔드", null))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void updateTeamRole_returns403WhenNotOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY))
+                    .when(memberService).updateTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestUpdateTeamRoleDto("백엔드", null))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("해당 스페이스에 없는 teamRoleId면 404 TEAM_ROLE_NOT_FOUND를 반환한다")
+        void updateTeamRole_returns404WhenTeamRoleNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.TEAM_ROLE_NOT_FOUND))
+                    .when(memberService).updateTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestUpdateTeamRoleDto("백엔드", null))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TEAM_ROLE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("다른 역할과 이름이 중복되면 409 TEAM_ROLE_NAME_DUPLICATED를 반환한다")
+        void updateTeamRole_returns409WhenNameDuplicated() throws Exception {
+            doThrow(new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED))
+                    .when(memberService).updateTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(TEAM_ROLE_ID), any(RequestUpdateTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/team-roles/{teamRoleId}", SPACE_ID, TEAM_ROLE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestUpdateTeamRoleDto("백엔드", null))))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("TEAM_ROLE_NAME_DUPLICATED"));
         }
     }
 }

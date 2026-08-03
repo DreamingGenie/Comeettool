@@ -18,8 +18,7 @@ import java.time.OffsetDateTime;
  * team_roles 테이블 매핑 엔티티 (스페이스별 커스텀 역할).
  * (team_id, role_name) 유니크 — 한 스페이스 안에서 역할명은 중복될 수 없다.
  * members.team_role_id가 이 테이블을 참조한다(FK, ON DELETE SET NULL).
- * 역할 생성·수정·삭제 API는 이번 작업 범위 아님 — @Builder는 테스트 픽스처 구성을 위해 다른 엔티티(Team/Member 등)와
- * 동일한 컨벤션으로 둔다.
+ * 역할 삭제 API는 이번 작업 범위 아님.
  */
 @Entity
 @Table(name = "team_roles")
@@ -50,5 +49,15 @@ public class TeamRole {
         this.teamId = teamId;
         this.roleName = roleName;
         this.color = color;
+    }
+
+    // MEMBER-16: 부분 수정 — 인자가 null이면 해당 필드는 건드리지 않는다(요청에 안 보낸 필드로 간주).
+    public void updateRole(String roleName, String color) {
+        if (roleName != null) {
+            this.roleName = roleName;
+        }
+        if (color != null) {
+            this.color = color;
+        }
     }
 }

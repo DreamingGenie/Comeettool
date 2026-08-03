@@ -14,6 +14,9 @@ public interface TeamRoleRepository extends JpaRepository<TeamRole, Long> {
     // MEMBER-14: 같은 스페이스 내 역할명 중복 여부 사전 체크.
     boolean existsByTeamIdAndRoleName(Long teamId, String roleName);
 
+    // MEMBER-16: 이름 변경 시 자기 자신(id)을 제외한 중복 체크.
+    boolean existsByTeamIdAndRoleNameAndIdNot(Long teamId, String roleName, Long id);
+
     // MEMBER-15: 스페이스의 역할 목록 — 생성순.
     List<TeamRole> findAllByTeamIdOrderByCreatedAtAsc(Long teamId);
 }
