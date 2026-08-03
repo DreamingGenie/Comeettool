@@ -43,12 +43,15 @@ const emptyMeetingRoom = {
   directContacts: []
 }
 
+let workspaceLoadSequence = 0
+
 const state = reactive({
   pendingRequests: 0,
   loading: false,
   error: '',
   currentTeamId: '',
   currentMeetingId: '',
+  workspaceQuery: '',
   workspaces: [],
   team: { ...emptyTeam },
   members: [],
@@ -72,11 +75,13 @@ const state = reactive({
 })
 
 function resetState() {
+  workspaceLoadSequence += 1
   state.pendingRequests = 0
   state.loading = false
   state.error = ''
   state.currentTeamId = ''
   state.currentMeetingId = ''
+  state.workspaceQuery = ''
   state.workspaces = []
   state.team = { ...emptyTeam }
   state.members = []
@@ -169,10 +174,40 @@ export const boardStore = {
     )
     return state
   },
-  async loadWorkspaces() {
-    const dashboard = await withLoading(() => dataSource.board.getDashboard())
+  async loadWorkspaces(search = '') {
+    const requestSequence = ++workspaceLoadSequence
+    const keyword = String(search || '').trim()
+    const dashboard = await withLoading(() =>
+      dataSource.board.getDashboard(keyword)
+    )
+    if (requestSequence !== workspaceLoadSequence) return state.workspaces
+
+    state.workspaceQuery = keyword
     state.workspaces = dashboard?.workspaces || []
     return state.workspaces
+  },
+  async reorderWorkspaces(spaceOrder) {
+    const normalizedOrder = spaceOrder.map(String)
+    const previousWorkspaces = [...state.workspaces]
+    const workspaceMap = new Map(
+      previousWorkspaces.map(workspace => [String(workspace.id), workspace])
+    )
+    const reordered = normalizedOrder
+      .map(spaceId => workspaceMap.get(spaceId))
+      .filter(Boolean)
+    const remaining = previousWorkspaces.filter(
+      workspace => !normalizedOrder.includes(String(workspace.id))
+    )
+
+    state.workspaces = [...reordered, ...remaining]
+    try {
+      const dashboard = await dataSource.board.reorderWorkspaces(normalizedOrder)
+      state.workspaces = dashboard?.workspaces || state.workspaces
+      return state.workspaces
+    } catch (error) {
+      state.workspaces = previousWorkspaces
+      throw error
+    }
   },
   async loadTeam(teamId) {
     const team = await withLoading(() => dataSource.board.getTeam(teamId))
@@ -259,7 +294,7 @@ export const boardStore = {
   },
   async createWorkspace(data) {
     const workspace = await dataSource.board.createWorkspace(data)
-    state.workspaces.push(workspace)
+    state.workspaces.unshift(workspace)
     return workspace
   },
   async leaveWorkspace(spaceId) {
@@ -342,11 +377,22 @@ export const boardStore = {
     return event
   },
   async updateTeam(teamId, data) {
-    state.team = await dataSource.board.updateTeam(teamId, data)
-    const workspace = state.workspaces.find(item => item.id === teamId)
-    if (workspace) {
-      workspace.name = state.team.name
-      workspace.badge = state.team.badge
+    const updatedTeam = await withLoading(() =>
+      dataSource.board.updateTeam(teamId, data)
+    )
+    state.team = {
+      ...state.team,
+      ...updatedTeam,
+      members: state.team.members
+    }
+    const workspaceIndex = state.workspaces.findIndex(
+      item => String(item.id) === String(teamId)
+    )
+    if (workspaceIndex >= 0) {
+      state.workspaces[workspaceIndex] = {
+        ...state.workspaces[workspaceIndex],
+        ...updatedTeam
+      }
     }
     return state.team
   },

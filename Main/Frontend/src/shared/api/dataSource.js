@@ -48,6 +48,8 @@ export const dataSource = {
     getTeam: spaceSource.getTeam,
     getMembers: spaceSource.getMembers,
     createWorkspace: spaceSource.createWorkspace,
+    updateTeam: spaceSource.updateTeam,
+    reorderWorkspaces: spaceSource.reorderWorkspaces,
     leaveWorkspace: spaceSource.leaveWorkspace,
     deleteWorkspace: spaceSource.deleteWorkspace,
     transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership,

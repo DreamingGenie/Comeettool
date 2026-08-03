@@ -4,6 +4,8 @@ import {
   toDashboardViewModel,
   toMemberRowsViewModel,
   toTeamViewModel,
+  toUpdatedWorkspaceViewModel,
+  toUpdateSpaceRequest,
   toWorkspaceViewModel
 } from '../mappers/spaceMapper'
 import {
@@ -14,8 +16,16 @@ import {
 } from '../mappers/meetingMapper'
 
 export const boardApi = {
-  getDashboard: async () =>
-    toDashboardViewModel(await request('/api/v1/spaces')),
+  getDashboard: async (search = '') => {
+    const params = new URLSearchParams()
+    const keyword = String(search || '').trim()
+    if (keyword) params.set('search', keyword)
+    const query = params.toString()
+
+    return toDashboardViewModel(
+      await request(`/api/v1/spaces${query ? `?${query}` : ''}`)
+    )
+  },
   getTeam: async spaceId =>
     toTeamViewModel(
       await request(`/api/v1/spaces/${spaceId}`),
@@ -53,11 +63,22 @@ export const boardApi = {
       })
     }),
   getInviteMembers: teamId => request(`/api/teams/${teamId}/invite-members`),
-  updateTeam: (teamId, data) =>
-    request(`/api/teams/${teamId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    }),
+  updateTeam: async (teamId, data) =>
+    toUpdatedWorkspaceViewModel(
+      await request(`/api/v1/spaces/${teamId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(toUpdateSpaceRequest(data))
+      })
+    ),
+  reorderWorkspaces: async spaceOrder =>
+    toDashboardViewModel(
+      await request('/api/v1/spaces/order', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          spaceOrder: spaceOrder.map(spaceId => Number(spaceId))
+        })
+      })
+    ),
   inviteMember: (teamId, data) =>
     request(`/api/teams/${teamId}/invite-members`, {
       method: 'POST',

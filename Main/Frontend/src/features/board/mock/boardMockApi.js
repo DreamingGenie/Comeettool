@@ -25,7 +25,15 @@ const getMockTeamMembers = teamId => {
 }
 
 export const boardMockApi = {
-  getDashboard: () => mockResponse({ workspaces: boardMockDatabase.workspaces }),
+  getDashboard: (search = '') => {
+    const keyword = String(search || '').trim().toLowerCase()
+    const workspaces = keyword
+      ? boardMockDatabase.workspaces.filter(workspace =>
+          workspace.name.toLowerCase().includes(keyword)
+        )
+      : boardMockDatabase.workspaces
+    return mockResponse({ workspaces })
+  },
   getTeam: teamId => {
     const team = findMockTeam(teamId)
     return mockResponse({
@@ -117,10 +125,33 @@ export const boardMockApi = {
     ),
   updateTeam: (teamId, data) => {
     const team =
-      boardMockDatabase.teams.find(item => item.id === teamId) ||
+      boardMockDatabase.teams.find(item => String(item.id) === String(teamId)) ||
       boardMockDatabase.teams[0]
     Object.assign(team, data)
-    return mockResponse(team)
+    const workspace = boardMockDatabase.workspaces.find(
+      item => String(item.id) === String(teamId)
+    )
+    if (workspace) Object.assign(workspace, data)
+    return mockResponse(workspace || team)
+  },
+  reorderWorkspaces: spaceOrder => {
+    const normalizedOrder = spaceOrder.map(String)
+    const workspaceMap = new Map(
+      boardMockDatabase.workspaces.map(workspace => [String(workspace.id), workspace])
+    )
+    const reordered = normalizedOrder
+      .map(spaceId => workspaceMap.get(spaceId))
+      .filter(Boolean)
+    const remaining = boardMockDatabase.workspaces.filter(
+      workspace => !normalizedOrder.includes(String(workspace.id))
+    )
+    boardMockDatabase.workspaces.splice(
+      0,
+      boardMockDatabase.workspaces.length,
+      ...reordered,
+      ...remaining
+    )
+    return mockResponse({ workspaces: boardMockDatabase.workspaces })
   },
   inviteMember: (teamId, data) => {
     const targetTeamId =
