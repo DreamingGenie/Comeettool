@@ -42,9 +42,11 @@
         </div>
         <label class="field">
           신규 멤버 기본 역할
-          <select v-model="form.defaultMemberRole">
-            <option v-for="role in boardState.team.defaultMemberRoles" :key="role">{{ role }}</option>
-          </select>
+          <AppSelect
+            v-model="form.defaultMemberRole"
+            :options="defaultMemberRoleOptions"
+            aria-label="신규 멤버 기본 역할"
+          />
         </label>
       </section>
       <section class="settings-card wide">
@@ -75,16 +77,13 @@
             <small>다른 멤버에게 Owner 권한을 넘기면 내 권한은 Member로 변경됩니다.</small>
           </div>
           <div v-if="eligibleOwners.length" class="ownership-controls">
-            <select v-model="selectedOwnerId" aria-label="새 스페이스 소유자">
-              <option value="" disabled>새 Owner를 선택하세요</option>
-              <option
-                v-for="member in eligibleOwners"
-                :key="member.userId"
-                :value="String(member.userId)"
-              >
-                {{ member.name }} · {{ member.authorityLabel }}
-              </option>
-            </select>
+            <AppSelect
+              v-model="selectedOwnerId"
+              class="ownership-select"
+              :options="ownerOptions"
+              placeholder="새 Owner를 선택하세요"
+              aria-label="새 스페이스 소유자"
+            />
             <button
               class="outline-btn"
               type="button"
@@ -152,6 +151,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import TeamLayout from '../components/TeamLayout.vue'
@@ -177,6 +177,15 @@ const eligibleOwners = computed(() =>
       String(member.userId) !== String(boardState.team.ownerId) &&
       member.authority !== 'OWNER'
   )
+)
+const defaultMemberRoleOptions = computed(() =>
+  (boardState.team.defaultMemberRoles || []).map((role) => ({ value: role, label: role }))
+)
+const ownerOptions = computed(() =>
+  eligibleOwners.value.map((member) => ({
+    value: String(member.userId),
+    label: `${member.name} · ${member.authorityLabel}`
+  }))
 )
 const selectedOwner = computed(() =>
   eligibleOwners.value.find(
@@ -358,13 +367,8 @@ async function save() {
   gap: 8px;
 }
 
-.ownership-controls select {
+.ownership-select {
   min-width: 210px;
-  height: 35px;
-  border: 1px solid #d7dce7;
-  border-radius: 7px;
-  padding: 0 10px;
-  background: #fff;
 }
 
 .ownership-empty {
@@ -416,7 +420,7 @@ async function save() {
     flex-direction: column;
   }
 
-  .ownership-controls select {
+  .ownership-select {
     width: 100%;
     min-width: 0;
   }

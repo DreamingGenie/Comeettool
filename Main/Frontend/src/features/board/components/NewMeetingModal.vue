@@ -9,11 +9,7 @@
       </label>
       <label class="field">
         담당 팀
-        <select v-model="form.teamId">
-          <option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">
-            {{ workspace.name }}
-          </option>
-        </select>
+        <AppSelect v-model="form.teamId" :options="workspaceOptions" aria-label="담당 팀" />
       </label>
       <div style="height:84px"></div>
       <button class="primary block" :disabled="submitting">회의 만들기</button>
@@ -22,8 +18,9 @@
 </template>
 
 <script setup>
-import { reactive, ref, watchEffect } from 'vue'
+import { computed, reactive, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { boardStore } from '../stores/boardStore'
@@ -32,6 +29,9 @@ const props = defineProps({
   workspaces: { type: Array, default: () => [] },
   teamId: { type: String, default: '' }
 })
+const workspaceOptions = computed(() =>
+  props.workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))
+)
 
 const emit = defineEmits(['close', 'created'])
 const router = useRouter()
