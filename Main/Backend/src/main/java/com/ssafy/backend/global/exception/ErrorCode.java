@@ -67,6 +67,11 @@ public enum ErrorCode {
             "회의 연결 종료 처리에 실패했습니다."),
     MEETING_LIVEKIT_ROOM_END_FAILED(HttpStatus.BAD_GATEWAY, "MEETING_LIVEKIT_ROOM_END_FAILED",
             "LiveKit 회의방 종료 처리에 실패했습니다."),
+    MEETING_AI_TRANSCRIPTION_START_FAILED(
+            HttpStatus.BAD_GATEWAY,
+            "MEETING_AI_TRANSCRIPTION_START_FAILED",
+            "AI 회의 음성 처리 시작 요청에 실패했습니다."
+    ),
     MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED(
             HttpStatus.UNAUTHORIZED,
             "MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED",

@@ -1,6 +1,7 @@
 package com.ssafy.backend.meeting.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ssafy.backend.global.exception.CustomException;
@@ -38,6 +40,7 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
@@ -98,6 +101,9 @@ class MeetingServiceImplTest {
 
     @Mock
     private LiveKitRoomManager liveKitRoomManager;
+
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -166,6 +172,19 @@ class MeetingServiceImplTest {
         assertThat(createdParticipant.getMemberId()).isEqualTo(CURRENT_HOST_MEMBER_ID);
         assertThat(createdParticipant.getParticipantRole()).isEqualTo("BE");
         assertThat(createdParticipant.isInMeeting()).isFalse();
+
+        ArgumentCaptor<MeetingTranscriptionStartedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        MeetingTranscriptionStartedEvent.class
+                );
+        verify(applicationEventPublisher)
+                .publishEvent(eventCaptor.capture());
+
+        MeetingTranscriptionStartedEvent event = eventCaptor.getValue();
+        assertThat(event.meetingId()).isEqualTo(MEETING_ID);
+        assertThat(event.startedAt()).isEqualTo(
+                CREATED_AT.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        );
         assertThat(response).isEqualTo(expectedResponse);
     }
 
