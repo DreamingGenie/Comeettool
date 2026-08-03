@@ -1,11 +1,13 @@
 package com.ssafy.backend.meeting.service.impl;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,7 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
@@ -62,6 +65,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final LiveKitTokenProvider liveKitTokenProvider;
     private final LiveKitParticipantManager liveKitParticipantManager;
     private final LiveKitRoomManager liveKitRoomManager;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * MEET-01: 회의 생성.
@@ -105,6 +109,15 @@ public class MeetingServiceImpl implements MeetingService {
                 .isInMeeting(false)
                 .build();
         participantRepository.save(hostParticipant);
+
+        String startedAt = savedMeetingRoom.getCreatedAt()
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        applicationEventPublisher.publishEvent(
+                new MeetingTranscriptionStartedEvent(
+                        savedMeetingRoom.getId(),
+                        startedAt
+                )
+        );
 
         return meetingMapper.toCreateResponse(
                 savedMeetingRoom,
