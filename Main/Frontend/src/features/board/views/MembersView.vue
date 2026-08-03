@@ -103,7 +103,9 @@
 
         <template v-else>
           <span class="member-value authority-value">{{ member.authorityLabel }}</span>
-          <span class="member-value job-value">{{ jobName(member.teamRoleId) }}</span>
+          <span class="member-value job-value" :style="jobStyle(member.teamRoleId)">
+            {{ jobName(member.teamRoleId) }}
+          </span>
         </template>
 
         <span v-if="activeTab === 'all'" class="member-actions">
@@ -270,6 +272,16 @@ function jobName(teamRoleId) {
     boardState.teamRoles.find((role) => String(role.teamRoleId) === String(teamRoleId))?.roleName ||
     '삭제된 직무'
   )
+}
+
+function jobStyle(teamRoleId) {
+  const role = boardState.teamRoles.find((item) => String(item.teamRoleId) === String(teamRoleId))
+  if (!role?.color) return {}
+  return {
+    backgroundColor: role.color,
+    borderColor: role.color,
+    color: '#fff'
+  }
 }
 
 watch([query, reverse, authorityFilter, activeTab], () => {
@@ -479,6 +491,7 @@ watch(totalPages, (pages) => {
 }
 
 .job-value {
+  border: 1px solid #dde5e2;
   background: #f1f5f4;
   color: #557568;
 }
