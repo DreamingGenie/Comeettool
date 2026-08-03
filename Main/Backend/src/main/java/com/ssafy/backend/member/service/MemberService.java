@@ -1,6 +1,8 @@
 package com.ssafy.backend.member.service;
 
+import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 
 public interface MemberService {
@@ -11,4 +13,8 @@ public interface MemberService {
     // MEMBER-07: 스페이스 소유자가 멤버의 권한(MEMBER/GUEST)을 변경한다.
     ResponseChangeAuthorityDto changeMemberAuthority(
             Long requesterId, Long spaceId, Long memberId, RequestChangeAuthorityDto request);
+
+    // MEMBER-06: 스페이스 소유자가 멤버에게 커스텀 역할을 배정하거나(teamRoleId) 해제(null)한다.
+    ResponseAssignTeamRoleDto assignTeamRole(
+            Long requesterId, Long spaceId, Long memberId, RequestAssignTeamRoleDto request);
 }

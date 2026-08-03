@@ -2,11 +2,15 @@ package com.ssafy.backend.member.service.impl;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
+import com.ssafy.backend.member.entity.TeamRole;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.member.repository.TeamRoleRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -39,12 +43,16 @@ class MemberServiceImplTest {
     private static final Long SPACE_ID = 10L;
     private static final Long MEMBER_ID = 100L;
     private static final Long TARGET_USER_ID = 2L;
+    private static final Long TEAM_ROLE_ID = 3L;
 
     @Mock
     private TeamRepository teamRepository;
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private TeamRoleRepository teamRoleRepository;
 
     @InjectMocks
     private MemberServiceImpl memberService;
@@ -64,6 +72,12 @@ class MemberServiceImplTest {
                 .build();
         ReflectionTestUtils.setField(member, "id", memberId);
         return member;
+    }
+
+    private TeamRole teamRoleOf(Long teamRoleId, Long teamId, String roleName) {
+        TeamRole teamRole = TeamRole.builder().teamId(teamId).roleName(roleName).build();
+        ReflectionTestUtils.setField(teamRole, "id", teamRoleId);
+        return teamRole;
     }
 
     @Nested
@@ -267,6 +281,152 @@ class MemberServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.CANNOT_CHANGE_OWNER_AUTHORITY);
+            verify(memberRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-06 멤버 팀 역할 배정/해제")
+    class AssignTeamRole {
+
+        private RequestAssignTeamRoleDto requestOf(Long teamRoleId) {
+            return new RequestAssignTeamRoleDto(teamRoleId);
+        }
+
+        @Test
+        @DisplayName("역할이 없던 멤버에게 배정하면 teamRoleId·roleName이 갱신되고 저장된다")
+        void assignTeamRole_assignsRoleAndReturnsRoleName() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            TeamRole teamRole = teamRoleOf(TEAM_ROLE_ID, SPACE_ID, "프론트엔드");
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.of(teamRole));
+
+            ResponseAssignTeamRoleDto response =
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID));
+
+            assertThat(response.memberId()).isEqualTo(MEMBER_ID);
+            assertThat(response.teamRoleId()).isEqualTo(TEAM_ROLE_ID);
+            assertThat(response.roleName()).isEqualTo("프론트엔드");
+            assertThat(member.getTeamRoleId()).isEqualTo(TEAM_ROLE_ID);
+            verify(memberRepository).save(member);
+        }
+
+        @Test
+        @DisplayName("역할이 있던 멤버를 null로 요청하면 해제되고 teamRoleId·roleName이 null로 응답된다")
+        void assignTeamRole_unassignsRole() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            ReflectionTestUtils.setField(member, "teamRoleId", TEAM_ROLE_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+            ResponseAssignTeamRoleDto response =
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(null));
+
+            assertThat(response.teamRoleId()).isNull();
+            assertThat(response.roleName()).isNull();
+            assertThat(member.getTeamRoleId()).isNull();
+            verify(memberRepository).save(member);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("이미 미배정 상태에서 null로 재요청하면 200으로 응답하되 저장은 호출하지 않는다(멱등)")
+        void assignTeamRole_isIdempotentWhenBothUnassigned() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+            ResponseAssignTeamRoleDto response =
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(null));
+
+            assertThat(response.teamRoleId()).isNull();
+            verify(memberRepository, never()).save(any());
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("이미 같은 역할로 재요청하면 200으로 응답하되 저장은 호출하지 않는다(멱등)")
+        void assignTeamRole_isIdempotentWhenSameRoleRequested() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            ReflectionTestUtils.setField(member, "teamRoleId", TEAM_ROLE_ID);
+            TeamRole teamRole = teamRoleOf(TEAM_ROLE_ID, SPACE_ID, "프론트엔드");
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.of(teamRole));
+
+            ResponseAssignTeamRoleDto response =
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID));
+
+            assertThat(response.teamRoleId()).isEqualTo(TEAM_ROLE_ID);
+            assertThat(response.roleName()).isEqualTo("프론트엔드");
+            verify(memberRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 멤버 조회를 시도하지 않는다")
+        void assignTeamRole_throwsWhenSpaceNotFound() {
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 멤버 조회를 시도하지 않는다")
+        void assignTeamRole_throwsWhenRequesterIsNotOwner() {
+            Long nonOwnerId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    memberService.assignTeamRole(nonOwnerId, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("memberId가 존재하지 않거나 해당 스페이스 소속이 아니면 SPACE_MEMBER_NOT_FOUND 예외가 발생하고 저장하지 않는다")
+        void assignTeamRole_throwsWhenMemberNotFoundOrBelongsToDifferentSpace() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_MEMBER_NOT_FOUND);
+            verify(memberRepository, never()).save(any());
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("해당 스페이스에 속하지 않는 teamRoleId면 TEAM_ROLE_NOT_FOUND 예외가 발생하고 저장하지 않는다")
+        void assignTeamRole_throwsWhenTeamRoleNotFound() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            Member member = memberOf(MEMBER_ID, SPACE_ID, TARGET_USER_ID, MemberAuthority.MEMBER);
+            given(teamRepository.findActiveByIdForUpdate(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+            given(teamRoleRepository.findByIdAndTeamId(TEAM_ROLE_ID, SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.assignTeamRole(OWNER_ID, SPACE_ID, MEMBER_ID, requestOf(TEAM_ROLE_ID)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NOT_FOUND);
             verify(memberRepository, never()).save(any());
         }
     }

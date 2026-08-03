@@ -1,7 +1,9 @@
 package com.ssafy.backend.member.controller;
 
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.service.MemberService;
 import jakarta.validation.Valid;
@@ -42,5 +44,17 @@ public class MemberController {
         ResponseChangeAuthorityDto response =
                 memberService.changeMemberAuthority(Long.parseLong(userId), spaceId, memberId, request);
         return ResponseEntity.ok(ApiResponse.success("멤버 권한이 변경되었습니다.", response));
+    }
+
+    // MEMBER-06: 스페이스 소유자가 멤버에게 커스텀 역할을 배정하거나(teamRoleId) 해제(null)한다.
+    @PatchMapping("/{memberId}/team-role")
+    public ResponseEntity<ApiResponse<ResponseAssignTeamRoleDto>> assignTeamRole(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @PathVariable Long memberId,
+            @RequestBody RequestAssignTeamRoleDto request) {
+        ResponseAssignTeamRoleDto response =
+                memberService.assignTeamRole(Long.parseLong(userId), spaceId, memberId, request);
+        return ResponseEntity.ok(ApiResponse.success("멤버 역할이 배정되었습니다.", response));
     }
 }

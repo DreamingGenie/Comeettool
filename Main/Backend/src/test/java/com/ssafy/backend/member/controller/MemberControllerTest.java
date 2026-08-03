@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.service.MemberService;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,6 +27,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -46,6 +50,7 @@ class MemberControllerTest {
     private static final String USER_ID = "1";
     private static final Long SPACE_ID = 10L;
     private static final Long MEMBER_ID = 100L;
+    private static final Long TEAM_ROLE_ID = 3L;
 
     @Mock
     private MemberService memberService;
@@ -232,6 +237,109 @@ class MemberControllerTest {
                             .content(objectMapper.writeValueAsString(new RequestChangeAuthorityDto("GUEST"))))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("CANNOT_CHANGE_OWNER_AUTHORITY"));
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-06 PATCH /api/v1/spaces/{spaceId}/members/{memberId}/team-role")
+    class AssignTeamRole {
+
+        @Test
+        @DisplayName("정상 배정이면 200 SUCCESS, message='멤버 역할이 배정되었습니다.', data에 teamRoleId·roleName을 반환한다")
+        void assignTeamRole_returns200() throws Exception {
+            given(memberService.assignTeamRole(
+                    eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class)))
+                    .willReturn(new ResponseAssignTeamRoleDto(MEMBER_ID, TEAM_ROLE_ID, "프론트엔드"));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("멤버 역할이 배정되었습니다."))
+                    .andExpect(jsonPath("$.data.memberId").value(MEMBER_ID))
+                    .andExpect(jsonPath("$.data.teamRoleId").value(TEAM_ROLE_ID))
+                    .andExpect(jsonPath("$.data.roleName").value("프론트엔드"));
+
+            verify(memberService).assignTeamRole(
+                    eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class));
+        }
+
+        @Test
+        @DisplayName("teamRoleId 필드 자체를 안 보내면 해제 요청으로 처리되어 data.teamRoleId·roleName이 null로 응답된다")
+        void assignTeamRole_returns200WithNullFieldsWhenTeamRoleIdOmitted() throws Exception {
+            given(memberService.assignTeamRole(
+                    eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class)))
+                    .willReturn(new ResponseAssignTeamRoleDto(MEMBER_ID, null, null));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.memberId").value(MEMBER_ID))
+                    .andExpect(jsonPath("$.data.teamRoleId").doesNotExist())
+                    .andExpect(jsonPath("$.data.roleName").doesNotExist());
+
+            ArgumentCaptor<RequestAssignTeamRoleDto> captor = ArgumentCaptor.forClass(RequestAssignTeamRoleDto.class);
+            verify(memberService).assignTeamRole(eq(1L), eq(SPACE_ID), eq(MEMBER_ID), captor.capture());
+            assertThat(captor.getValue().teamRoleId()).isNull();
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void assignTeamRole_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(memberService).assignTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void assignTeamRole_returns403WhenNotOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY))
+                    .when(memberService).assignTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 다른 스페이스 소속 멤버면 404 SPACE_MEMBER_NOT_FOUND를 반환한다")
+        void assignTeamRole_returns404WhenMemberNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_MEMBER_NOT_FOUND))
+                    .when(memberService).assignTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_MEMBER_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("해당 스페이스에 없는 teamRoleId면 404 TEAM_ROLE_NOT_FOUND를 반환한다")
+        void assignTeamRole_returns404WhenTeamRoleNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.TEAM_ROLE_NOT_FOUND))
+                    .when(memberService).assignTeamRole(
+                            eq(1L), eq(SPACE_ID), eq(MEMBER_ID), any(RequestAssignTeamRoleDto.class));
+
+            mockMvc.perform(patch("/api/v1/spaces/{spaceId}/members/{memberId}/team-role", SPACE_ID, MEMBER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TEAM_ROLE_NOT_FOUND"));
         }
     }
 }
