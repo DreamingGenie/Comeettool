@@ -4,13 +4,14 @@ import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
-import com.ssafy.backend.global.exception.CustomException;
-import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.RequestStartTranscriptionDto;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
 
@@ -65,14 +66,28 @@ public class AiTranscriptionClient {
 
             validateResponse(meetingId, response);
             return response;
-        } catch (RestClientException exception) {
-            log.warn(
-                    "AI 회의 시작 API 호출 실패: meetingId={}",
-                    meetingId,
+        } catch (ResourceAccessException exception) {
+            throw new AiTranscriptionException(
+                    AiTranscriptionFailureType.RETRYABLE,
+                    "AI 회의 시작 API 연결 또는 응답 시간 초과",
                     exception
             );
-            throw new CustomException(
-                    ErrorCode.MEETING_AI_TRANSCRIPTION_START_FAILED
+        } catch (RestClientResponseException exception) {
+            AiTranscriptionFailureType failureType =
+                    isRetryableStatus(exception.getStatusCode())
+                            ? AiTranscriptionFailureType.RETRYABLE
+                            : AiTranscriptionFailureType.NON_RETRYABLE;
+            throw new AiTranscriptionException(
+                    failureType,
+                    "AI 회의 시작 API HTTP 오류: "
+                            + exception.getStatusCode().value(),
+                    exception
+            );
+        } catch (RestClientException exception) {
+            throw new AiTranscriptionException(
+                    AiTranscriptionFailureType.NON_RETRYABLE,
+                    "AI 회의 시작 API 응답 처리 실패",
+                    exception
             );
         }
     }
@@ -92,9 +107,17 @@ public class AiTranscriptionClient {
                     meetingId,
                     response
             );
-            throw new CustomException(
-                    ErrorCode.MEETING_AI_TRANSCRIPTION_START_FAILED
+            throw new AiTranscriptionException(
+                    AiTranscriptionFailureType.NON_RETRYABLE,
+                    "AI 회의 시작 API 응답 검증 실패"
             );
         }
+    }
+
+    private boolean isRetryableStatus(HttpStatusCode statusCode) {
+        int status = statusCode.value();
+        return statusCode.is5xxServerError()
+                || status == 408
+                || status == 429;
     }
 }

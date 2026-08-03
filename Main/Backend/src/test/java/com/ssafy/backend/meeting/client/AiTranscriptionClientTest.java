@@ -13,13 +13,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-import com.ssafy.backend.global.exception.CustomException;
-import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
 
 @DisplayName("AI 회의 시작 Client 테스트")
@@ -91,33 +92,80 @@ class AiTranscriptionClientTest {
         mockServer.verify();
     }
 
-    @Test
-    @DisplayName("AI 서버 오류는 도메인 예외로 변환한다")
-    void startTranscription_throwsExceptionWhenAiServerFails() {
+    @ParameterizedTest(name = "HTTP {0} 응답은 재시도한다")
+    @ValueSource(ints = {408, 429, 500, 503})
+    @DisplayName("일시적인 HTTP 오류는 재시도 가능한 오류로 분류한다")
+    void startTranscription_classifiesTemporaryStatusAsRetryable(
+            int status
+    ) {
         mockServer.expect(requestTo(
                         BASE_URL
                                 + "/internal/v1/meetings/15/transcription/start"
                 ))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+                .andRespond(withStatus(HttpStatus.valueOf(status)));
 
         assertThatThrownBy(() ->
                 aiTranscriptionClient.startTranscription(
                         MEETING_ID,
                         STARTED_AT
                 ))
-                .isInstanceOf(CustomException.class)
-                .extracting(exception ->
-                        ((CustomException) exception).getErrorCode()
-                )
-                .isEqualTo(
-                        ErrorCode.MEETING_AI_TRANSCRIPTION_START_FAILED
-                );
+                .isInstanceOf(AiTranscriptionException.class)
+                .satisfies(exception -> assertThat(
+                        ((AiTranscriptionException) exception).isRetryable()
+                ).isTrue());
+        mockServer.verify();
+    }
+
+    @ParameterizedTest(name = "HTTP {0} 응답은 재시도하지 않는다")
+    @ValueSource(ints = {400, 401, 404})
+    @DisplayName("영구적인 HTTP 오류는 재시도 불가능한 오류로 분류한다")
+    void startTranscription_classifiesPermanentStatusAsNonRetryable(
+            int status
+    ) {
+        mockServer.expect(requestTo(
+                        BASE_URL
+                                + "/internal/v1/meetings/15/transcription/start"
+                ))
+                .andRespond(withStatus(HttpStatus.valueOf(status)));
+
+        assertThatThrownBy(() ->
+                aiTranscriptionClient.startTranscription(
+                        MEETING_ID,
+                        STARTED_AT
+                ))
+                .isInstanceOf(AiTranscriptionException.class)
+                .satisfies(exception -> assertThat(
+                        ((AiTranscriptionException) exception).isRetryable()
+                ).isFalse());
         mockServer.verify();
     }
 
     @Test
-    @DisplayName("AI 응답의 S3 Prefix가 다르면 실패 처리한다")
-    void startTranscription_rejectsInvalidS3Prefix() {
+    @DisplayName("연결 또는 응답 시간 초과는 재시도 가능한 오류로 분류한다")
+    void startTranscription_classifiesTimeoutAsRetryable() {
+        mockServer.expect(requestTo(
+                        BASE_URL
+                                + "/internal/v1/meetings/15/transcription/start"
+                ))
+                .andRespond(request -> {
+                    throw new ResourceAccessException("timeout");
+                });
+
+        assertThatThrownBy(() ->
+                aiTranscriptionClient.startTranscription(
+                        MEETING_ID,
+                        STARTED_AT
+                ))
+                .isInstanceOf(AiTranscriptionException.class)
+                .satisfies(exception -> assertThat(
+                        ((AiTranscriptionException) exception).isRetryable()
+                ).isTrue());
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("AI 응답의 S3 Prefix가 다르면 재시도하지 않는다")
+    void startTranscription_rejectsInvalidS3PrefixWithoutRetry() {
         mockServer.expect(requestTo(
                         BASE_URL
                                 + "/internal/v1/meetings/15/transcription/start"
@@ -139,13 +187,10 @@ class AiTranscriptionClientTest {
                         MEETING_ID,
                         STARTED_AT
                 ))
-                .isInstanceOf(CustomException.class)
-                .extracting(exception ->
-                        ((CustomException) exception).getErrorCode()
-                )
-                .isEqualTo(
-                        ErrorCode.MEETING_AI_TRANSCRIPTION_START_FAILED
-                );
+                .isInstanceOf(AiTranscriptionException.class)
+                .satisfies(exception -> assertThat(
+                        ((AiTranscriptionException) exception).isRetryable()
+                ).isFalse());
         mockServer.verify();
     }
 }
