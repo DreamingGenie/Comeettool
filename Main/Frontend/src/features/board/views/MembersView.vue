@@ -64,9 +64,7 @@
       >
         <div class="person">
           <i class="avatar">{{ member.avatarText }}</i>
-          <span
-            >{{ member.name }}<small>{{ member.identifier }}</small></span
-          >
+          <span>{{ member.name }}</span>
         </div>
 
         <template v-if="activeTab === 'authority'">

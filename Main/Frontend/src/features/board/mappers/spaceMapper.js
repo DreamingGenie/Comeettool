@@ -92,7 +92,6 @@ export const toMemberRowsViewModel = (space) =>
       userId: member.userId ?? null,
       avatarText: initials(name),
       name,
-      identifier: `사용자 #${member.userId}`,
       authority: String(member.authority || 'MEMBER').toUpperCase(),
       authorityLabel: authorityLabel(member.authority),
       teamRoleId: member.teamRoleId ?? null,
