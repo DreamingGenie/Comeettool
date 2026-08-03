@@ -6,8 +6,10 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
 import com.ssafy.backend.member.service.MemberService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +27,7 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +38,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -340,6 +344,96 @@ class MemberControllerTest {
                             .content(objectMapper.writeValueAsString(new RequestAssignTeamRoleDto(TEAM_ROLE_ID))))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("TEAM_ROLE_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-14 POST /api/v1/spaces/{spaceId}/members/team-roles")
+    class CreateTeamRole {
+
+        @Test
+        @DisplayName("정상 생성이면 201 SUCCESS, message='역할이 생성되었습니다.', data에 생성된 역할을 반환한다")
+        void createTeamRole_returns201() throws Exception {
+            OffsetDateTime createdAt = OffsetDateTime.parse("2026-08-03T10:00:00Z");
+            given(memberService.createTeamRole(eq(1L), eq(SPACE_ID), any(RequestCreateTeamRoleDto.class)))
+                    .willReturn(new ResponseTeamRoleDto(TEAM_ROLE_ID, "프론트엔드", "#3B82F6", createdAt));
+
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestCreateTeamRoleDto("프론트엔드", "#3B82F6"))))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("역할이 생성되었습니다."))
+                    .andExpect(jsonPath("$.data.teamRoleId").value(TEAM_ROLE_ID))
+                    .andExpect(jsonPath("$.data.roleName").value("프론트엔드"))
+                    .andExpect(jsonPath("$.data.color").value("#3B82F6"));
+
+            verify(memberService).createTeamRole(eq(1L), eq(SPACE_ID), any(RequestCreateTeamRoleDto.class));
+        }
+
+        @Test
+        @DisplayName("roleName이 없으면 400 VALIDATION_FAILED를 반환한다")
+        void createTeamRole_returns400WhenRoleNameMissing() throws Exception {
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("roleName이 20자를 초과하면 400 VALIDATION_FAILED를 반환한다")
+        void createTeamRole_returns400WhenRoleNameTooLong() throws Exception {
+            String tooLong = "가".repeat(21);
+
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RequestCreateTeamRoleDto(tooLong, null))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void createTeamRole_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(memberService).createTeamRole(eq(1L), eq(SPACE_ID), any(RequestCreateTeamRoleDto.class));
+
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestCreateTeamRoleDto("프론트엔드", "#3B82F6"))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void createTeamRole_returns403WhenNotOwner() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY))
+                    .when(memberService).createTeamRole(eq(1L), eq(SPACE_ID), any(RequestCreateTeamRoleDto.class));
+
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestCreateTeamRoleDto("프론트엔드", "#3B82F6"))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("같은 스페이스에 동일한 역할명이 있으면 409 TEAM_ROLE_NAME_DUPLICATED를 반환한다")
+        void createTeamRole_returns409WhenNameDuplicated() throws Exception {
+            doThrow(new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED))
+                    .when(memberService).createTeamRole(eq(1L), eq(SPACE_ID), any(RequestCreateTeamRoleDto.class));
+
+            mockMvc.perform(post("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new RequestCreateTeamRoleDto("프론트엔드", "#3B82F6"))))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("TEAM_ROLE_NAME_DUPLICATED"));
         }
     }
 }

@@ -4,8 +4,10 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.entity.TeamRole;
@@ -17,11 +19,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -428,6 +433,129 @@ class MemberServiceImplTest {
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.TEAM_ROLE_NOT_FOUND);
             verify(memberRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-14 팀 역할 생성")
+    class CreateTeamRole {
+
+        private static final String ROLE_NAME = "프론트엔드";
+        private static final String COLOR = "#3B82F6";
+
+        private RequestCreateTeamRoleDto requestOf(String roleName, String color) {
+            return new RequestCreateTeamRoleDto(roleName, color);
+        }
+
+        @Test
+        @DisplayName("정상 생성 시 team_id/roleName/color가 반영된 TeamRole을 저장하고 응답으로 반환한다")
+        void createTeamRole_savesTeamRoleAndReturnsResponse() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.existsByTeamIdAndRoleName(SPACE_ID, ROLE_NAME)).willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class))).willAnswer(invocation -> {
+                TeamRole saved = invocation.getArgument(0);
+                ReflectionTestUtils.setField(saved, "id", TEAM_ROLE_ID);
+                ReflectionTestUtils.setField(saved, "createdAt", OffsetDateTime.now());
+                return saved;
+            });
+
+            ResponseTeamRoleDto response =
+                    memberService.createTeamRole(OWNER_ID, SPACE_ID, requestOf(ROLE_NAME, COLOR));
+
+            assertThat(response.teamRoleId()).isEqualTo(TEAM_ROLE_ID);
+            assertThat(response.roleName()).isEqualTo(ROLE_NAME);
+            assertThat(response.color()).isEqualTo(COLOR);
+            assertThat(response.createdAt()).isNotNull();
+
+            ArgumentCaptor<TeamRole> captor = ArgumentCaptor.forClass(TeamRole.class);
+            verify(teamRoleRepository).saveAndFlush(captor.capture());
+            TeamRole saved = captor.getValue();
+            assertThat(saved.getTeamId()).isEqualTo(SPACE_ID);
+            assertThat(saved.getRoleName()).isEqualTo(ROLE_NAME);
+            assertThat(saved.getColor()).isEqualTo(COLOR);
+        }
+
+        @Test
+        @DisplayName("color 없이 roleName만 요청해도 정상 생성되고 color는 null로 저장된다")
+        void createTeamRole_savesWithNullColorWhenOmitted() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.existsByTeamIdAndRoleName(SPACE_ID, ROLE_NAME)).willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class))).willAnswer(invocation -> {
+                TeamRole saved = invocation.getArgument(0);
+                ReflectionTestUtils.setField(saved, "id", TEAM_ROLE_ID);
+                ReflectionTestUtils.setField(saved, "createdAt", OffsetDateTime.now());
+                return saved;
+            });
+
+            ResponseTeamRoleDto response =
+                    memberService.createTeamRole(OWNER_ID, SPACE_ID, requestOf(ROLE_NAME, null));
+
+            assertThat(response.color()).isNull();
+            ArgumentCaptor<TeamRole> captor = ArgumentCaptor.forClass(TeamRole.class);
+            verify(teamRoleRepository).saveAndFlush(captor.capture());
+            assertThat(captor.getValue().getColor()).isNull();
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 저장을 시도하지 않는다")
+        void createTeamRole_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    memberService.createTeamRole(OWNER_ID, SPACE_ID, requestOf(ROLE_NAME, COLOR)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 소유자가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 저장을 시도하지 않는다")
+        void createTeamRole_throwsWhenRequesterIsNotOwner() {
+            Long nonOwnerId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    memberService.createTeamRole(nonOwnerId, SPACE_ID, requestOf(ROLE_NAME, COLOR)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("같은 스페이스에 동일한 역할명이 이미 있으면 TEAM_ROLE_NAME_DUPLICATED 예외가 발생하고 저장하지 않는다")
+        void createTeamRole_throwsWhenNameAlreadyExists() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(teamRoleRepository.existsByTeamIdAndRoleName(SPACE_ID, ROLE_NAME)).willReturn(true);
+
+            assertThatThrownBy(() ->
+                    memberService.createTeamRole(OWNER_ID, SPACE_ID, requestOf(ROLE_NAME, COLOR)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+            verify(teamRoleRepository, never()).saveAndFlush(any(TeamRole.class));
+        }
+
+        @Test
+        @DisplayName("사전 체크는 통과했지만 저장 시 유니크 제약을 위반하면 TEAM_ROLE_NAME_DUPLICATED로 변환된다(동시성 방어)")
+        void createTeamRole_translatesUniqueConstraintViolationToDuplicated() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            // 사전 체크 시점엔 중복이 없었지만(false), 동시 요청이 먼저 커밋되어 DB 유니크 제약에 걸리는 상황을 재현한다.
+            given(teamRoleRepository.existsByTeamIdAndRoleName(SPACE_ID, ROLE_NAME)).willReturn(false);
+            given(teamRoleRepository.saveAndFlush(any(TeamRole.class)))
+                    .willThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+            assertThatThrownBy(() ->
+                    memberService.createTeamRole(OWNER_ID, SPACE_ID, requestOf(ROLE_NAME, COLOR)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
         }
     }
 }

@@ -3,16 +3,20 @@ package com.ssafy.backend.member.controller;
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
 import com.ssafy.backend.member.service.MemberService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,5 +60,16 @@ public class MemberController {
         ResponseAssignTeamRoleDto response =
                 memberService.assignTeamRole(Long.parseLong(userId), spaceId, memberId, request);
         return ResponseEntity.ok(ApiResponse.success("멤버 역할이 배정되었습니다.", response));
+    }
+
+    // MEMBER-14: 스페이스 소유자가 커스텀 팀 역할을 생성한다.
+    @PostMapping("/team-roles")
+    public ResponseEntity<ApiResponse<ResponseTeamRoleDto>> createTeamRole(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @Valid @RequestBody RequestCreateTeamRoleDto request) {
+        ResponseTeamRoleDto response = memberService.createTeamRole(Long.parseLong(userId), spaceId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("역할이 생성되었습니다.", response));
     }
 }

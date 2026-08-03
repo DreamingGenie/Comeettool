@@ -4,8 +4,10 @@ import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.member.dto.RequestAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.RequestChangeAuthorityDto;
+import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.entity.TeamRole;
@@ -15,6 +17,7 @@ import com.ssafy.backend.member.service.MemberService;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -128,5 +131,37 @@ public class MemberServiceImpl implements MemberService {
 
         String roleName = teamRole != null ? teamRole.getRoleName() : null;
         return new ResponseAssignTeamRoleDto(member.getId(), member.getTeamRoleId(), roleName);
+    }
+
+    @Override
+    @Transactional
+    public ResponseTeamRoleDto createTeamRole(Long requesterId, Long spaceId, RequestCreateTeamRoleDto request) {
+        Team team = teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        if (!team.getOwnerId().equals(requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        String roleName = request.roleName();
+        if (teamRoleRepository.existsByTeamIdAndRoleName(spaceId, roleName)) {
+            throw new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+        }
+
+        TeamRole teamRole = TeamRole.builder()
+                .teamId(spaceId)
+                .roleName(roleName)
+                .color(request.color())
+                .build();
+        try {
+            // saveAndFlush로 즉시 INSERT를 실행해, 유니크 제약 위반을 이 트랜잭션 안에서 바로 잡아낸다(초대 생성과 동일 패턴).
+            teamRoleRepository.saveAndFlush(teamRole);
+        } catch (DataIntegrityViolationException e) {
+            // (team_id, role_name) 유니크 제약 위반 — 위 existsBy 체크 이후 동시에 들어온 요청이 먼저 커밋된 경우의 race condition 방어.
+            throw new CustomException(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+        }
+
+        return new ResponseTeamRoleDto(
+                teamRole.getId(), teamRole.getRoleName(), teamRole.getColor(), teamRole.getCreatedAt());
     }
 }
