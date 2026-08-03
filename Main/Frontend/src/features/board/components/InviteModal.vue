@@ -1,9 +1,7 @@
 <template>
   <BaseModal modal-class="invite-modal" @close="$emit('close')">
     <header class="invite-header">
-      <span class="invite-header__icon" aria-hidden="true">
-        <i></i><i></i>
-      </span>
+      <span class="invite-header__icon" aria-hidden="true"> <i></i><i></i> </span>
       <div>
         <small>TEAM INVITATION</small>
         <h2>멤버 초대 및 공유</h2>
@@ -15,7 +13,7 @@
       <div class="invite-section__title">
         <div>
           <h3 id="email-invite-title">이메일로 초대</h3>
-          <p>초대할 멤버의 이메일과 권한을 선택해 주세요.</p>
+          <p>사용자를 검색해 팀 스페이스 초대를 보내세요.</p>
         </div>
       </div>
 
@@ -32,11 +30,7 @@
             @focus="scheduleSearch"
             @input="scheduleSearch"
           />
-          <div
-            v-if="showSearchResults"
-            class="invite-search-results"
-            aria-live="polite"
-          >
+          <div v-if="showSearchResults" class="invite-search-results" aria-live="polite">
             <p v-if="userSearch.loading">사용자를 검색하고 있습니다.</p>
             <p v-else-if="userSearch.error" class="error">{{ userSearch.error }}</p>
             <template v-else-if="visibleSearchResults.length">
@@ -58,13 +52,7 @@
             <p v-else>일치하는 사용자가 없습니다.</p>
           </div>
         </div>
-        <label class="invite-permission">
-          <span>권한</span>
-          <select v-model="permission">
-            <option value="MEMBER">편집 가능</option>
-            <option value="GUEST">보기 전용</option>
-          </select>
-        </label>
+        <p class="invite-default-authority">초대 수락 시 기본 권한은 MEMBER입니다.</p>
         <button class="primary invite-submit" type="submit" :disabled="submitting">
           <span>{{ submitting ? '전송 중' : '초대 발송' }}</span>
           <b aria-hidden="true">→</b>
@@ -82,7 +70,10 @@
       </div>
 
       <div class="invite-list">
-        <article v-for="(member, index) in members" :key="member.id">
+        <article
+          v-for="(member, index) in members"
+          :key="member.memberId || member.userId || member.id"
+        >
           <i class="invite-avatar" :style="{ '--avatar-hue': `${(index * 43 + 222) % 360}` }">
             {{ member.avatarText }}
           </i>
@@ -90,7 +81,9 @@
             <b>{{ member.name }}</b>
             <small>{{ member.email }}</small>
           </span>
-          <em :class="{ owner: member.role === 'OWNER' }">{{ roleLabel(member.role) }}</em>
+          <em :class="{ owner: member.authority === 'OWNER' }">
+            {{ roleLabel(member.authority) }}
+          </em>
         </article>
       </div>
     </section>
@@ -127,49 +120,42 @@ defineEmits(['close'])
 
 const { notify } = useToast()
 const email = ref('')
-const permission = ref('MEMBER')
+const selectedUser = ref(null)
 const submitting = ref(false)
 const copied = ref(false)
 const searchOpen = ref(false)
 const userSearch = userStore.state.search
 const visibleSearchResults = computed(() => {
   const existingUsers = new Set(
-    props.members.flatMap(member => [
-      member.userId,
-      member.id,
-      member.email?.toLowerCase()
-    ])
+    props.members.flatMap((member) => [member.userId, member.id, member.email?.toLowerCase()])
   )
   return userSearch.results.filter(
-    user =>
-      !existingUsers.has(user.userId) &&
-      !existingUsers.has(user.email?.toLowerCase())
+    (user) => !existingUsers.has(user.userId) && !existingUsers.has(user.email?.toLowerCase())
   )
 })
 const showSearchResults = computed(
   () =>
     searchOpen.value &&
     email.value.length >= 2 &&
-    (userSearch.loading ||
-      Boolean(userSearch.error) ||
-      userSearch.query === email.value)
+    (userSearch.loading || Boolean(userSearch.error) || userSearch.query === email.value)
 )
 let copiedTimer
 let searchTimer
 
-const roleLabel = role => (role === 'OWNER' ? 'OWNER' : role === 'GUEST' ? 'GUEST' : 'MEMBER')
+const roleLabel = (role) => (role === 'OWNER' ? 'OWNER' : role === 'GUEST' ? 'GUEST' : 'MEMBER')
 
 async function invite() {
-  if (!email.value || submitting.value) return
+  if (!selectedUser.value?.userId || submitting.value) {
+    notify('검색 결과에서 초대할 사용자를 선택해 주세요.')
+    return
+  }
 
   submitting.value = true
   try {
-    await boardStore.inviteMember(props.teamId, {
-      email: email.value,
-      permission: permission.value
-    })
-    notify(`${email.value} 주소로 초대를 보냈습니다.`)
+    await boardStore.inviteMember(props.teamId, selectedUser.value.userId)
+    notify(`${selectedUser.value.nickname || email.value}님에게 초대를 보냈습니다.`)
     email.value = ''
+    selectedUser.value = null
     searchOpen.value = false
     userStore.clearSearch()
   } catch (error) {
@@ -181,6 +167,7 @@ async function invite() {
 
 function scheduleSearch() {
   window.clearTimeout(searchTimer)
+  selectedUser.value = null
   searchOpen.value = true
 
   if (email.value.length < 2) {
@@ -195,6 +182,7 @@ function scheduleSearch() {
 
 function selectUser(user) {
   email.value = user.email
+  selectedUser.value = user
   searchOpen.value = false
   userStore.clearSearch()
 }
@@ -344,9 +332,22 @@ onBeforeUnmount(() => {
 
 .invite-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px 104px;
+  grid-template-columns: minmax(0, 1fr) 180px 104px;
   gap: 10px;
   align-items: end;
+}
+
+.invite-default-authority {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid #dfe3ec;
+  border-radius: 9px;
+  background: #f8f9fc;
+  color: #687184;
+  font-size: 10px;
 }
 
 .invite-form label {
@@ -512,7 +513,9 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 7px 8px;
   border-radius: 10px;
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .invite-list article:hover {
@@ -594,8 +597,8 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   object-fit: contain;
-  filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%)
-    hue-rotate(211deg) brightness(98%) contrast(88%);
+  filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%) hue-rotate(211deg)
+    brightness(98%) contrast(88%);
 }
 
 .copy-link-button {
@@ -626,13 +629,15 @@ onBeforeUnmount(() => {
   height: 14px;
   object-fit: contain;
   opacity: 0.72;
-  transition: filter 0.18s ease, opacity 0.18s ease;
+  transition:
+    filter 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .copy-link-button:hover img {
   opacity: 1;
-  filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%)
-    hue-rotate(211deg) brightness(98%) contrast(88%);
+  filter: brightness(0) saturate(100%) invert(42%) sepia(79%) saturate(1747%) hue-rotate(211deg)
+    brightness(98%) contrast(88%);
 }
 
 @media (max-width: 620px) {

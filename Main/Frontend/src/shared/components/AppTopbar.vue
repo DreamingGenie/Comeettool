@@ -8,9 +8,11 @@
         :invitations="notification.state.invitations"
         :loading="notification.state.loading"
         :accepting-id="notification.state.acceptingId"
+        :rejecting-id="notification.state.rejectingId"
         :error="notification.state.error"
         @refresh="loadNotifications"
         @accept="acceptInvitation"
+        @reject="rejectInvitation"
       />
       <button class="user-pill" type="button" @click="$router.push('/profile')">
         <img
@@ -20,11 +22,7 @@
           :alt="`${user?.nickname || '사용자'} 프로필`"
           @error="profileImageFailed = true"
         />
-        <i
-          v-else
-          class="user-avatar"
-          :style="{ backgroundColor: user?.userColor || '#5f6fe5' }"
-        >
+        <i v-else class="user-avatar" :style="{ backgroundColor: user?.userColor || '#5f6fe5' }">
           {{ avatarLabel }}
         </i>
         {{ user?.nickname || '' }}
@@ -48,10 +46,7 @@ const profileImageFailed = ref(false)
 const notification = inject(notificationContextKey, null)
 let notificationTimer
 const avatarLabel = computed(
-  () =>
-    props.user?.nickname?.trim().slice(0, 1) ||
-    props.user?.avatarText ||
-    ''
+  () => props.user?.nickname?.trim().slice(0, 1) || props.user?.avatarText || ''
 )
 
 watch(
@@ -72,6 +67,14 @@ async function loadNotifications() {
 async function acceptInvitation(invitationId) {
   try {
     await notification?.accept(invitationId)
+  } catch {
+    // 오류 상태는 알림 패널에서 표시한다.
+  }
+}
+
+async function rejectInvitation(invitationId) {
+  try {
+    await notification?.reject(invitationId)
   } catch {
     // 오류 상태는 알림 패널에서 표시한다.
   }
