@@ -4,6 +4,8 @@ import { boardApi } from '../../features/board/api'
 import { boardMockApi } from '../../features/board/mock/boardMockApi'
 import { documentApi } from '../../features/document/api'
 import { documentMockApi } from '../../features/document/mock/documentMockApi'
+import { notificationApi } from '../../features/notification/api'
+import { notificationMockApi } from '../../features/notification/mock/notificationMockApi'
 import { userApi } from '../../features/user/api'
 import { userMockApi } from '../../features/user/mock/userMockApi'
 
@@ -19,6 +21,7 @@ export const mockMode = {
   board: getMockMode(import.meta.env.VITE_USE_MOCK_BOARD_API),
   document: getMockMode(import.meta.env.VITE_USE_MOCK_DOCUMENT_API),
   meeting: getMockMode(import.meta.env.VITE_USE_MOCK_MEETING_API),
+  notification: getMockMode(import.meta.env.VITE_USE_MOCK_NOTIFICATION_API),
   passwordReset: getMockMode(
     import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API
   ),
@@ -33,6 +36,9 @@ const boardSource = mockMode.board ? boardMockApi : boardApi
 const meetingSource = mockMode.meeting ? boardMockApi : boardApi
 const spaceSource = mockMode.space ? boardMockApi : boardApi
 const documentSource = mockMode.document ? documentMockApi : documentApi
+const notificationSource = mockMode.notification
+  ? notificationMockApi
+  : notificationApi
 const userSource = mockMode.user ? userMockApi : userApi
 
 export const dataSource = {
@@ -48,6 +54,8 @@ export const dataSource = {
     getTeam: spaceSource.getTeam,
     getMembers: spaceSource.getMembers,
     createWorkspace: spaceSource.createWorkspace,
+    updateTeam: spaceSource.updateTeam,
+    reorderWorkspaces: spaceSource.reorderWorkspaces,
     leaveWorkspace: spaceSource.leaveWorkspace,
     deleteWorkspace: spaceSource.deleteWorkspace,
     transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership,
@@ -60,6 +68,7 @@ export const dataSource = {
     createMeeting: meetingSource.createMeeting
   },
   document: documentSource,
+  notification: notificationSource,
   user: {
     ...userSource,
     searchUsers: mockMode.userSearch

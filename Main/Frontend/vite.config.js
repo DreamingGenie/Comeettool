@@ -8,11 +8,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://70.12.247.162:8080',
         changeOrigin: true
       },
       '/uploads': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://70.12.247.162:8080',
         changeOrigin: true
       },
       '/collaboration': {

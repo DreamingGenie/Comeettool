@@ -43,6 +43,19 @@ export const toDashboardViewModel = spaces => ({
     : []
 })
 
+export const toUpdatedWorkspaceViewModel = space => {
+  const workspace = toWorkspaceViewModel(space)
+  return {
+    id: workspace.id,
+    badge: workspace.badge,
+    name: workspace.name,
+    description: workspace.description,
+    color: workspace.color,
+    profileImage: workspace.profileImage,
+    ownerId: workspace.ownerId
+  }
+}
+
 export const toTeamViewModel = (space, currentUserId) => {
   const members = Array.isArray(space?.members) ? space.members : []
   const currentMember = members.find(
@@ -94,3 +107,13 @@ export const toCreateSpaceRequest = workspace => ({
   teamColor: workspace?.color || '',
   teamProfileImage: workspace?.profileImage || null
 })
+
+export const toUpdateSpaceRequest = workspace =>
+  Object.fromEntries(
+    Object.entries({
+      teamName: workspace?.name,
+      teamDescription: workspace?.description,
+      teamColor: workspace?.color,
+      teamProfileImage: workspace?.profileImage
+    }).filter(([, value]) => value !== undefined)
+  )
