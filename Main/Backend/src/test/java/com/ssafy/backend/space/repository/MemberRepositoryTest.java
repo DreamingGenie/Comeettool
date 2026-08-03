@@ -167,6 +167,23 @@ class MemberRepositoryTest {
         }
 
         @Test
+        @DisplayName("SPACE-03 회귀: search=null이어도 예외 없이 전체 목록을 반환한다(lower(bytea) 42883 방지)")
+        void nullSearchReturnsAllWithoutError() {
+            User user = persistUser();
+            String tag = token();
+            Team a = persistTeam(user.getId(), false, "가-" + tag);
+            Team b = persistTeam(user.getId(), false, "나-" + tag);
+            persistMember(user.getId(), a.getId(), MemberAuthority.OWNER);
+            persistMember(user.getId(), b.getId(), MemberAuthority.MEMBER);
+
+            // cast(:search as string) 없이는 이 호출이 PostgreSQL lower(bytea) 오류로 500이 된다.
+            List<Object[]> rows = memberRepository.findActiveTeamsWithMyAuthority(user.getId(), null);
+
+            assertThat(rows).extracting(row -> ((Team) row[0]).getId())
+                    .contains(a.getId(), b.getId());
+        }
+
+        @Test
         @DisplayName("soft delete된 스페이스는 결과에서 제외된다")
         void excludesSoftDeletedTeam() {
             User user = persistUser();
