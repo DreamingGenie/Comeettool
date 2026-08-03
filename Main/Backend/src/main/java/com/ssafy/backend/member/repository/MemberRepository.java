@@ -46,6 +46,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
      * SPACE-02/03: 로그인 사용자가 참여 중인(members 조인) 삭제되지 않은 스페이스와 그 안에서의 내 권한. Team↔Member 간 연관 매핑이 없어 teamId로 조인하며, 결과는 [Team,
      * MemberAuthority] 배열이다.
      * SPACE-03 검색: search가 null이면 전체, 값이 있으면 스페이스 이름 부분 일치(대소문자 무시)로 필터한다.
+     * ※ :search를 cast(... as string)으로 명시 캐스팅한다 — 미지정 시 null 파라미터를 PostgreSQL이
+     *   bytea로 추론해 lower(bytea) 오류(42883)로 목록 조회 전체가 500이 된다.
      */
     @Query("""
             select t, m.authority
@@ -53,7 +55,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             where m.teamId = t.id
               and m.userId = :userId
               and t.isDeleted = false
-              and (:search is null or lower(t.name) like lower(concat('%', :search, '%')))
+              and (:search is null or lower(t.name) like lower(concat('%', cast(:search as string), '%')))
             order by t.createdAt desc
             """)
     List<Object[]> findActiveTeamsWithMyAuthority(@Param("userId") Long userId, @Param("search") String search);
