@@ -8,6 +8,7 @@ import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleSummaryDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.entity.TeamRole;
@@ -27,6 +28,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -556,6 +558,89 @@ class MemberServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.TEAM_ROLE_NAME_DUPLICATED);
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-15 팀 역할 목록 조회")
+    class GetTeamRoles {
+
+        @Test
+        @DisplayName("정상 조회 시 스페이스의 팀 역할 목록을 필드 매핑해 반환한다")
+        void getTeamRoles_returnsMappedList() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            TeamRole role1 = TeamRole.builder().teamId(SPACE_ID).roleName("프론트엔드").color("#3B82F6").build();
+            ReflectionTestUtils.setField(role1, "id", 3L);
+            TeamRole role2 = TeamRole.builder().teamId(SPACE_ID).roleName("백엔드").color("#10B981").build();
+            ReflectionTestUtils.setField(role2, "id", 4L);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(teamRoleRepository.findAllByTeamIdOrderByCreatedAtAsc(SPACE_ID)).willReturn(List.of(role1, role2));
+
+            List<ResponseTeamRoleSummaryDto> result = memberService.getTeamRoles(OWNER_ID, SPACE_ID);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).teamRoleId()).isEqualTo(3L);
+            assertThat(result.get(0).roleName()).isEqualTo("프론트엔드");
+            assertThat(result.get(0).color()).isEqualTo("#3B82F6");
+            assertThat(result.get(1).teamRoleId()).isEqualTo(4L);
+            assertThat(result.get(1).roleName()).isEqualTo("백엔드");
+            assertThat(result.get(1).color()).isEqualTo("#10B981");
+        }
+
+        @Test
+        @DisplayName("역할이 하나도 없으면 빈 리스트를 반환한다(예외 아님)")
+        void getTeamRoles_returnsEmptyListWhenNoneExist() {
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(teamRoleRepository.findAllByTeamIdOrderByCreatedAtAsc(SPACE_ID)).willReturn(List.of());
+
+            List<ResponseTeamRoleSummaryDto> result = memberService.getTeamRoles(OWNER_ID, SPACE_ID);
+
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 멤버·역할 조회를 시도하지 않는다")
+        void getTeamRoles_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> memberService.getTeamRoles(OWNER_ID, SPACE_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 역할 조회를 시도하지 않는다")
+        void getTeamRoles_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() -> memberService.getTeamRoles(nonMemberId, SPACE_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(teamRoleRepository);
+        }
+
+        @Test
+        @DisplayName("OWNER가 아닌 멤버(GUEST 등)도 정상 조회된다(오너 제한 없음)")
+        void getTeamRoles_allowsNonOwnerMemberRequester() {
+            // 요청자(TARGET_USER_ID)는 team.ownerId(OWNER_ID)가 아니지만, 스페이스 멤버이기만 하면 조회를 허용한다.
+            Team team = teamWithOwner(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, TARGET_USER_ID)).willReturn(true);
+            given(teamRoleRepository.findAllByTeamIdOrderByCreatedAtAsc(SPACE_ID)).willReturn(List.of());
+
+            List<ResponseTeamRoleSummaryDto> result = memberService.getTeamRoles(TARGET_USER_ID, SPACE_ID);
+
+            assertThat(result).isEmpty();
         }
     }
 }

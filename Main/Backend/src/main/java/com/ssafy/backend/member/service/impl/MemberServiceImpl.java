@@ -8,6 +8,7 @@ import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleSummaryDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.entity.TeamRole;
@@ -21,6 +22,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 
 @Service
@@ -163,5 +165,22 @@ public class MemberServiceImpl implements MemberService {
 
         return new ResponseTeamRoleDto(
                 teamRole.getId(), teamRole.getRoleName(), teamRole.getColor(), teamRole.getCreatedAt());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResponseTeamRoleSummaryDto> getTeamRoles(Long requesterId, Long spaceId) {
+        teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        // 조회는 OWNER 제한 없이 스페이스 멤버 전체(OWNER/MEMBER/GUEST)에게 허용 — SPACE-05 상세조회와 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(spaceId, requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        return teamRoleRepository.findAllByTeamIdOrderByCreatedAtAsc(spaceId).stream()
+                .map(teamRole -> new ResponseTeamRoleSummaryDto(
+                        teamRole.getId(), teamRole.getRoleName(), teamRole.getColor()))
+                .toList();
     }
 }

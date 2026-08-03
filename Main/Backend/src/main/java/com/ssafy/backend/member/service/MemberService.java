@@ -6,6 +6,9 @@ import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleSummaryDto;
+
+import java.util.List;
 
 public interface MemberService {
 
@@ -22,4 +25,7 @@ public interface MemberService {
 
     // MEMBER-14: 스페이스 소유자가 커스텀 팀 역할을 생성한다.
     ResponseTeamRoleDto createTeamRole(Long requesterId, Long spaceId, RequestCreateTeamRoleDto request);
+
+    // MEMBER-15: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 팀 역할 목록을 조회한다.
+    List<ResponseTeamRoleSummaryDto> getTeamRoles(Long requesterId, Long spaceId);
 }

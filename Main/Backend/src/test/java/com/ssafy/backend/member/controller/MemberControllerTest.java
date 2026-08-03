@@ -10,6 +10,7 @@ import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleSummaryDto;
 import com.ssafy.backend.member.service.MemberService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -434,6 +436,65 @@ class MemberControllerTest {
                                     new RequestCreateTeamRoleDto("프론트엔드", "#3B82F6"))))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("TEAM_ROLE_NAME_DUPLICATED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("MEMBER-15 GET /api/v1/spaces/{spaceId}/members/team-roles")
+    class GetTeamRoles {
+
+        @Test
+        @DisplayName("정상 조회면 200 SUCCESS, message='역할 목록 조회 성공', data에 역할 배열을 반환한다")
+        void getTeamRoles_returns200() throws Exception {
+            given(memberService.getTeamRoles(1L, SPACE_ID)).willReturn(List.of(
+                    new ResponseTeamRoleSummaryDto(3L, "프론트엔드", "#3B82F6"),
+                    new ResponseTeamRoleSummaryDto(4L, "백엔드", "#10B981")));
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("역할 목록 조회 성공"))
+                    .andExpect(jsonPath("$.data[0].teamRoleId").value(3))
+                    .andExpect(jsonPath("$.data[0].roleName").value("프론트엔드"))
+                    .andExpect(jsonPath("$.data[0].color").value("#3B82F6"))
+                    .andExpect(jsonPath("$.data[1].teamRoleId").value(4))
+                    .andExpect(jsonPath("$.data[1].roleName").value("백엔드"));
+
+            verify(memberService).getTeamRoles(1L, SPACE_ID);
+        }
+
+        @Test
+        @DisplayName("역할이 없으면 200과 빈 배열(null 아님)을 반환한다")
+        void getTeamRoles_returns200WithEmptyArray() throws Exception {
+            given(memberService.getTeamRoles(1L, SPACE_ID)).willReturn(List.of());
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data").isEmpty());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void getTeamRoles_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(memberService).getTeamRoles(1L, SPACE_ID);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void getTeamRoles_returns403WhenNotMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED))
+                    .when(memberService).getTeamRoles(1L, SPACE_ID);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/members/team-roles", SPACE_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
         }
     }
 }

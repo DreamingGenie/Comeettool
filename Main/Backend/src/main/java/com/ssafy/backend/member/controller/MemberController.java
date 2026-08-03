@@ -7,6 +7,7 @@ import com.ssafy.backend.member.dto.RequestCreateTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseAssignTeamRoleDto;
 import com.ssafy.backend.member.dto.ResponseChangeAuthorityDto;
 import com.ssafy.backend.member.dto.ResponseTeamRoleDto;
+import com.ssafy.backend.member.dto.ResponseTeamRoleSummaryDto;
 import com.ssafy.backend.member.service.MemberService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,12 +15,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/spaces/{spaceId}/members")
@@ -71,5 +75,14 @@ public class MemberController {
         ResponseTeamRoleDto response = memberService.createTeamRole(Long.parseLong(userId), spaceId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("역할이 생성되었습니다.", response));
+    }
+
+    // MEMBER-15: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 팀 역할 목록을 조회한다.
+    @GetMapping("/team-roles")
+    public ResponseEntity<ApiResponse<List<ResponseTeamRoleSummaryDto>>> getTeamRoles(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId) {
+        List<ResponseTeamRoleSummaryDto> response = memberService.getTeamRoles(Long.parseLong(userId), spaceId);
+        return ResponseEntity.ok(ApiResponse.success("역할 목록 조회 성공", response));
     }
 }
