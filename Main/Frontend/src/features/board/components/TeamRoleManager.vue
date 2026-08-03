@@ -2,24 +2,24 @@
   <section class="team-role-manager">
     <header>
       <div>
-        <span class="eyebrow">CUSTOM TEAM ROLES</span>
-        <h2>팀 역할 관리</h2>
-        <p>멤버에게 배정할 역할의 이름과 색상을 관리합니다.</p>
+        <span class="eyebrow">CUSTOM JOBS</span>
+        <h2>직무 추가 및 관리</h2>
+        <p>Backend, Frontend처럼 멤버에게 배정할 직무를 관리합니다.</p>
       </div>
       <form v-if="canManage" @submit.prevent="createRole">
-        <input v-model.trim="newRoleName" maxlength="20" placeholder="새 역할 이름" required />
-        <input v-model="newRoleColor" type="color" aria-label="새 역할 색상" />
+        <input v-model.trim="newRoleName" maxlength="20" placeholder="새 직무 이름" required />
+        <input v-model="newRoleColor" type="color" aria-label="새 직무 색상" />
         <button class="primary" type="submit" :disabled="pending">추가</button>
       </form>
     </header>
 
-    <div v-if="!roles.length" class="role-empty">등록된 팀 역할이 없습니다.</div>
+    <div v-if="!roles.length" class="role-empty">저장된 직무가 없습니다.</div>
     <div v-else class="role-list">
       <article v-for="role in roles" :key="role.teamRoleId">
         <span class="role-color" :style="{ backgroundColor: role.color || '#7a88d8' }"></span>
         <template v-if="editingId === role.teamRoleId">
-          <input v-model.trim="editName" maxlength="20" aria-label="역할 이름" />
-          <input v-model="editColor" type="color" aria-label="역할 색상" />
+          <input v-model.trim="editName" maxlength="20" aria-label="직무 이름" />
+          <input v-model="editColor" type="color" aria-label="직무 색상" />
           <button type="button" :disabled="pending" @click="saveRole(role)">저장</button>
           <button type="button" :disabled="pending" @click="cancelEdit">취소</button>
         </template>
@@ -63,7 +63,7 @@ async function run(action, successMessage) {
     await action()
     notify(successMessage)
   } catch (error) {
-    notify(error?.message || '팀 역할 요청을 처리하지 못했습니다.')
+    notify(error?.message || '직무 요청을 처리하지 못했습니다.')
     throw error
   } finally {
     pending.value = false
@@ -79,7 +79,7 @@ async function createRole() {
           roleName: newRoleName.value,
           color: newRoleColor.value
         }),
-      '팀 역할을 추가했습니다.'
+      '직무를 추가했습니다.'
     )
     newRoleName.value = ''
   } catch {
@@ -106,7 +106,7 @@ async function saveRole(role) {
           roleName: editName.value,
           color: editColor.value
         }),
-      '팀 역할을 수정했습니다.'
+      '직무를 수정했습니다.'
     )
     cancelEdit()
   } catch {
@@ -115,11 +115,11 @@ async function saveRole(role) {
 }
 
 async function removeRole(role) {
-  if (pending.value || !window.confirm(`${role.roleName} 역할을 삭제할까요?`)) return
+  if (pending.value || !window.confirm(`${role.roleName} 직무를 삭제할까요?`)) return
   try {
     await run(
       () => boardStore.deleteTeamRole(props.teamId, role.teamRoleId),
-      '팀 역할을 삭제했습니다.'
+      '직무를 삭제했습니다.'
     )
   } catch {
     // 오류 토스트는 run에서 표시한다.

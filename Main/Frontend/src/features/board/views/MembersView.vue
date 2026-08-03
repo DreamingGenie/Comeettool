@@ -8,10 +8,24 @@
       </div>
       <button class="primary" type="button" @click="showInvite = true">＋ 멤버 초대</button>
     </header>
+    <nav class="member-tabs" aria-label="멤버 관리 메뉴">
+      <button
+        type="button"
+        :class="{ active: activeTab === 'authority' }"
+        @click="activeTab = 'authority'"
+      >
+        멤버 역할
+      </button>
+      <button type="button" :class="{ active: activeTab === 'job' }" @click="activeTab = 'job'">
+        직무
+      </button>
+    </nav>
+
     <section class="member-table">
       <div class="table-tools">
         <span>
           <button
+            v-if="activeTab === 'authority'"
             type="button"
             @click="
               authorityFilter =
@@ -28,61 +42,91 @@
         </span>
         <input v-model.trim="query" placeholder="⌕　 멤버를 찾아보세요..." />
       </div>
-      <div class="member-row head">
-        <span>이름</span><span>권한</span><span>팀 역할</span><span>상태</span><span>관리</span>
+
+      <div v-if="activeTab === 'authority'" class="member-row authority-row head">
+        <span>이름</span><span>멤버 역할</span><span>상태</span><span>관리</span>
       </div>
-      <article v-for="member in visibleMembers" :key="member.memberId" class="member-row">
+      <div v-else class="member-row job-row head">
+        <span>이름</span><span>직무</span><span>상태</span>
+      </div>
+
+      <article
+        v-for="member in visibleMembers"
+        :key="`${activeTab}-${member.memberId}`"
+        class="member-row"
+        :class="activeTab === 'authority' ? 'authority-row' : 'job-row'"
+      >
         <div class="person">
           <i class="avatar">{{ member.avatarText }}</i>
           <span
             >{{ member.name }}<small>{{ member.identifier }}</small></span
           >
         </div>
-        <select
-          v-if="canManage && member.authority !== 'OWNER'"
-          class="member-select"
-          :value="member.authority"
-          :disabled="pendingMemberId === member.memberId"
-          @change="changeAuthority(member, $event.target.value)"
-        >
-          <option value="MEMBER">Member</option>
-          <option value="GUEST">Guest</option>
-        </select>
-        <span v-else class="role">{{ member.authorityLabel }}</span>
-        <select
-          class="member-select"
-          :value="member.teamRoleId ?? ''"
-          :disabled="!canManage || pendingMemberId === member.memberId"
-          @change="changeTeamRole(member, $event.target.value)"
-        >
-          <option value="">역할 없음</option>
-          <option
-            v-for="role in boardState.teamRoles"
-            :key="role.teamRoleId"
-            :value="role.teamRoleId"
+
+        <template v-if="activeTab === 'authority'">
+          <select
+            v-model="authorityDrafts[member.memberId]"
+            class="member-select"
+            :disabled="!canManage || member.authority === 'OWNER' || savingAuthority"
           >
-            {{ role.roleName }}
-          </option>
-        </select>
+            <option value="OWNER">Owner</option>
+            <option value="MEMBER">Member</option>
+            <option value="GUEST">Guest</option>
+          </select>
+        </template>
+
+        <template v-else>
+          <select
+            v-model="jobDrafts[member.memberId]"
+            class="member-select"
+            :disabled="!canManage || savingJobs || !boardState.teamRoles.length"
+          >
+            <option v-if="!boardState.teamRoles.length" value="" disabled>
+              저장된 직무가 없습니다.
+            </option>
+            <option v-else value="">직무 없음</option>
+            <option
+              v-for="role in boardState.teamRoles"
+              :key="role.teamRoleId"
+              :value="String(role.teamRoleId)"
+            >
+              {{ role.roleName }}
+            </option>
+          </select>
+        </template>
+
         <span
           class="status"
           :class="{ away: member.status === 'Away', off: member.status === 'Offline' }"
         >
           {{ member.status }}
         </span>
-        <button
-          v-if="canManage && member.authority !== 'OWNER'"
-          class="member-kick"
-          type="button"
-          :disabled="pendingMemberId === member.memberId"
-          @click="kickMember(member)"
-        >
-          강퇴
-        </button>
-        <span v-else class="member-owner-label">{{
-          member.authority === 'OWNER' ? '소유자' : '-'
-        }}</span>
+
+        <span v-if="activeTab === 'authority'" class="member-actions">
+          <template v-if="canManage && member.authority !== 'OWNER'">
+            <button
+              class="member-delegate"
+              type="button"
+              :disabled="pendingMemberId === member.memberId || savingAuthority"
+              @click="prepareDelegation(member)"
+            >
+              위임
+            </button>
+            <button
+              class="member-kick"
+              type="button"
+              :disabled="pendingMemberId === member.memberId || savingAuthority"
+              @click="kickMember(member)"
+            >
+              추방
+            </button>
+          </template>
+          <span v-else class="member-owner-label">{{
+            member.authority === 'OWNER' ? '현재 소유자' : '-'
+          }}</span>
+        </span>
       </article>
+
       <footer class="table-foot member-pagination">
         <span>
           Showing {{ rangeStart }}–{{ rangeEnd }} of {{ filteredMembers.length }} members
@@ -107,8 +151,39 @@
           </button>
         </nav>
       </footer>
+
+      <div v-if="canManage" class="member-save-bar">
+        <span v-if="activeTab === 'authority'">
+          Owner 변경은 선택한 멤버에게 소유권을 위임합니다.
+        </span>
+        <span v-else>멤버별 직무 선택을 확인한 뒤 저장해 주세요.</span>
+        <button
+          v-if="activeTab === 'authority'"
+          class="primary"
+          type="button"
+          :disabled="savingAuthority || !authorityChangeCount"
+          @click="saveAuthorityChanges"
+        >
+          {{ savingAuthority ? '저장 중' : `역할 변경 저장 (${authorityChangeCount})` }}
+        </button>
+        <button
+          v-else
+          class="primary"
+          type="button"
+          :disabled="savingJobs || !jobChangeCount"
+          @click="saveJobChanges"
+        >
+          {{ savingJobs ? '저장 중' : `직무 변경 저장 (${jobChangeCount})` }}
+        </button>
+      </div>
     </section>
-    <TeamRoleManager :team-id="teamId" :roles="boardState.teamRoles" :can-manage="canManage" />
+
+    <TeamRoleManager
+      v-if="activeTab === 'job'"
+      :team-id="teamId"
+      :roles="boardState.teamRoles"
+      :can-manage="canManage"
+    />
   </TeamLayout>
   <InviteModal
     v-if="showInvite"
@@ -131,11 +206,16 @@ const { boardState, teamId, reloadBoard } = useBoardPage({
   resources: ['workspaces', 'team', 'members', 'teamRoles']
 })
 const { notify } = useToast()
+const activeTab = ref('authority')
 const query = ref('')
 const reverse = ref(false)
 const authorityFilter = ref('ALL')
 const showInvite = ref(false)
 const pendingMemberId = ref('')
+const savingAuthority = ref(false)
+const savingJobs = ref(false)
+const authorityDrafts = ref({})
+const jobDrafts = ref({})
 const currentPage = ref(1)
 const pageSize = 4
 const filteredMembers = computed(() => {
@@ -149,6 +229,16 @@ const filteredMembers = computed(() => {
   return reverse.value ? [...rows].reverse() : rows
 })
 const canManage = computed(() => String(boardState.team.role || '').toUpperCase() === 'OWNER')
+const authorityChanges = computed(() =>
+  boardState.members.filter((member) => authorityDrafts.value[member.memberId] !== member.authority)
+)
+const jobChanges = computed(() =>
+  boardState.members.filter(
+    (member) => String(jobDrafts.value[member.memberId] ?? '') !== String(member.teamRoleId ?? '')
+  )
+)
+const authorityChangeCount = computed(() => authorityChanges.value.length)
+const jobChangeCount = computed(() => jobChanges.value.length)
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredMembers.value.length / pageSize)))
 const visibleMembers = computed(() => {
   const offset = (currentPage.value - 1) * pageSize
@@ -161,9 +251,22 @@ const rangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize, filteredMembers.value.length)
 )
 
-watch([query, reverse, authorityFilter], () => {
+watch([query, reverse, authorityFilter, activeTab], () => {
   currentPage.value = 1
 })
+
+watch(
+  () => boardState.members.map((member) => [member.memberId, member.authority, member.teamRoleId]),
+  () => {
+    authorityDrafts.value = Object.fromEntries(
+      boardState.members.map((member) => [member.memberId, member.authority])
+    )
+    jobDrafts.value = Object.fromEntries(
+      boardState.members.map((member) => [member.memberId, String(member.teamRoleId ?? '')])
+    )
+  },
+  { immediate: true }
+)
 
 async function runMemberAction(member, action, successMessage) {
   pendingMemberId.value = member.memberId
@@ -177,23 +280,69 @@ async function runMemberAction(member, action, successMessage) {
   }
 }
 
-function changeAuthority(member, authority) {
-  if (authority === member.authority) return
-  runMemberAction(
-    member,
-    () => boardStore.changeMemberAuthority(teamId.value, member.memberId, authority),
-    `${member.name}님의 권한을 변경했습니다.`
-  )
+function prepareDelegation(member) {
+  authorityDrafts.value[member.memberId] = 'OWNER'
+  notify(`${member.name}님을 Owner로 선택했습니다. 저장하면 소유권이 위임됩니다.`)
 }
 
-function changeTeamRole(member, value) {
-  const teamRoleId = value ? Number(value) : null
-  if (teamRoleId === member.teamRoleId) return
-  runMemberAction(
+async function saveAuthorityChanges() {
+  if (!canManage.value || savingAuthority.value || !authorityChanges.value.length) return
+  const changes = authorityChanges.value
+    .map((member) => ({
+      member,
+      authority: authorityDrafts.value[member.memberId]
+    }))
+    .sort((left, right) => Number(left.authority === 'OWNER') - Number(right.authority === 'OWNER'))
+  const ownerChanges = changes.filter(({ authority }) => authority === 'OWNER')
+
+  if (ownerChanges.length > 1) {
+    notify('Owner로 위임할 멤버는 한 명만 선택해 주세요.')
+    return
+  }
+  if (
+    ownerChanges.length &&
+    !window.confirm(`${ownerChanges[0].member.name}님에게 팀 소유권을 위임할까요?`)
+  ) {
+    return
+  }
+
+  savingAuthority.value = true
+  try {
+    for (const { member, authority } of changes) {
+      if (authority === 'OWNER') {
+        await boardStore.transferWorkspaceOwnership(teamId.value, member.userId)
+      } else {
+        await boardStore.changeMemberAuthority(teamId.value, member.memberId, authority)
+      }
+    }
+    await Promise.all([boardStore.loadTeam(teamId.value), boardStore.loadMembers(teamId.value)])
+    notify('멤버 역할 변경사항을 저장했습니다.')
+  } catch (error) {
+    notify(error?.message || '멤버 역할 변경사항을 저장하지 못했습니다.')
+  } finally {
+    savingAuthority.value = false
+  }
+}
+
+async function saveJobChanges() {
+  if (!canManage.value || savingJobs.value || !jobChanges.value.length) return
+  const changes = jobChanges.value.map((member) => ({
     member,
-    () => boardStore.assignTeamRole(teamId.value, member.memberId, teamRoleId),
-    `${member.name}님의 팀 역할을 변경했습니다.`
-  )
+    teamRoleId: jobDrafts.value[member.memberId] ? Number(jobDrafts.value[member.memberId]) : null
+  }))
+
+  savingJobs.value = true
+  try {
+    for (const { member, teamRoleId } of changes) {
+      await boardStore.assignTeamRole(teamId.value, member.memberId, teamRoleId)
+    }
+    await boardStore.loadMembers(teamId.value)
+    notify('멤버 직무 변경사항을 저장했습니다.')
+  } catch (error) {
+    notify(error?.message || '멤버 직무 변경사항을 저장하지 못했습니다.')
+  } finally {
+    savingJobs.value = false
+  }
 }
 
 function kickMember(member) {
@@ -211,8 +360,40 @@ watch(totalPages, (pages) => {
 </script>
 
 <style scoped>
-.member-row {
-  grid-template-columns: minmax(190px, 2fr) minmax(105px, 0.85fr) minmax(125px, 1fr) 0.7fr 70px;
+.member-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 12px;
+  padding: 5px;
+  border-radius: 11px;
+  background: #e9ecf4;
+}
+
+.member-tabs button {
+  min-width: 128px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #697287;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.member-tabs button.active {
+  background: #fff;
+  color: var(--blue);
+  box-shadow: 0 3px 10px #27365714;
+}
+
+.member-row.authority-row {
+  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) 0.7fr minmax(150px, 1fr);
+  gap: 12px;
+  padding: 0 28px;
+}
+
+.member-row.job-row {
+  grid-template-columns: minmax(220px, 2fr) minmax(200px, 1.35fr) 0.7fr;
   gap: 12px;
   padding: 0 28px;
 }
@@ -241,6 +422,30 @@ watch(totalPages, (pages) => {
   color: #c14455;
   font-size: 10px;
   font-weight: 700;
+}
+
+.member-delegate {
+  min-height: 30px;
+  border: 1px solid #cbd4f3;
+  border-radius: 7px;
+  background: #f4f6ff;
+  color: #536bdd;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.member-delegate:hover:not(:disabled) {
+  background: #e9edff;
+}
+
+.member-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.member-actions button {
+  min-width: 52px;
 }
 
 .member-kick:hover:not(:disabled) {
@@ -299,6 +504,25 @@ watch(totalPages, (pages) => {
   color: #697287;
   text-align: center;
   font-size: 11px;
+}
+
+.member-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 14px 24px;
+  border-top: 1px solid #e2e5ed;
+  background: #f8f9fc;
+}
+
+.member-save-bar span {
+  color: #747d90;
+  font-size: 10px;
+}
+
+.member-save-bar button {
+  min-width: 150px;
 }
 
 @media (max-width: 900px) {
