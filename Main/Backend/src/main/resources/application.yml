@@ -45,10 +45,10 @@ ai:
   internal-token: ${AI_INTERNAL_TOKEN:local-ai-internal-token}
   connect-timeout: ${AI_CONNECT_TIMEOUT:3s}
   read-timeout: ${AI_READ_TIMEOUT:5s}
-  transcription-start:
-    max-attempts: ${AI_TRANSCRIPTION_START_MAX_ATTEMPTS:3}
-    initial-retry-delay: ${AI_TRANSCRIPTION_START_INITIAL_RETRY_DELAY:1s}
-    max-retry-delay: ${AI_TRANSCRIPTION_START_MAX_RETRY_DELAY:5s}
+  transcription:
+    max-attempts: ${AI_TRANSCRIPTION_MAX_ATTEMPTS:${AI_TRANSCRIPTION_START_MAX_ATTEMPTS:3}}
+    initial-retry-delay: ${AI_TRANSCRIPTION_INITIAL_RETRY_DELAY:${AI_TRANSCRIPTION_START_INITIAL_RETRY_DELAY:1s}}
+    max-retry-delay: ${AI_TRANSCRIPTION_MAX_RETRY_DELAY:${AI_TRANSCRIPTION_START_MAX_RETRY_DELAY:5s}}
 
 livekit:
   url: ${LIVEKIT_URL:ws://localhost:7880}

@@ -29,15 +29,18 @@ import org.springframework.scheduling.TaskScheduler;
 import com.ssafy.backend.meeting.client.AiTranscriptionClient;
 import com.ssafy.backend.meeting.client.AiTranscriptionException;
 import com.ssafy.backend.meeting.client.AiTranscriptionFailureType;
+import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("회의 STT 폴링 시작 Processor 테스트")
-class MeetingTranscriptionStartProcessorTest {
+@DisplayName("회의 STT 시작·종료 Processor 테스트")
+class MeetingTranscriptionProcessorTest {
 
     private static final Long MEETING_ID = 15L;
     private static final String STARTED_AT =
             "2026-08-03T15:25:17.64601+09:00";
+    private static final String ENDED_AT =
+            "2026-08-03T16:25:17.64601+09:00";
 
     @Mock
     private AiTranscriptionClient aiTranscriptionClient;
@@ -51,11 +54,11 @@ class MeetingTranscriptionStartProcessorTest {
     private final Deque<Runnable> executorTasks = new ArrayDeque<>();
     private final Deque<Runnable> retryTasks = new ArrayDeque<>();
 
-    private MeetingTranscriptionStartProcessor processor;
+    private MeetingTranscriptionProcessor processor;
 
     @BeforeEach
     void setUp() {
-        processor = new MeetingTranscriptionStartProcessor(
+        processor = new MeetingTranscriptionProcessor(
                 aiTranscriptionClient,
                 transcriptionTaskExecutor,
                 transcriptionRetryScheduler,
@@ -66,13 +69,13 @@ class MeetingTranscriptionStartProcessorTest {
     }
 
     @Test
-    @DisplayName("최초 AI 호출 작업을 전용 Executor에 제출한다")
+    @DisplayName("회의 시작 작업을 전용 Executor에 제출한다")
     void startTranscription_submitsFirstAttemptToExecutor() {
         captureExecutorTasks();
         given(aiTranscriptionClient.startTranscription(
                 MEETING_ID,
                 STARTED_AT
-        )).willReturn(successResponse());
+        )).willReturn(startSuccessResponse());
 
         processor.startTranscription(MEETING_ID, STARTED_AT);
 
@@ -89,18 +92,41 @@ class MeetingTranscriptionStartProcessorTest {
     }
 
     @Test
-    @DisplayName("재시도 가능한 오류는 Scheduler에 다음 시도를 예약한다")
-    void startTranscription_schedulesRetryForRetryableFailure() {
+    @DisplayName("회의 종료 작업을 전용 Executor에 제출한다")
+    void endTranscription_submitsFirstAttemptToExecutor() {
+        captureExecutorTasks();
+        given(aiTranscriptionClient.endTranscription(
+                MEETING_ID,
+                ENDED_AT
+        )).willReturn(endSuccessResponse());
+
+        processor.endTranscription(MEETING_ID, ENDED_AT);
+
+        verify(transcriptionTaskExecutor).execute(any(Runnable.class));
+        verifyNoInteractions(aiTranscriptionClient);
+
+        runNextExecutorTask();
+
+        verify(aiTranscriptionClient).endTranscription(
+                MEETING_ID,
+                ENDED_AT
+        );
+        assertThat(retryTasks).isEmpty();
+    }
+
+    @Test
+    @DisplayName("종료 요청의 재시도 가능한 오류는 Scheduler에 다음 시도를 예약한다")
+    void endTranscription_schedulesRetryForRetryableFailure() {
         captureExecutorTasks();
         captureRetryTasks();
-        given(aiTranscriptionClient.startTranscription(
+        given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
-                STARTED_AT
+                ENDED_AT
         ))
                 .willThrow(retryableException())
-                .willReturn(successResponse());
+                .willReturn(endSuccessResponse());
 
-        processor.startTranscription(MEETING_ID, STARTED_AT);
+        processor.endTranscription(MEETING_ID, ENDED_AT);
         runNextExecutorTask();
 
         verify(transcriptionRetryScheduler).schedule(
@@ -113,22 +139,22 @@ class MeetingTranscriptionStartProcessorTest {
         runNextRetryTask();
         runNextExecutorTask();
 
-        verify(aiTranscriptionClient, times(2)).startTranscription(
+        verify(aiTranscriptionClient, times(2)).endTranscription(
                 MEETING_ID,
-                STARTED_AT
+                ENDED_AT
         );
     }
 
     @Test
-    @DisplayName("재시도 불가능한 오류는 추가 시도를 예약하지 않는다")
-    void startTranscription_doesNotRetryNonRetryableFailure() {
+    @DisplayName("종료 요청의 재시도 불가능한 오류는 추가 시도를 예약하지 않는다")
+    void endTranscription_doesNotRetryNonRetryableFailure() {
         captureExecutorTasks();
-        given(aiTranscriptionClient.startTranscription(
+        given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
-                STARTED_AT
+                ENDED_AT
         )).willThrow(nonRetryableException());
 
-        processor.startTranscription(MEETING_ID, STARTED_AT);
+        processor.endTranscription(MEETING_ID, ENDED_AT);
         runNextExecutorTask();
 
         verify(
@@ -139,25 +165,25 @@ class MeetingTranscriptionStartProcessorTest {
     }
 
     @Test
-    @DisplayName("최대 시도 횟수 이후에는 추가 재시도를 예약하지 않는다")
-    void startTranscription_stopsAfterMaximumAttempts() {
+    @DisplayName("종료 요청은 최대 시도 횟수 이후 추가 재시도를 예약하지 않는다")
+    void endTranscription_stopsAfterMaximumAttempts() {
         captureExecutorTasks();
         captureRetryTasks();
-        given(aiTranscriptionClient.startTranscription(
+        given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
-                STARTED_AT
+                ENDED_AT
         )).willThrow(retryableException());
 
-        processor.startTranscription(MEETING_ID, STARTED_AT);
+        processor.endTranscription(MEETING_ID, ENDED_AT);
         runNextExecutorTask();
         runNextRetryTask();
         runNextExecutorTask();
         runNextRetryTask();
         runNextExecutorTask();
 
-        verify(aiTranscriptionClient, times(3)).startTranscription(
+        verify(aiTranscriptionClient, times(3)).endTranscription(
                 MEETING_ID,
-                STARTED_AT
+                ENDED_AT
         );
         verify(transcriptionRetryScheduler, times(2)).schedule(
                 any(Runnable.class),
@@ -168,14 +194,14 @@ class MeetingTranscriptionStartProcessorTest {
     }
 
     @Test
-    @DisplayName("Executor가 작업을 거부해도 요청 스레드에서 AI를 호출하지 않는다")
-    void startTranscription_doesNotCallAiWhenExecutorRejectsTask() {
+    @DisplayName("Executor가 종료 작업을 거부해도 요청 스레드에서 AI를 호출하지 않는다")
+    void endTranscription_doesNotCallAiWhenExecutorRejectsTask() {
         doThrow(new TaskRejectedException("executor saturated"))
                 .when(transcriptionTaskExecutor)
                 .execute(any(Runnable.class));
 
         assertThatCode(() ->
-                processor.startTranscription(MEETING_ID, STARTED_AT)
+                processor.endTranscription(MEETING_ID, ENDED_AT)
         ).doesNotThrowAnyException();
 
         verifyNoInteractions(aiTranscriptionClient);
@@ -210,12 +236,20 @@ class MeetingTranscriptionStartProcessorTest {
         retryTasks.removeFirst().run();
     }
 
-    private ResponseStartTranscriptionDto successResponse() {
+    private ResponseStartTranscriptionDto startSuccessResponse() {
         return new ResponseStartTranscriptionDto(
                 "SUCCESS",
                 "회의 시작",
                 MEETING_ID,
                 "conferences/15/"
+        );
+    }
+
+    private ResponseEndTranscriptionDto endSuccessResponse() {
+        return new ResponseEndTranscriptionDto(
+                "SUCCESS",
+                "회의 종료",
+                MEETING_ID
         );
     }
 

@@ -13,13 +13,14 @@ import org.springframework.stereotype.Component;
 import com.ssafy.backend.meeting.client.AiTranscriptionClient;
 import com.ssafy.backend.meeting.client.AiTranscriptionException;
 import com.ssafy.backend.meeting.config.MeetingTranscriptionTaskConfig;
+import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
-public class MeetingTranscriptionStartProcessor {
+public class MeetingTranscriptionProcessor {
 
     private final AiTranscriptionClient aiTranscriptionClient;
     private final TaskExecutor transcriptionTaskExecutor;
@@ -28,7 +29,7 @@ public class MeetingTranscriptionStartProcessor {
     private final Duration initialRetryDelay;
     private final Duration maxRetryDelay;
 
-    public MeetingTranscriptionStartProcessor(
+    public MeetingTranscriptionProcessor(
             AiTranscriptionClient aiTranscriptionClient,
             @Qualifier(
                     MeetingTranscriptionTaskConfig.TRANSCRIPTION_TASK_EXECUTOR
@@ -38,11 +39,11 @@ public class MeetingTranscriptionStartProcessor {
                     MeetingTranscriptionTaskConfig.TRANSCRIPTION_RETRY_SCHEDULER
             )
             TaskScheduler transcriptionRetryScheduler,
-            @Value("${ai.transcription-start.max-attempts:3}")
+            @Value("${ai.transcription.max-attempts:3}")
             int maxAttempts,
-            @Value("${ai.transcription-start.initial-retry-delay:1s}")
+            @Value("${ai.transcription.initial-retry-delay:1s}")
             Duration initialRetryDelay,
-            @Value("${ai.transcription-start.max-retry-delay:5s}")
+            @Value("${ai.transcription.max-retry-delay:5s}")
             Duration maxRetryDelay
     ) {
         this.aiTranscriptionClient = aiTranscriptionClient;
@@ -54,22 +55,42 @@ public class MeetingTranscriptionStartProcessor {
     }
 
     public void startTranscription(Long meetingId, String startedAt) {
-        submitAttempt(meetingId, startedAt, 1);
+        submitAttempt(
+                TranscriptionOperation.START,
+                meetingId,
+                startedAt,
+                1
+        );
+    }
+
+    public void endTranscription(Long meetingId, String endedAt) {
+        submitAttempt(
+                TranscriptionOperation.END,
+                meetingId,
+                endedAt,
+                1
+        );
     }
 
     private void submitAttempt(
+            TranscriptionOperation operation,
             Long meetingId,
-            String startedAt,
+            String occurredAt,
             int attempt
     ) {
         try {
             transcriptionTaskExecutor.execute(
-                    () -> executeAttempt(meetingId, startedAt, attempt)
+                    () -> executeAttempt(
+                            operation,
+                            meetingId,
+                            occurredAt,
+                            attempt
+                    )
             );
         } catch (TaskRejectedException exception) {
             log.error(
-                    "AI 회의 STT 시작 작업 등록 실패: "
-                            + "meetingId={}, attempt={}",
+                    "AI 회의 STT {} 작업 등록 실패: meetingId={}, attempt={}",
+                    operation.description,
                     meetingId,
                     attempt,
                     exception
@@ -78,35 +99,51 @@ public class MeetingTranscriptionStartProcessor {
     }
 
     private void executeAttempt(
+            TranscriptionOperation operation,
             Long meetingId,
-            String startedAt,
+            String occurredAt,
             int attempt
     ) {
         try {
-            ResponseStartTranscriptionDto response =
-                    aiTranscriptionClient.startTranscription(
-                            meetingId,
-                            startedAt
-                    );
+            if (operation == TranscriptionOperation.START) {
+                ResponseStartTranscriptionDto response =
+                        aiTranscriptionClient.startTranscription(
+                                meetingId,
+                                occurredAt
+                        );
+                log.info(
+                        "AI 회의 STT 폴링 시작 완료: meetingId={}, "
+                                + "s3Prefix={}, attempt={}",
+                        response.meetingRoomId(),
+                        response.s3Prefix(),
+                        attempt
+                );
+                return;
+            }
 
+            ResponseEndTranscriptionDto response =
+                    aiTranscriptionClient.endTranscription(
+                            meetingId,
+                            occurredAt
+                    );
             log.info(
-                    "AI 회의 STT 폴링 시작 완료: meetingId={}, "
-                            + "s3Prefix={}, attempt={}",
+                    "AI 회의 STT 폴링 종료 요청 완료: meetingId={}, attempt={}",
                     response.meetingRoomId(),
-                    response.s3Prefix(),
                     attempt
             );
         } catch (AiTranscriptionException exception) {
             handleFailure(
+                    operation,
                     meetingId,
-                    startedAt,
+                    occurredAt,
                     attempt,
                     exception
             );
         } catch (RuntimeException exception) {
             log.error(
-                    "AI 회의 STT 시작 중 예상하지 못한 오류: "
+                    "AI 회의 STT {} 중 예상하지 못한 오류: "
                             + "meetingId={}, attempt={}",
+                    operation.description,
                     meetingId,
                     attempt,
                     exception
@@ -115,15 +152,17 @@ public class MeetingTranscriptionStartProcessor {
     }
 
     private void handleFailure(
+            TranscriptionOperation operation,
             Long meetingId,
-            String startedAt,
+            String occurredAt,
             int attempt,
             AiTranscriptionException exception
     ) {
         if (!exception.isRetryable()) {
             log.error(
-                    "AI 회의 STT 시작 재시도 불가 오류: "
+                    "AI 회의 STT {} 재시도 불가 오류: "
                             + "meetingId={}, attempt={}, failureType={}",
+                    operation.description,
                     meetingId,
                     attempt,
                     exception.getFailureType(),
@@ -134,8 +173,8 @@ public class MeetingTranscriptionStartProcessor {
 
         if (attempt >= maxAttempts) {
             log.error(
-                    "AI 회의 STT 시작 최종 실패: "
-                            + "meetingId={}, attempts={}",
+                    "AI 회의 STT {} 최종 실패: meetingId={}, attempts={}",
+                    operation.description,
                     meetingId,
                     maxAttempts,
                     exception
@@ -143,12 +182,13 @@ public class MeetingTranscriptionStartProcessor {
             return;
         }
 
-        scheduleRetry(meetingId, startedAt, attempt);
+        scheduleRetry(operation, meetingId, occurredAt, attempt);
     }
 
     private void scheduleRetry(
+            TranscriptionOperation operation,
             Long meetingId,
-            String startedAt,
+            String occurredAt,
             int failedAttempt
     ) {
         Duration retryDelay = calculateRetryDelay(failedAttempt);
@@ -158,23 +198,26 @@ public class MeetingTranscriptionStartProcessor {
         try {
             transcriptionRetryScheduler.schedule(
                     () -> submitAttempt(
+                            operation,
                             meetingId,
-                            startedAt,
+                            occurredAt,
                             nextAttempt
                     ),
                     retryAt
             );
             log.warn(
-                    "AI 회의 STT 시작 재시도 예약: "
+                    "AI 회의 STT {} 재시도 예약: "
                             + "meetingId={}, nextAttempt={}, retryDelayMs={}",
+                    operation.description,
                     meetingId,
                     nextAttempt,
                     retryDelay.toMillis()
             );
         } catch (TaskRejectedException exception) {
             log.error(
-                    "AI 회의 STT 시작 재시도 예약 실패: "
+                    "AI 회의 STT {} 재시도 예약 실패: "
                             + "meetingId={}, nextAttempt={}",
+                    operation.description,
                     meetingId,
                     nextAttempt,
                     exception
@@ -190,5 +233,16 @@ public class MeetingTranscriptionStartProcessor {
             return maxRetryDelay;
         }
         return calculatedDelay;
+    }
+
+    private enum TranscriptionOperation {
+        START("시작"),
+        END("종료");
+
+        private final String description;
+
+        TranscriptionOperation(String description) {
+            this.description = description;
+        }
     }
 }

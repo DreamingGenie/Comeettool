@@ -25,6 +25,7 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.event.MeetingTranscriptionEndedEvent;
 import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
@@ -335,6 +336,13 @@ public class MeetingServiceImpl implements MeetingService {
         OffsetDateTime endedAt = OffsetDateTime.now();
         meetingRoom.endMeeting(endedAt);
         participantRepository.leaveAllByMeetingRoomId(meetingRoom.getId());
+
+        applicationEventPublisher.publishEvent(
+                new MeetingTranscriptionEndedEvent(
+                        meetingRoom.getId(),
+                        endedAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                )
+        );
     }
 
     /**
