@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +21,7 @@ import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
@@ -151,6 +153,26 @@ public class MeetingController {
     }
 
     /**
+     * MEET-08: 호스트가 지정한 참여자를 회의에서 강퇴한다.
+     */
+    @DeleteMapping("/meetings/{meetingId}/participants/{participantId}")
+    public ResponseEntity<ApiResponse<ResponseLeaveMeetingDto>> kickParticipant(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @PathVariable Long participantId
+    ) {
+        ResponseLeaveMeetingDto response = meetingService.kickParticipant(
+                Long.parseLong(userId),
+                meetingId,
+                participantId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("참여자를 강퇴했습니다.", response)
+        );
+    }
+
+    /**
      * MEET-09: 호스트가 회의에 초대할 수 있는 팀 멤버를 조회한다.
      */
     @GetMapping("/meetings/{meetingId}/invite-candidates")
@@ -176,5 +198,24 @@ public class MeetingController {
         }
 
         return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
+
+    /**
+     * MEET-10: 호스트가 회의와 같은 팀의 사용자를 초대한다.
+     */
+    @PostMapping("/meetings/{meetingId}/invitations/users/{inviteeUserId}")
+    public ResponseEntity<ApiResponse<ResponseMeetingInvitationDto>> inviteMember(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @PathVariable Long inviteeUserId
+    ) {
+        ResponseMeetingInvitationDto response = meetingService.inviteMember(
+                Long.parseLong(userId),
+                meetingId,
+                inviteeUserId
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("회의 멤버 초대 성공", response));
     }
 }

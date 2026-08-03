@@ -51,6 +51,8 @@ public enum ErrorCode {
             "이미 해당 회의의 호스트입니다."),
     MEETING_HOST_CANNOT_LEAVE(HttpStatus.CONFLICT, "MEETING_HOST_CANNOT_LEAVE",
             "호스트는 권한을 양도하거나 회의를 종료해야 합니다."),
+    MEETING_HOST_CANNOT_BE_KICKED(HttpStatus.CONFLICT, "MEETING_HOST_CANNOT_BE_KICKED",
+            "회의 호스트는 강퇴할 수 없습니다."),
     MEETING_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "MEETING_CREATE_FORBIDDEN",
             "게스트는 회의를 생성할 수 없습니다."),
     MEETING_ROOM_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "MEETING_ROOM_LIMIT_EXCEEDED",
@@ -63,7 +65,9 @@ public enum ErrorCode {
             HttpStatus.UNAUTHORIZED,
             "MEETING_LIVEKIT_WEBHOOK_UNAUTHORIZED",
             "유효하지 않은 LiveKit 웹훅 요청입니다."
-    ),
+    ),    MEETING_ALREADY_INVITED(HttpStatus.CONFLICT, "MEETING_ALREADY_INVITED",
+            "이미 회의에 초대된 멤버입니다."),
+
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "해당 문서에 접근할 권한이 없습니다."),
     DOCUMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "DOCUMENT_CREATE_FORBIDDEN", "문서를 생성할 권한이 없습니다."),

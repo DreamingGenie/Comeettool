@@ -1,13 +1,12 @@
 package com.ssafy.backend.meeting.repository;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +24,7 @@ import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.user.entity.User;
 
 /**
- * MEET-02·05·09 Repository 통합 테스트.
+ * MEET-02·05·09·10 Repository 통합 테스트.
  * memberId 기반 Participant 조회, 회의별 현재 접속자 집계,
  * 같은 스페이스의 삭제되지 않은 회의 필터와 초대 후보 검색을
  * 실제 PostgreSQL에서 검증한다.
@@ -297,6 +296,33 @@ class MeetingRepositoryTest {
         );
 
         assertThat(rows).isEmpty();
+    }
+
+    @Test
+    @DisplayName("회의와 멤버 ID로 기존 초대 여부를 확인한다")
+    void existsByMeetingRoomIdAndMemberId_detectsExistingInvitation() {
+        User user = persistUser();
+        Team team = persistTeam(user.getId());
+        Member member = persistMember(user.getId(), team.getId());
+        MeetingRoom meeting =
+                persistMeeting(team.getId(), user.getId(), "초대 회의", false);
+
+        boolean beforeInvitation =
+                participantRepository.existsByMeetingRoomIdAndMemberId(
+                        meeting.getId(),
+                        member.getId()
+                );
+
+        persistParticipant(meeting.getId(), member.getId(), false);
+
+        boolean afterInvitation =
+                participantRepository.existsByMeetingRoomIdAndMemberId(
+                        meeting.getId(),
+                        member.getId()
+                );
+
+        assertThat(beforeInvitation).isFalse();
+        assertThat(afterInvitation).isTrue();
     }
 
     private String token() {

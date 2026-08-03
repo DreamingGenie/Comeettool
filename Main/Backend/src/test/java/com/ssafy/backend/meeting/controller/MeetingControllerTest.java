@@ -1,15 +1,5 @@
 package com.ssafy.backend.meeting.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.verify;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -18,14 +8,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.verify;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +38,7 @@ import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -46,7 +47,7 @@ import com.ssafy.backend.meeting.service.MeetingService;
 
 /**
  * 회의 컨트롤러 단위 테스트.
- * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·04·05·06·07·09 매핑과 공통 응답 형식을 검증한다.
+ * 실제 DB·시큐리티 필터 없이 MEET-01·02·03·04·05·06·07·08·09·10 매핑과 공통 응답 형식을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 API 테스트")
@@ -297,6 +298,61 @@ class MeetingControllerTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code")
                         .value("MEETING_LIVEKIT_DISCONNECT_FAILED"));
+    }
+
+    @Test
+    @DisplayName("호스트가 참여자를 강퇴하면 isKick=true를 반환한다")
+    void kickParticipant_returns200WithKickResult() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willReturn(new ResponseLeaveMeetingDto(true));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("참여자를 강퇴했습니다."))
+                .andExpect(jsonPath("$.data.isKick").value(true));
+
+        verify(meetingService).kickParticipant(1L, MEETING_ID, participantId);
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자가 강퇴하면 403을 반환한다")
+    void kickParticipant_returns403WhenRequesterIsNotHost() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_REQUIRED));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("회의 호스트 자신을 강퇴하면 409를 반환한다")
+    void kickParticipant_returns409WhenTargetIsHost() throws Exception {
+        long participantId = 30L;
+        given(meetingService.kickParticipant(1L, MEETING_ID, participantId))
+                .willThrow(new CustomException(
+                        ErrorCode.MEETING_HOST_CANNOT_BE_KICKED
+                ));
+
+        mockMvc.perform(delete(
+                        "/api/v1/meetings/{meetingId}/participants/{participantId}",
+                        MEETING_ID,
+                        participantId
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code")
+                        .value("MEETING_HOST_CANNOT_BE_KICKED"));
     }
 
     @Test
@@ -562,5 +618,98 @@ class MeetingControllerTest {
                 ))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("회의 초대에 성공하면 201과 생성된 Participant 정보를 반환한다")
+    void inviteMember_returns201WithInvitation() throws Exception {
+        ResponseMeetingInvitationDto response =
+                new ResponseMeetingInvitationDto(
+                        40L,
+                        MEETING_ID,
+                        20L,
+                        2L,
+                        "BE",
+                        false
+                );
+        given(meetingService.inviteMember(1L, MEETING_ID, 2L))
+                .willReturn(response);
+
+        mockMvc.perform(post(
+                        "/api/v1/meetings/{meetingId}/invitations/users/{inviteeUserId}",
+                        MEETING_ID,
+                        2L
+                ))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("회의 멤버 초대 성공"))
+                .andExpect(jsonPath("$.data.participantId").value(40))
+                .andExpect(jsonPath("$.data.meetingRoomId").value(100))
+                .andExpect(jsonPath("$.data.memberId").value(20))
+                .andExpect(jsonPath("$.data.userId").value(2))
+                .andExpect(jsonPath("$.data.participantRole").value("BE"))
+                .andExpect(jsonPath("$.data.isInMeeting").value(false));
+
+        verify(meetingService).inviteMember(1L, MEETING_ID, 2L);
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자가 회의 초대를 요청하면 403을 반환한다")
+    void inviteMember_returns403ForNonHost() throws Exception {
+        given(meetingService.inviteMember(1L, MEETING_ID, 2L))
+                .willThrow(new CustomException(ErrorCode.MEETING_HOST_REQUIRED));
+
+        mockMvc.perform(post(
+                        "/api/v1/meetings/{meetingId}/invitations/users/{inviteeUserId}",
+                        MEETING_ID,
+                        2L
+                ))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEETING_HOST_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("회의 초대 시 회의가 없으면 404를 반환한다")
+    void inviteMember_returns404WhenMeetingIsMissing() throws Exception {
+        given(meetingService.inviteMember(1L, MEETING_ID, 2L))
+                .willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        mockMvc.perform(post(
+                        "/api/v1/meetings/{meetingId}/invitations/users/{inviteeUserId}",
+                        MEETING_ID,
+                        2L
+                ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("회의 상위 팀의 멤버가 아니면 초대 요청에 404를 반환한다")
+    void inviteMember_returns404WhenInviteeIsOutsideMeetingTeam() throws Exception {
+        given(meetingService.inviteMember(1L, MEETING_ID, 2L))
+                .willThrow(new CustomException(ErrorCode.SPACE_MEMBER_NOT_FOUND));
+
+        mockMvc.perform(post(
+                        "/api/v1/meetings/{meetingId}/invitations/users/{inviteeUserId}",
+                        MEETING_ID,
+                        2L
+                ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SPACE_MEMBER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("이미 초대된 멤버를 다시 초대하면 409를 반환한다")
+    void inviteMember_returns409WhenMemberIsAlreadyInvited() throws Exception {
+        given(meetingService.inviteMember(1L, MEETING_ID, 2L))
+                .willThrow(new CustomException(ErrorCode.MEETING_ALREADY_INVITED));
+
+        mockMvc.perform(post(
+                        "/api/v1/meetings/{meetingId}/invitations/users/{inviteeUserId}",
+                        MEETING_ID,
+                        2L
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEETING_ALREADY_INVITED"));
     }
 }

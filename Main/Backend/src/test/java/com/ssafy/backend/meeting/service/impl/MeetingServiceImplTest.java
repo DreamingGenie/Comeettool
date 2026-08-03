@@ -1,26 +1,25 @@
 package com.ssafy.backend.meeting.service.impl;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -32,6 +31,7 @@ import com.ssafy.backend.meeting.dto.ResponseCreateMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseJoinMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseLeaveMeetingDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingHostDto;
+import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
@@ -45,18 +45,18 @@ import com.ssafy.backend.meeting.livekit.LiveKitTokenProvider;
 import com.ssafy.backend.meeting.mapper.MeetingMapper;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
-import com.ssafy.backend.user.entity.User;
-import com.ssafy.backend.user.repository.UserRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
+import com.ssafy.backend.user.entity.User;
+import com.ssafy.backend.user.repository.UserRepository;
 
 /**
  * 회의 서비스 단위 테스트.
  * 저장소와 LiveKit 토큰 발급기를 Mock으로 분리하고
- * MEET-01·02·03·04·05·06·07·09의 정상 흐름과 접근 제한을 검증한다.
+ * MEET-01·02·03·04·05·06·07·08·09·10의 정상 흐름과 접근 제한을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 서비스 테스트")
@@ -804,6 +804,222 @@ class MeetingServiceImplTest {
     }
 
     @Test
+    @DisplayName("호스트가 참여자를 강퇴하면 LiveKit 연결과 Participant 권한을 제거한다")
+    void kickParticipant_disconnectsAndDeletesParticipant() {
+        Participant participant = createParticipantWithId(
+                NEXT_HOST_PARTICIPANT_ID,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+        Member participantMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                NEXT_HOST_PARTICIPANT_ID,
+                MEETING_ID
+        )).willReturn(Optional.of(participant));
+        given(memberRepository.findById(NEXT_HOST_MEMBER_ID))
+                .willReturn(Optional.of(participantMember));
+
+        ResponseLeaveMeetingDto response = meetingService.kickParticipant(
+                CURRENT_HOST_USER_ID,
+                MEETING_ID,
+                NEXT_HOST_PARTICIPANT_ID
+        );
+
+        assertThat(response.isKick()).isTrue();
+        verify(liveKitParticipantManager).disconnectParticipant(
+                MEETING_ID,
+                NEXT_HOST_PARTICIPANT_ID
+        );
+        verify(participantRepository).delete(participant);
+    }
+
+    @Test
+    @DisplayName("활성 회의가 없으면 참여자를 강퇴할 수 없다")
+    void kickParticipant_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(
+                participantRepository,
+                memberRepository,
+                liveKitParticipantManager
+        );
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자는 참여자를 강퇴할 수 없다")
+    void kickParticipant_rejectsNonHostRequester() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        NEXT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_HOST_REQUIRED
+        );
+        verifyNoInteractions(
+                participantRepository,
+                memberRepository,
+                liveKitParticipantManager
+        );
+    }
+
+    @Test
+    @DisplayName("다른 회의이거나 존재하지 않는 Participant는 강퇴할 수 없다")
+    void kickParticipant_rejectsMissingTargetParticipant() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                NEXT_HOST_PARTICIPANT_ID,
+                MEETING_ID
+        )).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_PARTICIPANT_NOT_FOUND
+        );
+        verifyNoInteractions(memberRepository, liveKitParticipantManager);
+        verify(participantRepository, never()).delete(any(Participant.class));
+    }
+
+    @Test
+    @DisplayName("회의 호스트 자신은 강퇴할 수 없다")
+    void kickParticipant_rejectsCurrentHostTarget() {
+        Participant hostParticipant = createParticipantWithId(
+                NEXT_HOST_PARTICIPANT_ID,
+                CURRENT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+        Member hostMember = createMemberWithId(
+                CURRENT_HOST_MEMBER_ID,
+                CURRENT_HOST_USER_ID,
+                TEAM_ID,
+                "호스트"
+        );
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                NEXT_HOST_PARTICIPANT_ID,
+                MEETING_ID
+        )).willReturn(Optional.of(hostParticipant));
+        given(memberRepository.findById(CURRENT_HOST_MEMBER_ID))
+                .willReturn(Optional.of(hostMember));
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_HOST_CANNOT_BE_KICKED
+        );
+        verifyNoInteractions(liveKitParticipantManager);
+        verify(participantRepository, never()).delete(any(Participant.class));
+    }
+
+    @Test
+    @DisplayName("회의 상위 팀과 다른 Member의 Participant는 강퇴할 수 없다")
+    void kickParticipant_rejectsTargetOutsideMeetingTeam() {
+        long otherTeamId = 999L;
+        Participant participant = createParticipantWithId(
+                NEXT_HOST_PARTICIPANT_ID,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+        Member otherTeamMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                otherTeamId,
+                "다른 팀 참여자"
+        );
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                NEXT_HOST_PARTICIPANT_ID,
+                MEETING_ID
+        )).willReturn(Optional.of(participant));
+        given(memberRepository.findById(NEXT_HOST_MEMBER_ID))
+                .willReturn(Optional.of(otherTeamMember));
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_PARTICIPANT_NOT_FOUND
+        );
+        verifyNoInteractions(liveKitParticipantManager);
+        verify(participantRepository, never()).delete(any(Participant.class));
+    }
+
+    @Test
+    @DisplayName("LiveKit 연결 종료가 실패하면 Participant를 삭제하지 않는다")
+    void kickParticipant_keepsParticipantWhenLiveKitDisconnectFails() {
+        Participant participant = createParticipantWithId(
+                NEXT_HOST_PARTICIPANT_ID,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                true
+        );
+        Member participantMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "참여자"
+        );
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(createSavedMeetingRoom()));
+        given(participantRepository.findByIdAndMeetingRoomId(
+                NEXT_HOST_PARTICIPANT_ID,
+                MEETING_ID
+        )).willReturn(Optional.of(participant));
+        given(memberRepository.findById(NEXT_HOST_MEMBER_ID))
+                .willReturn(Optional.of(participantMember));
+        willThrow(new CustomException(
+                ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
+        )).given(liveKitParticipantManager).disconnectParticipant(
+                MEETING_ID,
+                NEXT_HOST_PARTICIPANT_ID
+        );
+
+        assertErrorCode(
+                () -> meetingService.kickParticipant(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_PARTICIPANT_ID
+                ),
+                ErrorCode.MEETING_LIVEKIT_DISCONNECT_FAILED
+        );
+        verify(participantRepository, never()).delete(any(Participant.class));
+    }
+
+    @Test
     @DisplayName("호스트가 회의를 종료하면 LiveKit 방과 모든 참여자 상태를 정리한다")
     void endMeeting_endsLiveKitRoomAndSoftDeletesMeeting() {
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
@@ -1211,6 +1427,279 @@ class MeetingServiceImplTest {
                 ErrorCode.MEETING_HOST_REQUIRED
         );
         verifyNoInteractions(memberRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("호스트는 같은 팀의 활성 사용자를 미접속 Participant로 초대한다")
+    void inviteMember_createsDisconnectedParticipant() {
+        Long participantId = 40L;
+        Member inviteeMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "초대 대상"
+        );
+        User inviteeUser = createUserWithId(NEXT_HOST_USER_ID, null);
+        Participant savedParticipant = createParticipantWithId(
+                participantId,
+                NEXT_HOST_MEMBER_ID,
+                "BE",
+                false
+        );
+        ResponseMeetingInvitationDto expectedResponse =
+                new ResponseMeetingInvitationDto(
+                        participantId,
+                        MEETING_ID,
+                        NEXT_HOST_MEMBER_ID,
+                        NEXT_HOST_USER_ID,
+                        "BE",
+                        false
+                );
+
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeMember));
+        given(userRepository.findById(NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeUser));
+        given(participantRepository.existsByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                NEXT_HOST_MEMBER_ID
+        )).willReturn(false);
+        given(memberRepository.findTeamRoleNameByMemberId(NEXT_HOST_MEMBER_ID))
+                .willReturn(Optional.of("BE"));
+        given(participantRepository.save(any(Participant.class)))
+                .willReturn(savedParticipant);
+        given(meetingMapper.toInvitationResponse(savedParticipant, inviteeMember))
+                .willReturn(expectedResponse);
+
+        ResponseMeetingInvitationDto response = meetingService.inviteMember(
+                CURRENT_HOST_USER_ID,
+                MEETING_ID,
+                NEXT_HOST_USER_ID
+        );
+
+        ArgumentCaptor<Participant> participantCaptor =
+                ArgumentCaptor.forClass(Participant.class);
+        verify(participantRepository).save(participantCaptor.capture());
+
+        Participant createdParticipant = participantCaptor.getValue();
+        assertThat(createdParticipant.getMeetingRoomId()).isEqualTo(MEETING_ID);
+        assertThat(createdParticipant.getMemberId()).isEqualTo(NEXT_HOST_MEMBER_ID);
+        assertThat(createdParticipant.getParticipantRole()).isEqualTo("BE");
+        assertThat(createdParticipant.isInMeeting()).isFalse();
+        assertThat(response).isEqualTo(expectedResponse);
+    }
+
+    @Test
+    @DisplayName("팀 역할이 없는 멤버는 Participant 역할을 null로 저장한다")
+    void inviteMember_savesNullRoleWhenInviteeHasNoTeamRole() {
+        Member inviteeMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "초대 대상"
+        );
+        User inviteeUser = createUserWithId(NEXT_HOST_USER_ID, null);
+        Participant savedParticipant = createParticipantWithId(
+                40L,
+                NEXT_HOST_MEMBER_ID,
+                null,
+                false
+        );
+        ResponseMeetingInvitationDto expectedResponse =
+                new ResponseMeetingInvitationDto(
+                        40L,
+                        MEETING_ID,
+                        NEXT_HOST_MEMBER_ID,
+                        NEXT_HOST_USER_ID,
+                        null,
+                        false
+                );
+
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeMember));
+        given(userRepository.findById(NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeUser));
+        given(participantRepository.existsByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                NEXT_HOST_MEMBER_ID
+        )).willReturn(false);
+        given(memberRepository.findTeamRoleNameByMemberId(NEXT_HOST_MEMBER_ID))
+                .willReturn(Optional.empty());
+        given(participantRepository.save(any(Participant.class)))
+                .willReturn(savedParticipant);
+        given(meetingMapper.toInvitationResponse(savedParticipant, inviteeMember))
+                .willReturn(expectedResponse);
+
+        meetingService.inviteMember(
+                CURRENT_HOST_USER_ID,
+                MEETING_ID,
+                NEXT_HOST_USER_ID
+        );
+
+        ArgumentCaptor<Participant> participantCaptor =
+                ArgumentCaptor.forClass(Participant.class);
+        verify(participantRepository).save(participantCaptor.capture());
+        assertThat(participantCaptor.getValue().getParticipantRole()).isNull();
+    }
+
+    @Test
+    @DisplayName("회의가 없으면 멤버를 초대할 수 없다")
+    void inviteMember_rejectsMissingMeeting() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_USER_ID
+                ),
+                ErrorCode.MEETING_NOT_FOUND
+        );
+        verifyNoInteractions(
+                memberRepository,
+                userRepository,
+                participantRepository,
+                meetingMapper
+        );
+    }
+
+    @Test
+    @DisplayName("호스트가 아닌 사용자는 멤버를 초대할 수 없다")
+    void inviteMember_rejectsNonHostRequester() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        NEXT_HOST_USER_ID,
+                        MEETING_ID,
+                        CURRENT_HOST_USER_ID
+                ),
+                ErrorCode.MEETING_HOST_REQUIRED
+        );
+        verifyNoInteractions(
+                memberRepository,
+                userRepository,
+                participantRepository,
+                meetingMapper
+        );
+    }
+
+    @Test
+    @DisplayName("회의 상위 팀의 멤버가 아닌 사용자는 초대할 수 없다")
+    void inviteMember_rejectsUserOutsideMeetingTeam() {
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_USER_ID
+                ),
+                ErrorCode.SPACE_MEMBER_NOT_FOUND
+        );
+        verifyNoInteractions(userRepository, participantRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("사용자 정보가 없으면 회의에 초대할 수 없다")
+    void inviteMember_rejectsMissingUser() {
+        Member inviteeMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "초대 대상"
+        );
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeMember));
+        given(userRepository.findById(NEXT_HOST_USER_ID))
+                .willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_USER_ID
+                ),
+                ErrorCode.USER_NOT_FOUND
+        );
+        verifyNoInteractions(participantRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("탈퇴한 사용자는 회의에 초대할 수 없다")
+    void inviteMember_rejectsDeletedUser() {
+        Member inviteeMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "초대 대상"
+        );
+        User deletedUser = createUserWithId(NEXT_HOST_USER_ID, null);
+        deletedUser.withdraw();
+
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeMember));
+        given(userRepository.findById(NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(deletedUser));
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_USER_ID
+                ),
+                ErrorCode.USER_NOT_FOUND
+        );
+        verifyNoInteractions(participantRepository, meetingMapper);
+    }
+
+    @Test
+    @DisplayName("이미 Participant인 멤버는 중복 초대할 수 없다")
+    void inviteMember_rejectsAlreadyInvitedMember() {
+        Member inviteeMember = createMemberWithId(
+                NEXT_HOST_MEMBER_ID,
+                NEXT_HOST_USER_ID,
+                TEAM_ID,
+                "초대 대상"
+        );
+        User inviteeUser = createUserWithId(NEXT_HOST_USER_ID, null);
+
+        given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
+                .willReturn(Optional.of(meetingRoom));
+        given(memberRepository.findByTeamIdAndUserId(TEAM_ID, NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeMember));
+        given(userRepository.findById(NEXT_HOST_USER_ID))
+                .willReturn(Optional.of(inviteeUser));
+        given(participantRepository.existsByMeetingRoomIdAndMemberId(
+                MEETING_ID,
+                NEXT_HOST_MEMBER_ID
+        )).willReturn(true);
+
+        assertErrorCode(
+                () -> meetingService.inviteMember(
+                        CURRENT_HOST_USER_ID,
+                        MEETING_ID,
+                        NEXT_HOST_USER_ID
+                ),
+                ErrorCode.MEETING_ALREADY_INVITED
+        );
+        verify(memberRepository, never())
+                .findTeamRoleNameByMemberId(NEXT_HOST_MEMBER_ID);
+        verify(participantRepository, never()).save(any(Participant.class));
+        verifyNoInteractions(meetingMapper);
     }
 
     private void assertErrorCode(Runnable action, ErrorCode expectedErrorCode) {
