@@ -27,7 +27,7 @@ def get_s3_client():
     return boto3.client("s3", **kwargs)
 
 
-def download_meeting_recordings(meeting_id: str, dest_dir: str) -> str:
+def download_meeting_recordings(meeting_id: int, dest_dir: str) -> str:
     """conferences/{meeting_id}/ 아래 모든 객체를 dest_dir에 같은 상대 경로로 내려받는다.
 
     반환값은 conferences/{meeting_id}에 대응하는 로컬 디렉토리 경로다.
@@ -36,7 +36,7 @@ def download_meeting_recordings(meeting_id: str, dest_dir: str) -> str:
 
     s3 = get_s3_client()
     prefix = f"conferences/{meeting_id}/"
-    dest_root = Path(dest_dir) / meeting_id
+    dest_root = Path(dest_dir) / str(meeting_id)
     dest_root.mkdir(parents=True, exist_ok=True)
 
     paginator = s3.get_paginator("list_objects_v2")

@@ -33,7 +33,7 @@ def _build_legacy_meeting_dir(session_root: str, meeting_id: str) -> str:
     )
 
 
-def run_full_pipeline(meeting_id: str, db: Session) -> None:
+def run_full_pipeline(meeting_id: int, db: Session) -> None:
     """meeting_id 하나에 대해 회의록 + Facilitator 보고서를 모두 만들어 DB에 저장한다."""
     import tempfile
 

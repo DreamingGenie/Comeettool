@@ -87,7 +87,7 @@ def _strip_transcript_log(document: str) -> str:
     return document.split("\n<details>")[0].rstrip()
 
 
-def save_meeting(meeting_id: str, document: str, created_at=None) -> None:
+def save_meeting(meeting_id: int | str, document: str, created_at=None) -> None:
     """방금 만든 회의록을 히스토리에 저장한다.
 
     원문 발화 로그는 잘라내고 회의록 내용만 저장한다(_strip_transcript_log 참고).
@@ -121,7 +121,7 @@ DEFAULT_TOP_K = 3
 
 
 def get_relevant_meetings(
-    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: str | None = None
+    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: int | str | None = None
 ) -> list[tuple[str, str]]:
     """query_text와 임베딩 유사도가 높은 과거 회의록을 top_k개 검색한다.
 

@@ -9,13 +9,13 @@ class ProcessMeetingResponse(BaseModel):
     """POST /meetings/{meeting_id}/process 응답 - 접수만 하고 바로 반환(비동기 처리)."""
 
     job_id: str
-    meeting_id: str
+    meeting_id: int
     status: str
 
 
 class ProcessingJobStatusResponse(BaseModel):
     job_id: str
-    meeting_id: str
+    meeting_id: int
     status: str
     error_message: str | None = None
     created_at: datetime

@@ -11,7 +11,7 @@ schema.py(MeetingMinutes)/schema_facilitator.py(FacilitatorReport)의 필드 구
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,11 @@ class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    meeting_id: Mapped[str] = mapped_column(String, index=True)
+    # meeting_rooms.meeting_room_id(Main Backend)와 동일한 값. STT 시작 시
+    # AiTranscriptionClient가 Long meetingId로 넘기는 것과 같은 ID.
+    meeting_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_rooms.meeting_room_id"), index=True
+    )
     # pending -> processing -> done | failed
     status: Mapped[str] = mapped_column(String, default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
@@ -39,7 +43,9 @@ class MeetingMinutesRecord(Base):
 
     __tablename__ = "meeting_minutes"
 
-    meeting_id: Mapped[str] = mapped_column(String, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_rooms.meeting_room_id"), primary_key=True
+    )
     title: Mapped[str] = mapped_column(String)
     summary: Mapped[str] = mapped_column(Text)
     topics: Mapped[list] = mapped_column(JSONB, default=list)
@@ -54,7 +60,9 @@ class FacilitatorReportRecord(Base):
 
     __tablename__ = "facilitator_reports"
 
-    meeting_id: Mapped[str] = mapped_column(String, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_rooms.meeting_room_id"), primary_key=True
+    )
     title: Mapped[str] = mapped_column(String)
     meeting_type: Mapped[str | None] = mapped_column(String, default=None)
     overall_review: Mapped[str] = mapped_column(Text)

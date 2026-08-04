@@ -7,7 +7,7 @@ from app.db.session import SessionLocal
 from app.services.pipeline_service import run_full_pipeline
 
 
-def process_meeting(job_id: uuid.UUID, meeting_id: str) -> None:
+def process_meeting(job_id: uuid.UUID, meeting_id: int) -> None:
     db = SessionLocal()
     try:
         job = db.get(ProcessingJob, job_id)
