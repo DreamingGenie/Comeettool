@@ -39,7 +39,10 @@
               segment.event.tone === 'default' ? '' : segment.event.tone,
               { 'continues-before': segment.continuesBefore, 'continues-after': segment.continuesAfter }
             ]"
-            :style="{ width: `calc(${segment.span * 100}% + ${(segment.span - 1) * 12.8}px)` }"
+            :style="{
+              width: `calc(${segment.span * 100}% + ${(segment.span - 1) * 12.8}px)`,
+              backgroundColor: segment.event.color || '#7086E8'
+            }"
             type="button"
             :disabled="!editable"
             @click.stop="$emit('select-event', segment.event)"

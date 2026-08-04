@@ -30,6 +30,23 @@
           설명
           <textarea v-model.trim="form.description" placeholder="팀원들에게 공유할 내용을 입력하세요"></textarea>
         </label>
+        <fieldset class="schedule-color-field schedule-wide-field">
+          <legend>일정 색상</legend>
+          <div class="schedule-colors">
+            <label v-for="option in colorOptions" :key="option.value" class="schedule-color-option">
+              <input v-model="form.color" type="radio" name="schedule-color" :value="option.value" />
+              <span class="color-swatch" :style="{ backgroundColor: option.value }"></span>
+              <small>{{ option.label }}</small>
+            </label>
+            <label class="schedule-color-option custom-color-option" :class="{ selected: isCustomColor }">
+              <input v-model="form.color" type="color" aria-label="일정 색상 직접 지정" />
+              <span class="color-swatch custom-swatch" :style="{ backgroundColor: form.color }">
+                <b>＋</b>
+              </span>
+              <small>직접 지정</small>
+            </label>
+          </div>
+        </fieldset>
       </div>
 
       <p v-if="formError" class="schedule-error" role="alert">{{ formError }}</p>
@@ -81,8 +98,20 @@ const form = reactive({
   category: 'meeting',
   description: '',
   startTime: '',
-  endTime: ''
+  endTime: '',
+  color: '#7086E8'
 })
+
+const colorOptions = [
+  { label: '블루', value: '#7086E8' },
+  { label: '퍼플', value: '#845BEA' },
+  { label: '그린', value: '#63B58D' },
+  { label: '오렌지', value: '#E98032' },
+  { label: '로즈', value: '#D5677C' }
+]
+const isCustomColor = computed(
+  () => !colorOptions.some(option => option.value.toLowerCase() === form.color.toLowerCase())
+)
 
 const pad = value => String(value).padStart(2, '0')
 const toLocalInput = value => {
@@ -105,7 +134,8 @@ watch(
       category: props.event?.category || 'meeting',
       description: props.event?.description || '',
       startTime,
-      endTime: toLocalInput(props.event?.endTime) || toLocalInput(endDate)
+      endTime: toLocalInput(props.event?.endTime) || toLocalInput(endDate),
+      color: /^#[0-9a-f]{6}$/i.test(props.event?.color || '') ? props.event.color : '#7086E8'
     })
     formError.value = ''
     deleteConfirm.value = false
@@ -152,6 +182,77 @@ function submit() {
 
 .schedule-form textarea {
   resize: vertical;
+}
+
+.schedule-color-field {
+  min-width: 0;
+  margin: 4px 0 18px;
+  padding: 0;
+  border: 0;
+}
+
+.schedule-color-field legend {
+  margin-bottom: 11px;
+  color: #27324a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.schedule-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.schedule-color-option {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  cursor: pointer;
+}
+
+.schedule-color-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.color-swatch {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #cfd6e7;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.schedule-color-option input:checked + .color-swatch,
+.custom-color-option.selected .color-swatch {
+  box-shadow: 0 0 0 3px #27324a;
+  transform: scale(1.08);
+}
+
+.schedule-color-option input:focus-visible + .color-swatch {
+  outline: 2px solid #7086e8;
+  outline-offset: 4px;
+}
+
+.custom-swatch b {
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  text-shadow: 0 1px 3px #0008;
+}
+
+.schedule-color-option small {
+  color: #778198;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .schedule-error {

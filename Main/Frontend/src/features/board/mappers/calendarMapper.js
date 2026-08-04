@@ -21,7 +21,8 @@ export const toCalendarEventViewModel = (event, index = 0) => {
   return {
     ...event,
     id: event?.id ?? event?.scheduleId ?? `calendar-${day}-${index}-${event?.title || 'event'}`,
-    day
+    day,
+    color: /^#[0-9a-f]{6}$/i.test(event?.color || '') ? event.color : '#7086E8'
   }
 }
 
@@ -38,6 +39,7 @@ const isEventInMonth = (event, year, month) => {
 
 export const toScheduleRequest = schedule => ({
   category: schedule.category || null,
+  color: /^#[0-9a-f]{6}$/i.test(schedule.color || '') ? schedule.color : '#7086E8',
   title: schedule.title || null,
   description: schedule.description || null,
   startTime: schedule.startTime ? new Date(schedule.startTime).toISOString() : null,
