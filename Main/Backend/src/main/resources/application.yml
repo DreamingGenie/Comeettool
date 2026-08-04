@@ -104,6 +104,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # REPORTS-03: AudioTranscription은 @Immutable(변경 감지·save() 차단용)이지만 mdUrl/pdfUrl 캐시 컬럼만
+        # Repository의 @Modifying UPDATE로 좁게 갱신한다. 기본값(exception)이면 이 UPDATE 자체를 Hibernate가
+        # 시작 시점에 거부하므로 allow로 완화한다 — 프로젝트에 @Immutable 엔티티가 AudioTranscription뿐이라
+        # 전역 설정으로도 다른 엔티티의 불변성 보장에는 영향이 없다.
+        query.immutable_entity_update_query_handling_mode: allow
   data:
     redis:
       host: localhost
@@ -133,6 +138,10 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+    properties:
+      hibernate:
+        # local 프로필과 동일한 이유 — REPORTS-03 mdUrl/pdfUrl @Modifying UPDATE 허용.
+        query.immutable_entity_update_query_handling_mode: allow
   data:
     redis:
       host: ${REDIS_HOST}

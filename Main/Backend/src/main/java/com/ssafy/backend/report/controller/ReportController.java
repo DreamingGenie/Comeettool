@@ -6,11 +6,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.service.ReportService;
@@ -41,5 +45,15 @@ public class ReportController {
             @PathVariable Long meetingId) {
         TranscriptDetailDto response = reportService.getTranscript(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("전사 조회 성공", response));
+    }
+
+    // REPORTS-03: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 회의 전사를 md/pdf로 내보낸다(캐시 우선).
+    @PostMapping("/api/v1/meetings/{meetingId}/reports/transcript/export")
+    public ResponseEntity<ApiResponse<ResponseExportDto>> exportTranscript(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestBody RequestExportDto request) {
+        ResponseExportDto response = reportService.exportTranscript(Long.parseLong(userId), meetingId, request);
+        return ResponseEntity.ok(ApiResponse.success("전사 내보내기 성공", response));
     }
 }

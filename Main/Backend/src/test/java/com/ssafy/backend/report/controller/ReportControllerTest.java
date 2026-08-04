@@ -14,16 +14,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.service.ReportService;
@@ -36,6 +40,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -57,6 +62,7 @@ class ReportControllerTest {
     @InjectMocks
     private ReportController reportController;
 
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -199,6 +205,104 @@ class ReportControllerTest {
                     .when(reportService).getTranscript(1L, MEETING_ID);
 
             mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/transcript", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TRANSCRIPT_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-03 POST /api/v1/meetings/{meetingId}/reports/transcript/export")
+    class ExportTranscript {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 내보내기면 200 SUCCESS, message='전사 내보내기 성공', data 필드를 반환한다")
+        void exportTranscript_returns200() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            ResponseExportDto response =
+                    new ResponseExportDto(MEETING_ID, "md", "https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willReturn(response);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("전사 내보내기 성공"))
+                    .andExpect(jsonPath("$.data.meetingId").value(34))
+                    .andExpect(jsonPath("$.data.format").value("md"))
+                    .andExpect(jsonPath("$.data.url").value("https://bucket.s3.region.amazonaws.com/transcripts/34.md"));
+
+            verify(reportService).exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class));
+        }
+
+        @Test
+        @DisplayName("format이 md/pdf가 아니면 400 VALIDATION_FAILED를 반환한다")
+        void exportTranscript_returns400WhenFormatIsInvalid() throws Exception {
+            RequestExportDto request = new RequestExportDto("docx");
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.VALIDATION_FAILED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("format을 생략하면 400 VALIDATION_FAILED를 반환한다")
+        void exportTranscript_returns400WhenFormatIsMissing() throws Exception {
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.VALIDATION_FAILED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void exportTranscript_returns404WhenMeetingNotFound() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void exportTranscript_returns403WhenNotMember() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 전사가 없으면 404 TRANSCRIPT_NOT_FOUND를 반환한다")
+        void exportTranscript_returns404WhenTranscriptNotFound() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.TRANSCRIPT_NOT_FOUND));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/transcript/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("TRANSCRIPT_NOT_FOUND"));
         }

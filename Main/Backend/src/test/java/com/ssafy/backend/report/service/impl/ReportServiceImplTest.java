@@ -22,12 +22,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.entity.AudioTranscription;
+import com.ssafy.backend.report.export.MarkdownToPdfConverter;
+import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
@@ -37,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -62,6 +68,15 @@ class ReportServiceImplTest {
 
     @Mock
     private AudioTranscriptionRepository audioTranscriptionRepository;
+
+    @Mock
+    private TranscriptMarkdownRenderer transcriptMarkdownRenderer;
+
+    @Mock
+    private MarkdownToPdfConverter markdownToPdfConverter;
+
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private ReportServiceImpl reportService;
@@ -286,6 +301,167 @@ class ReportServiceImplTest {
             given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> reportService.getTranscript(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TRANSCRIPT_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-03 전사 내보내기")
+    class ExportTranscript {
+
+        private static final String TRANSCRIPT_JSON =
+                "[{\"speaker\":\"ssong123\",\"start\":12.5,\"end\":15.8,\"text\":\"그럼 다음 안건으로 넘어가겠습니다\"}]";
+        private static final String RENDERED_MARKDOWN =
+                "# 회의 전사 (Meeting #34)\n\n- [00:12] ssong123: 그럼 다음 안건으로 넘어가겠습니다\n";
+
+        @Test
+        @DisplayName("md 캐시가 없으면 렌더링·업로드 후 mdUrl을 갱신하고 새 URL을 반환한다")
+        void exportTranscript_rendersAndUploadsWhenMdCacheMissing() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+            given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
+            given(fileStorageService.upload(any(byte[].class), eq("text/markdown"), eq("transcripts")))
+                    .willReturn("https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+
+            ResponseExportDto result =
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.format()).isEqualTo("md");
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+            verify(fileStorageService).upload(any(byte[].class), eq("text/markdown"), eq("transcripts"));
+            verify(audioTranscriptionRepository)
+                    .updateMdUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+            verify(markdownToPdfConverter, never()).convert(any());
+            verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("pdf 캐시가 없으면 렌더링·PDF 변환·업로드 후 pdfUrl을 갱신하고 새 URL을 반환한다")
+        void exportTranscript_rendersAndUploadsWhenPdfCacheMissing() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+            given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
+            byte[] pdfBytes = {1, 2, 3};
+            given(markdownToPdfConverter.convert(RENDERED_MARKDOWN)).willReturn(pdfBytes);
+            given(fileStorageService.upload(pdfBytes, "application/pdf", "transcripts"))
+                    .willReturn("https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
+
+            ResponseExportDto result =
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
+
+            assertThat(result.format()).isEqualTo("pdf");
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
+            verify(fileStorageService).upload(pdfBytes, "application/pdf", "transcripts");
+            verify(audioTranscriptionRepository)
+                    .updatePdfUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
+            verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        void exportTranscript_returnsCachedMdUrlWithoutUploading() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
+            ReflectionTestUtils.setField(transcription, "mdUrl", "https://bucket.s3.region.amazonaws.com/cached.md");
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+
+            ResponseExportDto result =
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.md");
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(markdownToPdfConverter);
+            verify(fileStorageService, never()).upload(any(byte[].class), any(), any());
+            verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        void exportTranscript_returnsCachedPdfUrlWithoutUploading() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
+            ReflectionTestUtils.setField(
+                    transcription, "pdfUrl", "https://bucket.s3.region.amazonaws.com/cached.pdf");
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+
+            ResponseExportDto result =
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
+
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.pdf");
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(markdownToPdfConverter);
+            verify(fileStorageService, never()).upload(any(byte[].class), any(), any());
+            verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("format이 md/pdf가 아니면 VALIDATION_FAILED 예외가 발생하고 전사 조회를 시도하지 않는다")
+        void exportTranscript_throwsWhenFormatIsInvalid() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            assertThatThrownBy(() ->
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("docx")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verifyNoInteractions(audioTranscriptionRepository);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·전사 조회를 시도하지 않는다")
+        void exportTranscript_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(audioTranscriptionRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생한다")
+        void exportTranscript_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() ->
+                    reportService.exportTranscript(nonMemberId, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(audioTranscriptionRepository);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 전사가 없으면 TRANSCRIPT_NOT_FOUND 예외가 발생한다")
+        void exportTranscript_throwsWhenTranscriptNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.TRANSCRIPT_NOT_FOUND);
