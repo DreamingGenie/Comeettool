@@ -58,13 +58,6 @@ meeting:
     drain-timeout: ${MEETING_VAD_DRAIN_TIMEOUT:20s}
     quiet-period: ${MEETING_VAD_QUIET_PERIOD:300ms}
     max-audio-bytes: ${MEETING_VAD_MAX_AUDIO_BYTES:5242880}
-  recording:
-    bucket: ${RECORDING_S3_BUCKET:a707}
-    region: ${RECORDING_S3_REGION:us-east-1}
-    endpoint: ${RECORDING_S3_ENDPOINT:}
-    path-style-access: ${RECORDING_S3_PATH_STYLE_ACCESS:false}
-    access-key: ${RECORDING_S3_ACCESS_KEY:${AWS_ACCESS_KEY_ID:}}
-    secret-key: ${RECORDING_S3_SECRET_KEY:${AWS_SECRET_ACCESS_KEY:}}
 
 livekit:
   url: ${LIVEKIT_URL:ws://localhost:7880}
@@ -82,7 +75,7 @@ file:
   upload-dir: ${FILE_UPLOAD_DIR:/uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080}
 
-# S3 (PROFILE_IMG=S3일 때 사용 — 배포 시 환경변수로 주입)
+# S3 (공통 Object Storage — 배포 시 환경변수로 주입, AWS SSO/IAM Role 인증)
 aws:
   s3:
     bucket: ${AWS_S3_BUCKET:}

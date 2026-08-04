@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.StorageObjectKey;
 import com.ssafy.backend.meeting.dto.ResponseVadRecordingDto;
 import com.ssafy.backend.meeting.dto.ResponseVadSequenceConflictDto;
 import com.ssafy.backend.meeting.dto.VadSegmentMetadataDto;
@@ -23,7 +24,8 @@ import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
 import com.ssafy.backend.meeting.service.VadRecordingService;
-import com.ssafy.backend.meeting.storage.RecordingObjectStorage;
+import com.ssafy.backend.meeting.storage.ConferenceSegmentObjectKey;
+import com.ssafy.backend.meeting.storage.ConferenceSegmentObjectStorage;
 import com.ssafy.backend.meeting.vad.VadParticipantUploadLock;
 import com.ssafy.backend.meeting.vad.VadUploadFlightTracker;
 import com.ssafy.backend.member.entity.Member;
@@ -45,7 +47,7 @@ public class VadRecordingServiceImpl implements VadRecordingService {
     private final MemberRepository memberRepository;
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
-    private final RecordingObjectStorage recordingObjectStorage;
+    private final ConferenceSegmentObjectStorage segmentObjectStorage;
     private final VadUploadFlightTracker vadUploadFlightTracker;
     private final VadParticipantUploadLock vadParticipantUploadLock;
     private final ObjectMapper objectMapper;
@@ -87,9 +89,15 @@ public class VadRecordingServiceImpl implements VadRecordingService {
         long participantId = participant.getId();
         long durationMs = endedAt - startedAt;
 
-        String audioKey = audioObjectKey(meetingId, participantId, sequence);
-        String metadataKey = metadataObjectKey(meetingId, participantId, sequence);
-        String participantPrefix = participantPrefix(meetingId, participantId);
+        StorageObjectKey audioKey = ConferenceSegmentObjectKey.audio(
+                meetingId, participantId, sequence
+        );
+        StorageObjectKey metadataKey = ConferenceSegmentObjectKey.metadata(
+                meetingId, participantId, sequence
+        );
+        String participantPrefix = ConferenceSegmentObjectKey.participantPrefix(
+                meetingId, participantId
+        );
 
         byte[] audioBytes = readAudioBytes(audio);
         String audioSha256 = sha256Hex(audioBytes);
@@ -127,12 +135,12 @@ public class VadRecordingServiceImpl implements VadRecordingService {
             long durationMs,
             byte[] audioBytes,
             String audioSha256,
-            String audioKey,
-            String metadataKey,
+            StorageObjectKey audioKey,
+            StorageObjectKey metadataKey,
             String participantPrefix
     ) {
-        boolean metadataExists = recordingObjectStorage.exists(metadataKey);
-        boolean audioExists = recordingObjectStorage.exists(audioKey);
+        boolean metadataExists = segmentObjectStorage.exists(metadataKey);
+        boolean audioExists = segmentObjectStorage.exists(audioKey);
 
         if (metadataExists) {
             VadSegmentMetadataDto existing = readMetadata(metadataKey);
@@ -143,17 +151,17 @@ public class VadRecordingServiceImpl implements VadRecordingService {
         }
 
         if (audioExists) {
-            byte[] existingAudio = recordingObjectStorage.getBytes(audioKey)
+            byte[] existingAudio = segmentObjectStorage.getBytes(audioKey)
                     .orElseThrow(() -> new CustomException(ErrorCode.VAD_STORAGE_FAILED));
             if (!sha256Hex(existingAudio).equals(audioSha256)) {
                 throw conflict(participantPrefix);
             }
         } else {
-            boolean created = recordingObjectStorage.putIfAbsent(
+            boolean created = segmentObjectStorage.putIfAbsent(
                     audioKey, audioBytes, "audio/ogg"
             );
             if (!created) {
-                byte[] existingAudio = recordingObjectStorage.getBytes(audioKey)
+                byte[] existingAudio = segmentObjectStorage.getBytes(audioKey)
                         .orElseThrow(() -> new CustomException(ErrorCode.VAD_STORAGE_FAILED));
                 if (!sha256Hex(existingAudio).equals(audioSha256)) {
                     throw conflict(participantPrefix);
@@ -171,12 +179,12 @@ public class VadRecordingServiceImpl implements VadRecordingService {
                 endedAt,
                 durationMs,
                 audioSha256,
-                audioKey,
+                audioKey.value(),
                 uploadedAt
         );
 
         byte[] metadataBytes = writeJson(metadata);
-        boolean metadataCreated = recordingObjectStorage.putIfAbsent(
+        boolean metadataCreated = segmentObjectStorage.putIfAbsent(
                 metadataKey, metadataBytes, "application/json"
         );
         if (!metadataCreated) {
@@ -220,7 +228,7 @@ public class VadRecordingServiceImpl implements VadRecordingService {
 
     private int nextExpectedSequence(String participantPrefix) {
         int max = 0;
-        for (String key : recordingObjectStorage.listKeys(participantPrefix)) {
+        for (String key : segmentObjectStorage.listKeys(participantPrefix)) {
             Matcher matcher = SEGMENT_JSON.matcher(key);
             if (matcher.matches()) {
                 max = Math.max(max, Integer.parseInt(matcher.group(1)));
@@ -229,8 +237,8 @@ public class VadRecordingServiceImpl implements VadRecordingService {
         return max + 1;
     }
 
-    private VadSegmentMetadataDto readMetadata(String metadataKey) {
-        byte[] bytes = recordingObjectStorage.getBytes(metadataKey)
+    private VadSegmentMetadataDto readMetadata(StorageObjectKey metadataKey) {
+        byte[] bytes = segmentObjectStorage.getBytes(metadataKey)
                 .orElseThrow(() -> new CustomException(ErrorCode.VAD_STORAGE_FAILED));
         try {
             return objectMapper.readValue(bytes, VadSegmentMetadataDto.class);
@@ -260,14 +268,14 @@ public class VadRecordingServiceImpl implements VadRecordingService {
 
     private ResponseVadRecordingDto toResponse(
             VadSegmentMetadataDto metadata,
-            String metadataKey
+            StorageObjectKey metadataKey
     ) {
         return new ResponseVadRecordingDto(
                 metadata.meetingRoomId(),
                 metadata.participantId(),
                 metadata.sequence(),
                 metadata.audioObjectKey(),
-                metadataKey,
+                metadataKey.value(),
                 metadata.durationMs(),
                 metadata.uploadedAt(),
                 metadata.username()
@@ -289,19 +297,5 @@ public class VadRecordingServiceImpl implements VadRecordingService {
         } catch (Exception e) {
             throw new CustomException(ErrorCode.INTERNAL_ERROR);
         }
-    }
-
-    private static String participantPrefix(long meetingId, long participantId) {
-        return "conferences/" + meetingId + "/participants/" + participantId + "/";
-    }
-
-    private static String audioObjectKey(long meetingId, long participantId, int sequence) {
-        return participantPrefix(meetingId, participantId)
-                + "segment-" + String.format("%06d", sequence) + ".ogg";
-    }
-
-    private static String metadataObjectKey(long meetingId, long participantId, int sequence) {
-        return participantPrefix(meetingId, participantId)
-                + "segment-" + String.format("%06d", sequence) + ".json";
     }
 }

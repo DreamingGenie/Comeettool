@@ -3,7 +3,6 @@ package com.ssafy.backend.meeting.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -29,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.StorageObjectKey;
 import com.ssafy.backend.meeting.dto.ResponseVadRecordingDto;
 import com.ssafy.backend.meeting.dto.ResponseVadSequenceConflictDto;
 import com.ssafy.backend.meeting.dto.VadSegmentMetadataDto;
@@ -36,7 +36,8 @@ import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.meeting.repository.ParticipantRepository;
-import com.ssafy.backend.meeting.storage.RecordingObjectStorage;
+import com.ssafy.backend.meeting.storage.ConferenceSegmentObjectKey;
+import com.ssafy.backend.meeting.storage.ConferenceSegmentObjectStorage;
 import com.ssafy.backend.meeting.vad.VadParticipantUploadLock;
 import com.ssafy.backend.meeting.vad.VadUploadFlightTracker;
 import com.ssafy.backend.member.entity.Member;
@@ -64,7 +65,7 @@ class VadRecordingServiceImplTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private RecordingObjectStorage recordingObjectStorage;
+    private ConferenceSegmentObjectStorage segmentObjectStorage;
 
     private VadUploadFlightTracker vadUploadFlightTracker;
     private VadParticipantUploadLock vadParticipantUploadLock;
@@ -84,7 +85,7 @@ class VadRecordingServiceImplTest {
                 memberRepository,
                 participantRepository,
                 userRepository,
-                recordingObjectStorage,
+                segmentObjectStorage,
                 vadUploadFlightTracker,
                 vadParticipantUploadLock,
                 objectMapper
@@ -97,14 +98,18 @@ class VadRecordingServiceImplTest {
     void addVadRecording_storesNewChunkWithUserNickname() throws Exception {
         stubAuthorizedParticipant();
         byte[] audio = "ogg-bytes".getBytes(StandardCharsets.UTF_8);
-        String audioKey = "conferences/3/participants/12/segment-000001.ogg";
-        String metadataKey = "conferences/3/participants/12/segment-000001.json";
+        StorageObjectKey audioKey = ConferenceSegmentObjectKey.audio(
+                MEETING_ID, PARTICIPANT_ID, 1
+        );
+        StorageObjectKey metadataKey = ConferenceSegmentObjectKey.metadata(
+                MEETING_ID, PARTICIPANT_ID, 1
+        );
 
-        given(recordingObjectStorage.exists(metadataKey)).willReturn(false);
-        given(recordingObjectStorage.exists(audioKey)).willReturn(false);
-        given(recordingObjectStorage.putIfAbsent(eq(audioKey), any(), eq("audio/ogg")))
+        given(segmentObjectStorage.exists(metadataKey)).willReturn(false);
+        given(segmentObjectStorage.exists(audioKey)).willReturn(false);
+        given(segmentObjectStorage.putIfAbsent(eq(audioKey), any(), eq("audio/ogg")))
                 .willReturn(true);
-        given(recordingObjectStorage.putIfAbsent(eq(metadataKey), any(), eq("application/json")))
+        given(segmentObjectStorage.putIfAbsent(eq(metadataKey), any(), eq("application/json")))
                 .willReturn(true);
 
         ResponseVadRecordingDto response = service.addVadRecording(
@@ -120,8 +125,8 @@ class VadRecordingServiceImplTest {
         assertThat(response.participantId()).isEqualTo(PARTICIPANT_ID);
         assertThat(response.sequence()).isEqualTo(1);
         assertThat(response.username()).isEqualTo("junho");
-        assertThat(response.audioObjectKey()).isEqualTo(audioKey);
-        assertThat(response.metadataObjectKey()).isEqualTo(metadataKey);
+        assertThat(response.audioObjectKey()).isEqualTo(audioKey.value());
+        assertThat(response.metadataObjectKey()).isEqualTo(metadataKey.value());
         assertThat(response.durationMs()).isEqualTo(5800L);
     }
 
@@ -131,8 +136,12 @@ class VadRecordingServiceImplTest {
         stubAuthorizedParticipant();
         byte[] audio = "ogg-bytes".getBytes(StandardCharsets.UTF_8);
         String sha = sha256Hex(audio);
-        String audioKey = "conferences/3/participants/12/segment-000001.ogg";
-        String metadataKey = "conferences/3/participants/12/segment-000001.json";
+        StorageObjectKey audioKey = ConferenceSegmentObjectKey.audio(
+                MEETING_ID, PARTICIPANT_ID, 1
+        );
+        StorageObjectKey metadataKey = ConferenceSegmentObjectKey.metadata(
+                MEETING_ID, PARTICIPANT_ID, 1
+        );
         VadSegmentMetadataDto existing = new VadSegmentMetadataDto(
                 MEETING_ID,
                 PARTICIPANT_ID,
@@ -142,12 +151,12 @@ class VadRecordingServiceImplTest {
                 1785551205800L,
                 5800L,
                 sha,
-                audioKey,
+                audioKey.value(),
                 OffsetDateTime.parse("2026-08-01T15:25:17.64601+09:00")
         );
 
-        given(recordingObjectStorage.exists(metadataKey)).willReturn(true);
-        given(recordingObjectStorage.getBytes(metadataKey))
+        given(segmentObjectStorage.exists(metadataKey)).willReturn(true);
+        given(segmentObjectStorage.getBytes(metadataKey))
                 .willReturn(Optional.of(objectMapper.writeValueAsBytes(existing)));
 
         ResponseVadRecordingDto response = service.addVadRecording(
@@ -161,7 +170,7 @@ class VadRecordingServiceImplTest {
 
         assertThat(response.sequence()).isEqualTo(1);
         assertThat(response.uploadedAt()).isEqualTo(existing.uploadedAt());
-        verify(recordingObjectStorage, never()).putIfAbsent(anyString(), any(), anyString());
+        verify(segmentObjectStorage, never()).putIfAbsent(any(), any(), any());
     }
 
     @Test
@@ -169,7 +178,9 @@ class VadRecordingServiceImplTest {
     void addVadRecording_conflictsWhenDifferentChunkUsesSameSequence() throws Exception {
         stubAuthorizedParticipant();
         byte[] audio = "new-audio".getBytes(StandardCharsets.UTF_8);
-        String metadataKey = "conferences/3/participants/12/segment-000001.json";
+        StorageObjectKey metadataKey = ConferenceSegmentObjectKey.metadata(
+                MEETING_ID, PARTICIPANT_ID, 1
+        );
         VadSegmentMetadataDto existing = new VadSegmentMetadataDto(
                 MEETING_ID,
                 PARTICIPANT_ID,
@@ -179,14 +190,14 @@ class VadRecordingServiceImplTest {
                 2L,
                 1L,
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "conferences/3/participants/12/segment-000001.ogg",
+                ConferenceSegmentObjectKey.audio(MEETING_ID, PARTICIPANT_ID, 1).value(),
                 OffsetDateTime.parse("2026-08-01T15:25:17.64601+09:00")
         );
 
-        given(recordingObjectStorage.exists(metadataKey)).willReturn(true);
-        given(recordingObjectStorage.getBytes(metadataKey))
+        given(segmentObjectStorage.exists(metadataKey)).willReturn(true);
+        given(segmentObjectStorage.getBytes(metadataKey))
                 .willReturn(Optional.of(objectMapper.writeValueAsBytes(existing)));
-        given(recordingObjectStorage.listKeys("conferences/3/participants/12/"))
+        given(segmentObjectStorage.listKeys("conferences/3/participants/12/"))
                 .willReturn(List.of(
                         "conferences/3/participants/12/segment-000001.json",
                         "conferences/3/participants/12/segment-000015.json"

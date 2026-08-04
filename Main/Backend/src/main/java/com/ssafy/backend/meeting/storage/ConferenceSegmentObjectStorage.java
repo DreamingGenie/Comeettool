@@ -1,25 +1,20 @@
 package com.ssafy.backend.meeting.storage;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.StorageObjectKey;
 
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
@@ -27,41 +22,31 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+/**
+ * MEET-12 VAD 세그먼트 저장소.
+ * 공통 S3 bucket({@code aws.s3.bucket})과 AWS 기본 자격증명 체인(SSO/IAM Role)을 사용한다.
+ */
 @Slf4j
 @Component
-@RequiredArgsConstructor
-public class S3RecordingObjectStorage implements RecordingObjectStorage {
+@ConditionalOnProperty(name = "storage.provider", havingValue = "S3")
+public class ConferenceSegmentObjectStorage {
 
-    private final RecordingStorageProperties properties;
-    private S3Client s3Client;
+    private final S3Client s3Client;
+    private final String bucket;
 
-    @PostConstruct
-    void init() {
-        S3ClientBuilder builder = S3Client.builder()
-                .region(Region.of(properties.region()));
-
-        if (properties.endpoint() != null && !properties.endpoint().isBlank()) {
-            builder.endpointOverride(URI.create(properties.endpoint()))
-                    .forcePathStyle(properties.pathStyleAccess());
-        }
-
-        if (properties.accessKey() != null && !properties.accessKey().isBlank()) {
-            builder.credentialsProvider(StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
-            ));
-        } else {
-            builder.credentialsProvider(DefaultCredentialsProvider.create());
-        }
-
-        this.s3Client = builder.build();
+    public ConferenceSegmentObjectStorage(
+            S3Client s3Client,
+            @Value("${aws.s3.bucket}") String bucket
+    ) {
+        this.s3Client = s3Client;
+        this.bucket = requireText(bucket, "AWS S3 bucket 이름이 필요합니다.");
     }
 
-    @Override
-    public boolean exists(String objectKey) {
+    public boolean exists(StorageObjectKey objectKey) {
         try {
             s3Client.headObject(HeadObjectRequest.builder()
-                    .bucket(properties.bucket())
-                    .key(objectKey)
+                    .bucket(bucket)
+                    .key(objectKey.value())
                     .build());
             return true;
         } catch (NoSuchKeyException e) {
@@ -74,12 +59,11 @@ public class S3RecordingObjectStorage implements RecordingObjectStorage {
         }
     }
 
-    @Override
-    public Optional<byte[]> getBytes(String objectKey) {
+    public Optional<byte[]> getBytes(StorageObjectKey objectKey) {
         try {
             return Optional.of(s3Client.getObjectAsBytes(GetObjectRequest.builder()
-                    .bucket(properties.bucket())
-                    .key(objectKey)
+                    .bucket(bucket)
+                    .key(objectKey.value())
                     .build()).asByteArray());
         } catch (NoSuchKeyException e) {
             return Optional.empty();
@@ -91,13 +75,12 @@ public class S3RecordingObjectStorage implements RecordingObjectStorage {
         }
     }
 
-    @Override
-    public boolean putIfAbsent(String objectKey, byte[] bytes, String contentType) {
+    public boolean putIfAbsent(StorageObjectKey objectKey, byte[] bytes, String contentType) {
         try {
             s3Client.putObject(
                     PutObjectRequest.builder()
-                            .bucket(properties.bucket())
-                            .key(objectKey)
+                            .bucket(bucket)
+                            .key(objectKey.value())
                             .contentType(contentType)
                             .ifNoneMatch("*")
                             .build(),
@@ -112,29 +95,12 @@ public class S3RecordingObjectStorage implements RecordingObjectStorage {
         }
     }
 
-    @Override
-    public void put(String objectKey, byte[] bytes, String contentType) {
-        try {
-            s3Client.putObject(
-                    PutObjectRequest.builder()
-                            .bucket(properties.bucket())
-                            .key(objectKey)
-                            .contentType(contentType)
-                            .build(),
-                    RequestBody.fromBytes(bytes)
-            );
-        } catch (S3Exception e) {
-            throw storageFailed(e);
-        }
-    }
-
-    @Override
     public List<String> listKeys(String prefix) {
         List<String> keys = new ArrayList<>();
         String token = null;
         do {
             var response = s3Client.listObjectsV2(ListObjectsV2Request.builder()
-                    .bucket(properties.bucket())
+                    .bucket(bucket)
                     .prefix(prefix)
                     .continuationToken(token)
                     .build());
@@ -147,7 +113,14 @@ public class S3RecordingObjectStorage implements RecordingObjectStorage {
     }
 
     private CustomException storageFailed(Exception e) {
-        log.error("Recording storage failed: {}", e.getMessage());
+        log.error("Conference segment storage failed: {}", e.getMessage());
         return new CustomException(ErrorCode.VAD_STORAGE_FAILED);
+    }
+
+    private static String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 }
