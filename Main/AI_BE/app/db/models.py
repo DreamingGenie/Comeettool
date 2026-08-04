@@ -38,6 +38,19 @@ class ProcessingJob(Base):
     )
 
 
+class AudioTranscriptionRecord(Base):
+    """common/transcribe.py TranscriptSegment 리스트(STT 결과) 저장."""
+
+    __tablename__ = "audio_transcriptions"
+
+    meeting_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_rooms.meeting_room_id"), primary_key=True
+    )
+    transcript: Mapped[list] = mapped_column(JSONB, default=list)
+    # transcript 원소: {"speaker": str, "start": float, "end": float, "text": str}
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MeetingMinutesRecord(Base):
     """schema.py MeetingMinutes 결과 저장."""
 
@@ -75,3 +88,4 @@ class FacilitatorReportRecord(Base):
     unresolved_issues_evaluation: Mapped[list] = mapped_column(JSONB, default=list)
     next_meeting_suggestions: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
