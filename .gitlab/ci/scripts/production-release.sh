@@ -456,6 +456,9 @@ jq -e '.status == "ok" and .database == "postgresql"' \
   || fail_release "the Yjs health payload is invalid."
 
 : >"$release_work_dir/websocket-headers.txt"
+websocket_key="$(head -c 16 /dev/urandom | base64 | tr -d '\n')"
+[ -n "$websocket_key" ] \
+  || fail_release "a WebSocket handshake key could not be generated."
 curl --silent --show-error --http1.1 \
   --connect-timeout 10 --max-time 5 \
   --dump-header "$release_work_dir/websocket-headers.txt" \
@@ -463,7 +466,7 @@ curl --silent --show-error --http1.1 \
   --header 'Connection: Upgrade' \
   --header 'Upgrade: websocket' \
   --header 'Sec-WebSocket-Version: 13' \
-  --header 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+  --header "Sec-WebSocket-Key: ${websocket_key}" \
   "$DEPLOY_YJS_WEBSOCKET_URL" 2>/dev/null || true
 grep -Eq '^HTTP/[0-9.]+ 101([[:space:]]|$)' "$release_work_dir/websocket-headers.txt" \
   || fail_release "the Yjs WebSocket endpoint did not upgrade to HTTP 101."
@@ -500,7 +503,7 @@ blocked_cors_code="$(
 unset \
   aws_account_id ecr_registry backend_image yjs_image migration_image \
   backend_task_definition yjs_task_definition migration_task_definition \
-  migration_task invalidation_id
+  migration_task invalidation_id websocket_key
 
 echo "Production smoke checks passed without printing deployment endpoints or identifiers."
 echo "Production release completed successfully."

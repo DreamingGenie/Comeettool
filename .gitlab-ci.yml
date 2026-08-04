@@ -362,7 +362,7 @@ dependencies:critical-scan:
     TRIVY_NO_PROGRESS: "true"
     TRIVY_DISABLE_TELEMETRY: "true"
   cache:
-    key: "trivy-vulnerability-db-v0.69.3"
+    key: "trivy-db"
     paths:
       - .trivy-cache/
     policy: pull-push
