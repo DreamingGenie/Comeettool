@@ -17,6 +17,8 @@ for package_command in aws buildah jq grep; do
 done
 
 sh .gitlab/ci/scripts/validate-production-inputs.sh container
+[ "${AWS_REGION:-}" = "ap-northeast-2" ] \
+  || fail_package "the AWS region does not match the deployment contract."
 
 deploy_image_tag="git-${CI_COMMIT_SHA}"
 aws_account_id="$(
