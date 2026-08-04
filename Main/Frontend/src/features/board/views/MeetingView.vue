@@ -165,13 +165,26 @@
             <button class="meeting-invite-trigger" type="button" :aria-expanded="showInvitePanel" @click="toggleInvitePanel">
               <span aria-hidden="true">♙+</span> 초대 및 알림
             </button>
-            <div v-if="showInvitePanel" class="meeting-invite-body">
+          </section>
+          <div v-if="showInvitePanel" class="meeting-invite-overlay" @click.self="toggleInvitePanel">
+            <section class="meeting-invite-dialog" role="dialog" aria-modal="true" aria-labelledby="meeting-invite-title">
+              <header>
+                <div>
+                  <small>TEAM MEMBERS</small>
+                  <h3 id="meeting-invite-title">멤버 및 초대</h3>
+                </div>
+                <button type="button" aria-label="초대 창 닫기" @click="toggleInvitePanel">×</button>
+              </header>
               <form @submit.prevent="searchMeetingInviteCandidates">
                 <input v-model="meetingInviteKeyword" type="search" placeholder="이름 또는 이메일 검색" />
                 <button type="submit" :disabled="loadingInviteCandidates">
                   {{ loadingInviteCandidates ? '검색 중…' : '검색' }}
                 </button>
               </form>
+              <p class="meeting-invite-guide">
+                {{ meetingInviteKeyword.trim() ? '검색 결과' : '초대 가능한 팀 스페이스 멤버 전체' }}
+                <b>{{ boardState.meetingInviteCandidates.length }}명</b>
+              </p>
               <div v-if="boardState.meetingInviteCandidates.length" class="meeting-invite-results">
                 <article v-for="candidate in boardState.meetingInviteCandidates" :key="candidate.id">
                   <i>{{ candidate.avatarText.slice(0, 1) }}</i>
@@ -184,8 +197,8 @@
               <p v-else-if="hasSearchedInviteCandidates" class="meeting-invite-empty">
                 초대할 수 있는 팀원이 없습니다.
               </p>
-            </div>
-          </section>
+            </section>
+          </div>
           <header class="participant-list-heading">
             <b>⌄　참가자 ({{ liveParticipantCount }})</b>
           </header>
@@ -788,7 +801,9 @@ async function searchMeetingInviteCandidates() {
 
 async function toggleInvitePanel() {
   showInvitePanel.value = !showInvitePanel.value
-  if (showInvitePanel.value && !hasSearchedInviteCandidates.value) {
+  if (showInvitePanel.value) {
+    meetingInviteKeyword.value = ''
+    hasSearchedInviteCandidates.value = false
     await searchMeetingInviteCandidates()
   }
 }
@@ -1415,6 +1430,7 @@ async function send() {
 }
 
 .chat-panel {
+  position: relative;
   grid-template-rows: 62px minmax(0, 1fr) 94px !important;
   border: 1px solid var(--meeting-border) !important;
   border-radius: 20px !important;
@@ -1495,37 +1511,128 @@ async function send() {
   font-size: 15px;
 }
 
-.meeting-invite-body {
+.meeting-invite-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  align-items: start;
+  padding: 12px;
+  border-radius: inherit;
+  background: rgba(12, 13, 16, 0.76);
+  backdrop-filter: blur(8px);
 }
 
-.participants-panel .meeting-invite-section input {
+.meeting-invite-dialog {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  max-height: calc(100% - 24px);
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: #24252a;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.38);
+}
+
+.meeting-invite-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.meeting-invite-dialog > header div {
+  display: grid;
+  gap: 2px;
+}
+
+.meeting-invite-dialog > header small {
+  color: #858892;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.meeting-invite-dialog > header h3 {
+  margin: 0;
+  color: #f5f5f6;
+  font-size: 17px;
+}
+
+.meeting-invite-dialog > header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d9dade;
+  font-size: 20px;
+}
+
+.meeting-invite-dialog form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.meeting-invite-dialog input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 13px;
   border-color: rgba(255, 255, 255, 0.08);
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 11px;
+  outline: none;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
-.participants-panel .meeting-invite-section input::placeholder {
+.meeting-invite-dialog input:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.meeting-invite-dialog input::placeholder {
   color: #858892;
 }
 
-.participants-panel .meeting-invite-section form button,
-.participants-panel .meeting-invite-results button {
+.meeting-invite-dialog form button,
+.meeting-invite-dialog .meeting-invite-results button {
+  height: 40px;
+  padding: 0 14px;
   border-color: #4a4b51;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 10px;
   background: #3a3b40;
+  color: #fff;
+  font-weight: 700;
 }
 
-.participants-panel .meeting-invite-results article {
+.meeting-invite-guide {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: #a9abb2;
+  font-size: 10px;
+}
+
+.meeting-invite-guide b {
+  color: #f1f1f3;
+}
+
+.meeting-invite-dialog .meeting-invite-results {
+  max-height: none;
+  min-height: 0;
+}
+
+.meeting-invite-dialog .meeting-invite-results article {
   background: rgba(255, 255, 255, 0.055);
 }
 
-.participants-panel .meeting-invite-results span b {
+.meeting-invite-dialog .meeting-invite-results span b {
   color: #f2f2f4;
 }
 
