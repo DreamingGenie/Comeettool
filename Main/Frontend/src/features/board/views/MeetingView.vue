@@ -6,6 +6,9 @@
         <small class="connection-status" :class="liveKitStatus">
           {{ connectionStatusLabel }}
         </small>
+        <small v-if="vadStatus === 'recording'" class="vad-status">
+          VAD {{ vadPendingUploads > 0 ? `업로드 ${vadPendingUploads}` : '감지 중' }}
+        </small>
       </h1>
       <div class="meeting-top-actions">
         <button class="participant-count" type="button" @click="modal = 'participants'">
@@ -304,6 +307,7 @@ import { useUserPage } from '../../user/composables/useUserPage'
 import { meetingControls } from '../constants/meetingControls'
 import { useBoardPage } from '../composables/useBoardPage'
 import { useLiveKitMeeting } from '../composables/useLiveKitMeeting'
+import { useVadRecording } from '../composables/useVadRecording'
 import { boardStore } from '../stores/boardStore'
 
 const { boardState, meetingId } = useBoardPage({
@@ -334,6 +338,21 @@ const {
     router.replace(teamId ? `/teams/${teamId}/schedule` : '/home')
   }
 })
+const {
+  status: vadStatus,
+  pendingUploads: vadPendingUploads,
+  start: startVadRecording,
+  stopMonitoring: stopVadRecording,
+  stopAndDrain: drainVadUploads
+} = useVadRecording({
+  onUploadSuccess: ({ sequence }) => {
+    notify(`VAD 청크 #${sequence} 업로드 완료`)
+  },
+  onUploadError: error => {
+    notify(error?.message || 'VAD 업로드에 실패했습니다.')
+  }
+})
+let vadStartTimer = 0
 const liveParticipants = computed(() => {
   const participants = boardState.meetingRoom.participants
   if (!participantIdentities.value.length) {
@@ -504,6 +523,28 @@ watch(
   }
 )
 
+function scheduleVadStart() {
+  window.clearTimeout(vadStartTimer)
+  if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) {
+    stopVadRecording()
+    return
+  }
+
+  vadStartTimer = window.setTimeout(() => {
+    if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) return
+    const started = startVadRecording(meetingId.value, liveKitRoom.value)
+    if (!started) {
+      console.warn('[VAD] microphone track is not ready yet')
+    }
+  }, 400)
+}
+
+watch(
+  () => [deviceState.microphone, liveKitRoom.value, meetingId.value],
+  () => scheduleVadStart(),
+  { immediate: true }
+)
+
 watch(videoPageCount, pageCount => {
   currentVideoPage.value = Math.min(
     currentVideoPage.value,
@@ -527,6 +568,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   participantRefreshTimers.forEach(timer => window.clearTimeout(timer))
+  window.clearTimeout(vadStartTimer)
+  stopVadRecording()
   document.removeEventListener('fullscreenchange', syncFullscreenState)
 })
 
@@ -610,6 +653,7 @@ async function exitMeeting() {
   exiting.value = true
   requestServerExit(action)
   try {
+    await drainVadUploads()
     if (isHost.value) await boardStore.endMeeting(meetingId.value)
     else await boardStore.leaveMeeting(meetingId.value)
     await disconnectAfterServerExit(action)
@@ -734,6 +778,12 @@ async function send() {
 .connection-status {
   margin-left: 8px;
   color: #b9c4d8;
+  font-size: 11px;
+}
+
+.vad-status {
+  margin-left: 8px;
+  color: #7dd3a0;
   font-size: 11px;
 }
 

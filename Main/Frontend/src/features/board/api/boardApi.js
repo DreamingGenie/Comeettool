@@ -36,6 +36,21 @@ export const boardApi = {
         method: 'POST'
       })
     ),
+  uploadVadRecording: (meetingId, { sequence, startedAt, endedAt, audio }) => {
+    const formData = new FormData()
+    formData.append('sequence', String(sequence))
+    formData.append('startedAt', String(startedAt))
+    formData.append('endedAt', String(endedAt))
+    formData.append(
+      'audio',
+      audio,
+      `segment-${String(sequence).padStart(6, '0')}.ogg`
+    )
+    return request(`/api/v1/meetings/${meetingId}/vad-recordings`, {
+      method: 'POST',
+      body: formData
+    })
+  },
   leaveMeeting: (meetingId) =>
     request(`/api/v1/meetings/${meetingId}/leave`, {
       method: 'POST'

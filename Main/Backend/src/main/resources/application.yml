@@ -52,6 +52,20 @@ ai:
     initial-retry-delay: ${AI_TRANSCRIPTION_INITIAL_RETRY_DELAY:${AI_TRANSCRIPTION_START_INITIAL_RETRY_DELAY:1s}}
     max-retry-delay: ${AI_TRANSCRIPTION_MAX_RETRY_DELAY:${AI_TRANSCRIPTION_START_MAX_RETRY_DELAY:5s}}
 
+# MEET-12 VAD 업로드 / MEET-14 in-flight 드레인
+meeting:
+  vad:
+    drain-timeout: ${MEETING_VAD_DRAIN_TIMEOUT:20s}
+    quiet-period: ${MEETING_VAD_QUIET_PERIOD:300ms}
+    max-audio-bytes: ${MEETING_VAD_MAX_AUDIO_BYTES:5242880}
+  recording:
+    bucket: ${RECORDING_S3_BUCKET:a707}
+    region: ${RECORDING_S3_REGION:us-east-1}
+    endpoint: ${RECORDING_S3_ENDPOINT:}
+    path-style-access: ${RECORDING_S3_PATH_STYLE_ACCESS:false}
+    access-key: ${RECORDING_S3_ACCESS_KEY:${AWS_ACCESS_KEY_ID:}}
+    secret-key: ${RECORDING_S3_SECRET_KEY:${AWS_SECRET_ACCESS_KEY:}}
+
 livekit:
   url: ${LIVEKIT_URL:ws://localhost:7880}
   api-key: ${LIVEKIT_API_KEY:devkey}
