@@ -88,16 +88,14 @@ export const boardMockApi = {
         (meeting) => !meeting.teamId || String(meeting.teamId) === String(teamId)
       )
     ),
-  getEvents: (teamId, year, month) => {
+  getSchedules: (teamId) => {
     const source =
       boardMockDatabase.calendars[teamId] ||
       boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
-    return mockResponse({
-      year,
-      month,
-      events: source.year === year && source.month === month ? source.events : []
-    })
+    return mockResponse(source?.events || [])
   },
+  getMySchedules: () =>
+    mockResponse(Object.values(boardMockDatabase.calendars).flatMap((calendar) => calendar.events || [])),
   getArchive: (_teamId, section) => {
     const rows = boardMockDatabase.archives[section] || []
     const stats = boardMockDatabase.archiveStats[section] || null
@@ -350,13 +348,29 @@ export const boardMockApi = {
     }
     return mockResponse(meeting)
   },
-  createEvent: (data) => {
-    const event = { id: createId('event'), ...data }
+  createSchedule: (teamId, data) => {
+    const scheduleId = createId('schedule')
+    const event = { id: scheduleId, scheduleId, spaceId: teamId, ...data }
     const calendar =
-      boardMockDatabase.calendars[data.teamId] ||
+      boardMockDatabase.calendars[teamId] ||
       boardMockDatabase.calendars[boardMockDatabase.teams[0]?.id]
     calendar?.events.push(event)
     return mockResponse(event)
+  },
+  updateSchedule: (scheduleId, data) => {
+    const event = Object.values(boardMockDatabase.calendars)
+      .flatMap((calendar) => calendar.events || [])
+      .find((item) => String(item.id ?? item.scheduleId) === String(scheduleId))
+    if (event) Object.assign(event, data)
+    return mockResponse(event)
+  },
+  deleteSchedule: (scheduleId) => {
+    Object.values(boardMockDatabase.calendars).forEach((calendar) => {
+      calendar.events = (calendar.events || []).filter(
+        (event) => String(event.id ?? event.scheduleId) !== String(scheduleId)
+      )
+    })
+    return mockResponse(null)
   },
   sendMessage: (meetingId, body) => {
     const room =

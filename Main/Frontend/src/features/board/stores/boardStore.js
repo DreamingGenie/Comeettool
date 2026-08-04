@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { dataSource } from '../../../shared/api/dataSource'
-import { toCalendarViewModel } from '../mappers/calendarMapper'
+import { toCalendarEventViewModel, toCalendarViewModel } from '../mappers/calendarMapper'
 
 const emptyTeam = {
   id: '',
@@ -238,7 +238,9 @@ export const boardStore = {
     return state.activeMeeting
   },
   async loadCalendar(teamId, year, month) {
-    const response = await withLoading(() => dataSource.board.getEvents(teamId, year, month))
+    const response = await withLoading(() =>
+      teamId ? dataSource.board.getSchedules(teamId) : dataSource.board.getMySchedules()
+    )
     state.calendar = toCalendarViewModel(response, { year, month })
     return state.calendar
   },
@@ -349,10 +351,21 @@ export const boardStore = {
       directContacts: []
     }
   },
-  async createEvent(data) {
-    const event = await dataSource.board.createEvent(data)
-    state.calendar.events.push(event)
+  async createSchedule(teamId, data) {
+    const response = await withLoading(() => dataSource.board.createSchedule(teamId, data))
+    const event = toCalendarEventViewModel(response)
+    await boardStore.loadCalendar(teamId, state.calendar.year, state.calendar.month)
     return event
+  },
+  async updateSchedule(teamId, scheduleId, data) {
+    const response = await withLoading(() => dataSource.board.updateSchedule(scheduleId, data))
+    const event = toCalendarEventViewModel(response)
+    await boardStore.loadCalendar(teamId, state.calendar.year, state.calendar.month)
+    return event
+  },
+  async deleteSchedule(teamId, scheduleId) {
+    await withLoading(() => dataSource.board.deleteSchedule(scheduleId))
+    await boardStore.loadCalendar(teamId, state.calendar.year, state.calendar.month)
   },
   async updateTeam(teamId, data) {
     const updatedTeam = await withLoading(() => dataSource.board.updateTeam(teamId, data))
