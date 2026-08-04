@@ -1,17 +1,17 @@
 <template>
   <main ref="meetingRoomElement" class="meeting-room dark">
     <header class="meeting-top">
-      <h1>
-        🔴　{{ boardState.activeMeeting.roomTitle || '회의' }}
+      <div class="meeting-title-block">
+        <h1>{{ boardState.activeMeeting.roomTitle || '회의' }}</h1>
         <small class="connection-status" :class="liveKitStatus">
           {{ connectionStatusLabel }}
         </small>
         <small v-if="vadStatus === 'recording'" class="vad-status">
           VAD {{ vadPendingUploads > 0 ? `업로드 ${vadPendingUploads}` : '감지 중' }}
         </small>
-      </h1>
+      </div>
       <div class="meeting-top-actions">
-        <button class="participant-count" type="button" @click="modal = 'participants'">
+        <button class="participant-count" type="button" @click="toggleSidePanel('participants')">
           <span>
             <i v-for="participant in participantPreview" :key="participant.id">
               {{ participant.avatarText.slice(0, 1) }}
@@ -24,8 +24,8 @@
         </button>
       </div>
     </header>
-    <div class="meeting-content" :class="{ 'chat-closed': !isChatPanelOpen }">
-      <section class="video-column">
+    <div class="meeting-content" :class="{ 'chat-closed': !sidePanel }">
+      <section class="video-column" :class="{ 'controls-collapsed': controlsCollapsed && !controlsHovered }">
         <div
           class="video-grid"
           :class="videoLayoutClass"
@@ -90,7 +90,22 @@
             </button>
           </nav>
         </div>
-        <footer class="controls">
+        <footer
+          class="controls"
+          :class="{ collapsed: controlsCollapsed && !controlsHovered }"
+          @mouseleave="controlsHovered = false"
+        >
+          <button
+            class="controls-collapse-handle"
+            :class="{ 'is-collapsed': controlsCollapsed }"
+            type="button"
+            :aria-label="controlsCollapsed ? '회의 제어 펼치기' : '회의 제어 숨기기'"
+            :aria-expanded="!controlsCollapsed"
+            @mouseenter="controlsHovered = controlsCollapsed"
+            @click="toggleControlsCollapsed"
+          >
+            <span aria-hidden="true"></span>
+          </button>
           <span class="meeting-agenda">
             {{ boardState.activeMeeting.agendaTime }}　| {{ boardState.activeMeeting.roomTitle }}
           </span>
@@ -135,7 +150,59 @@
         </footer>
       </section>
 
-      <aside v-if="isChatPanelOpen" class="chat-panel">
+      <aside v-if="sidePanel" class="chat-panel" :class="{ 'participants-panel': sidePanel === 'participants' }">
+        <template v-if="sidePanel === 'participants'">
+          <header class="side-panel-header">
+            <div><small>PARTICIPANTS</small><h2>참가자 ({{ liveParticipantCount }})</h2></div>
+            <button type="button" aria-label="참가자 패널 닫기" @click="toggleSidePanel('participants')">×</button>
+          </header>
+          <section v-if="isHost" class="meeting-invite-section">
+            <button class="meeting-invite-trigger" type="button" :aria-expanded="showInvitePanel" @click="toggleInvitePanel">
+              <span aria-hidden="true">♙+</span> 초대 및 알림
+            </button>
+            <div v-if="showInvitePanel" class="meeting-invite-body">
+              <form @submit.prevent="searchMeetingInviteCandidates">
+                <input v-model="meetingInviteKeyword" type="search" placeholder="이름 또는 이메일 검색" />
+                <button type="submit" :disabled="loadingInviteCandidates">
+                  {{ loadingInviteCandidates ? '검색 중…' : '검색' }}
+                </button>
+              </form>
+              <div v-if="boardState.meetingInviteCandidates.length" class="meeting-invite-results">
+                <article v-for="candidate in boardState.meetingInviteCandidates" :key="candidate.id">
+                  <i>{{ candidate.avatarText.slice(0, 1) }}</i>
+                  <span><b>{{ candidate.name }}</b><small>{{ candidate.email }}</small></span>
+                  <button type="button" :disabled="invitingUserId === candidate.userId" @click="inviteMeetingCandidate(candidate)">
+                    {{ invitingUserId === candidate.userId ? '초대 중…' : '초대' }}
+                  </button>
+                </article>
+              </div>
+              <p v-else-if="hasSearchedInviteCandidates" class="meeting-invite-empty">
+                초대할 수 있는 팀원이 없습니다.
+              </p>
+            </div>
+          </section>
+          <header class="participant-list-heading">
+            <b>⌄　참가자 ({{ liveParticipantCount }})</b>
+          </header>
+          <section class="side-participant-list">
+            <article v-for="participant in liveParticipants" :key="participant.id" :class="{ 'is-host': participant.isHost }">
+              <i>{{ participant.avatarText.slice(0, 1) }}</i>
+              <span><b>{{ participant.displayName }}</b><small>{{ participant.isHost ? '호스트' : participant.status }}</small></span>
+              <div v-if="isHost && !participant.isHost && participant.participantId" class="side-participant-actions">
+                <button type="button" @click="pendingHostTransfer = participant">위임</button>
+                <button type="button" class="danger" @click="kickMeetingParticipant(participant)">강퇴</button>
+              </div>
+            </article>
+          </section>
+          <section v-if="pendingHostTransfer" class="host-transfer-confirm side-transfer-confirm">
+            <div><b>{{ pendingHostTransfer.displayName }} 님에게 호스트를 위임할까요?</b><small>회의 종료 권한도 함께 이동합니다.</small></div>
+            <footer>
+              <button type="button" @click="pendingHostTransfer = null">취소</button>
+              <button class="confirm-transfer-button" type="button" @click="confirmTransferHost">위임하기</button>
+            </footer>
+          </section>
+        </template>
+        <template v-else>
         <nav class="chat-tabs">
           <button type="button" :class="{ active: activeTab === 'chat' }" @click="selectTab('chat')">
             채팅
@@ -146,6 +213,11 @@
         </nav>
         <section ref="messageList" class="messages">
           <template v-if="activeTab === 'chat'">
+            <div v-if="!boardState.meetingRoom.chatMessages.length" class="chat-empty-state">
+              <i aria-hidden="true">💬</i>
+              <b>아직 대화가 없어요</b>
+              <small>첫 메시지를 보내 회의를 시작해 보세요.</small>
+            </div>
             <article
               v-for="message in boardState.meetingRoom.chatMessages"
               :key="message.id || `${message.sender}-${message.time}-${message.body}`"
@@ -195,54 +267,11 @@
           />
           <button :disabled="!draft.trim()">▷</button>
         </form>
+        </template>
       </aside>
     </div>
   </main>
 
-  <BaseModal v-if="modal === 'participants'" modal-class="meeting-info-modal" @close="closeParticipantsModal">
-    <small>MEETING PARTICIPANTS</small>
-    <h2>참가자 {{ liveParticipantCount }}명</h2>
-    <div class="meeting-member-list">
-      <article
-        v-for="participant in liveParticipants"
-        :key="participant.id"
-        class="meeting-member-row"
-        :class="{ 'is-host': participant.isHost }"
-      >
-        <i>{{ participant.avatarText.slice(0, 1) }}</i>
-        <span><b>{{ participant.displayName }}</b><small>{{ participant.status }}</small></span>
-        <em class="participant-role">{{ participant.isHost ? '호스트' : participant.role }}</em>
-        <button
-          v-if="isHost && !participant.isHost && participant.participantId"
-          class="transfer-host-button"
-          type="button"
-          :disabled="Boolean(transferringHostId)"
-          @click="pendingHostTransfer = participant"
-        >
-          {{ transferringHostId === participant.id ? '위임 중…' : '호스트 위임' }}
-        </button>
-      </article>
-    </div>
-    <section v-if="pendingHostTransfer" class="host-transfer-confirm">
-      <div>
-        <b>{{ pendingHostTransfer.displayName }} 님에게 호스트를 위임할까요?</b>
-        <small>위임 후에는 해당 참가자가 회의 종료와 호스트 권한을 갖습니다.</small>
-      </div>
-      <footer>
-        <button type="button" :disabled="Boolean(transferringHostId)" @click="pendingHostTransfer = null">
-          취소
-        </button>
-        <button
-          class="confirm-transfer-button"
-          type="button"
-          :disabled="Boolean(transferringHostId)"
-          @click="confirmTransferHost"
-        >
-          {{ transferringHostId ? '위임 중…' : '위임하기' }}
-        </button>
-      </footer>
-    </section>
-  </BaseModal>
   <BaseModal
     v-if="modal === 'device-setup'"
     modal-class="meeting-info-modal device-setup-modal"
@@ -440,6 +469,12 @@ const draft = ref('')
 const exiting = ref(false)
 const transferringHostId = ref('')
 const pendingHostTransfer = ref(null)
+const kickingParticipantId = ref('')
+const meetingInviteKeyword = ref('')
+const loadingInviteCandidates = ref(false)
+const hasSearchedInviteCandidates = ref(false)
+const invitingUserId = ref(null)
+const showInvitePanel = ref(false)
 const deviceSetupPending = ref(false)
 const hasAskedDeviceSetup = ref(false)
 const entryDeviceSelection = reactive({ microphone: true, camera: true })
@@ -450,8 +485,26 @@ const messageList = ref(null)
 const meetingRoomElement = ref(null)
 const showMore = ref(false)
 const isFullscreen = ref(false)
-const isChatPanelOpen = ref(true)
-const activeControls = reactive(new Set(['chat']))
+const sidePanel = ref('participants')
+const controlsCollapsed = ref(false)
+const controlsHovered = ref(false)
+
+const toggleControlsCollapsed = () => {
+  controlsCollapsed.value = !controlsCollapsed.value
+  controlsHovered.value = false
+}
+
+const activeControls = reactive(new Set(['people']))
+
+async function toggleSidePanel(panel) {
+  const nextPanel = sidePanel.value === panel ? '' : panel
+  sidePanel.value = nextPanel
+  activeControls.delete('people')
+  activeControls.delete('chat')
+  if (nextPanel) activeControls.add(nextPanel === 'participants' ? 'people' : 'chat')
+
+  if (nextPanel !== 'participants') showInvitePanel.value = false
+}
 const messagePlaceholder = computed(() => {
   if (activeTab.value === 'chat') return '메시지를 입력하세요...'
   if (!activeContact.value) return '대화 상대를 선택하세요...'
@@ -603,7 +656,7 @@ async function toggleParticipantMic(participant) {
 
 async function handleControl(id) {
   if (id === 'people') {
-    modal.value = 'participants'
+    await toggleSidePanel('participants')
     return
   }
   if (id === 'more') {
@@ -617,9 +670,7 @@ async function handleControl(id) {
     return
   }
   if (id === 'chat') {
-    isChatPanelOpen.value = !isChatPanelOpen.value
-    if (isChatPanelOpen.value) activeControls.add('chat')
-    else activeControls.delete('chat')
+    await toggleSidePanel('chat')
     return
   }
   const deviceByControl = {
@@ -665,10 +716,58 @@ async function exitMeeting() {
   }
 }
 
-function closeParticipantsModal() {
-  if (transferringHostId.value) return
-  pendingHostTransfer.value = null
-  modal.value = ''
+async function searchMeetingInviteCandidates() {
+  if (!isHost.value || loadingInviteCandidates.value) return
+  loadingInviteCandidates.value = true
+  try {
+    await boardStore.loadMeetingInviteCandidates(
+      meetingId.value,
+      meetingInviteKeyword.value
+    )
+    hasSearchedInviteCandidates.value = true
+  } catch (error) {
+    notify(error?.message || '초대 가능한 팀원을 조회하지 못했습니다.')
+  } finally {
+    loadingInviteCandidates.value = false
+  }
+}
+
+async function toggleInvitePanel() {
+  showInvitePanel.value = !showInvitePanel.value
+  if (showInvitePanel.value && !hasSearchedInviteCandidates.value) {
+    await searchMeetingInviteCandidates()
+  }
+}
+
+async function inviteMeetingCandidate(candidate) {
+  if (!candidate?.userId || invitingUserId.value) return
+  invitingUserId.value = candidate.userId
+  try {
+    await boardStore.inviteMeetingMember(meetingId.value, candidate.userId)
+    notify(`${candidate.name} 님을 회의에 초대했습니다.`)
+  } catch (error) {
+    notify(error?.message || '회의 초대에 실패했습니다.')
+  } finally {
+    invitingUserId.value = null
+  }
+}
+
+async function kickMeetingParticipant(participant) {
+  if (!participant?.participantId || kickingParticipantId.value) return
+  if (!window.confirm(`${participant.displayName} 님을 회의에서 강퇴할까요?`)) return
+
+  kickingParticipantId.value = participant.id
+  try {
+    await boardStore.kickMeetingParticipant(
+      meetingId.value,
+      participant.participantId
+    )
+    notify(`${participant.displayName} 님을 회의에서 강퇴했습니다.`)
+  } catch (error) {
+    notify(error?.message || '참가자를 강퇴하지 못했습니다.')
+  } finally {
+    kickingParticipantId.value = ''
+  }
 }
 
 function skipEntryDeviceSetup() {
@@ -767,8 +866,71 @@ async function send() {
 }
 
 .meeting-room {
+  position: relative;
+  isolation: isolate;
   font-weight: 400;
   letter-spacing: -0.01em;
+  --meeting-surface: rgba(27, 28, 32, 0.9);
+  --meeting-surface-strong: rgba(20, 21, 25, 0.96);
+  --meeting-border: rgba(255, 255, 255, 0.045);
+  --meeting-muted: #a7a9b2;
+  background:
+    radial-gradient(circle at 48% -20%, rgba(255, 255, 255, 0.055), transparent 42%),
+    linear-gradient(145deg, #18191d 0%, #0d0e11 100%) !important;
+}
+
+.meeting-top,
+.meeting-content {
+  position: relative;
+  z-index: 1;
+}
+
+.meeting-top {
+  height: 58px !important;
+  padding: 0 20px 0 24px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 0 !important;
+  background: rgba(17, 18, 21, 0.88) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.meeting-title-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-title-block h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 17px !important;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.meeting-top-actions {
+  gap: 10px !important;
+}
+
+.meeting-top-actions > button {
+  height: 38px !important;
+  border-color: rgba(255, 255, 255, 0.055) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.meeting-top-actions > button:hover {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.075) !important;
+}
+
+.meeting-content {
+  height: calc(100vh - 58px) !important;
+  grid-template-columns: minmax(0, 1fr) minmax(292px, 326px) !important;
+  gap: 14px !important;
+  padding: 14px !important;
 }
 
 .meeting-content.chat-closed {
@@ -776,9 +938,17 @@ async function send() {
 }
 
 .connection-status {
-  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  margin-left: 0;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
   color: #b9c4d8;
-  font-size: 11px;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .vad-status {
@@ -805,21 +975,25 @@ async function send() {
   position: relative;
   min-width: 0;
   min-height: 0;
-  padding: 12px;
-  border: 1.5px solid rgba(222, 232, 250, 0.82);
-  border-radius: 20px;
+  padding: 14px;
+  border: 1px solid var(--meeting-border);
+  border-radius: 22px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(68, 104, 170, 0.2), transparent 52%),
-    rgba(6, 24, 53, 0.48);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 12px 32px rgba(3, 14, 35, 0.2);
+    radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.045), transparent 48%),
+    linear-gradient(145deg, rgba(27, 28, 32, 0.92), rgba(13, 14, 17, 0.88));
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
 
 .video-grid.layout-single {
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
+  place-items: center;
+}
+
+.video-grid.layout-single .video-tile {
+  width: min(100%, 1120px);
+  height: min(100%, 680px);
 }
 
 .video-grid.layout-two {
@@ -854,21 +1028,29 @@ async function send() {
 .video-tile {
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(221, 231, 248, 0.42);
-  box-shadow: 0 8px 24px rgba(2, 11, 29, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  border-radius: 18px !important;
+  background: linear-gradient(145deg, #303136, #1b1c21) !important;
+  box-shadow: 0 12px 30px rgba(2, 10, 27, 0.28);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.video-tile:hover {
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
 .video-tile.is-speaking {
-  box-shadow: 0 0 0 3px #5ce2a4;
+  border-color: #64e2aa;
+  box-shadow: 0 0 0 2px rgba(100, 226, 170, 0.68), 0 14px 32px rgba(2, 10, 27, 0.3);
 }
 
 .video-tile.is-pinned {
-  border-color: #8aa0ff;
-  box-shadow: 0 0 0 2px rgba(116, 140, 255, 0.72);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16), 0 14px 32px rgba(0, 0, 0, 0.32);
 }
 
 .video-tile.is-screen-share {
-  background: #07162f;
+  background: #111216 !important;
 }
 
 .video-pagination {
@@ -880,9 +1062,9 @@ async function send() {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border: 1px solid rgba(226, 235, 250, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: rgba(7, 20, 43, 0.82);
+  background: rgba(22, 23, 27, 0.9);
   color: #fff;
   box-shadow: 0 8px 20px rgba(1, 8, 22, 0.28);
   transform: translateX(-50%);
@@ -897,8 +1079,8 @@ async function send() {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: #fff;
-  color: #172d52;
+  background: #303137;
+  color: #f0f0f2;
   font-size: 22px;
   line-height: 1;
 }
@@ -947,14 +1129,654 @@ async function send() {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #6e84f5;
+  background: #3b3c42;
   color: #fff;
   font-size: 12px;
   font-style: normal;
 }
 
+.participant-badge {
+  left: 14px !important;
+  bottom: 14px !important;
+  min-height: 34px;
+  padding: 5px 11px 5px 7px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px !important;
+  background: rgba(17, 18, 21, 0.76) !important;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.controls {
+  min-width: 0;
+  padding: 6px 16px !important;
+  gap: 12px !important;
+  border: 1px solid var(--meeting-border) !important;
+  border-radius: 18px !important;
+  background: var(--meeting-surface) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(18px);
+  transition: min-height 180ms ease, transform 180ms ease, opacity 180ms ease;
+}
+
+.video-column {
+  transition: grid-template-rows 180ms ease;
+}
+
+.video-column.controls-collapsed {
+  grid-template-rows: minmax(0, 1fr) 14px !important;
+  gap: 4px;
+}
+
+.controls-collapse-handle {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  z-index: 5;
+  display: grid !important;
+  place-items: center;
+  width: 76px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.055) !important;
+  border-bottom: 0 !important;
+  border-radius: 9px 9px 0 0 !important;
+  background: var(--meeting-surface) !important;
+  color: #aeb0b8 !important;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+.controls-collapse-handle::after {
+  position: absolute;
+  right: -1px;
+  bottom: -2px;
+  left: -1px;
+  height: 3px;
+  background: #1b1c20;
+  content: '';
+}
+
+.controls-collapse-handle:hover {
+  color: #fff !important;
+  background: #25262b !important;
+}
+
+.controls-collapse-handle span {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.controls-collapse-handle span::before {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  clip-path: polygon(20% 2%, 80% 2%, 70% 34%, 100% 55%, 58% 55%, 52% 100%, 42% 55%, 0 55%, 30% 34%);
+  content: '';
+  transform: rotate(45deg) scale(0.88);
+  transition: transform 160ms ease;
+}
+
+.controls-collapse-handle span::after {
+  position: absolute;
+  top: 7px;
+  left: -1px;
+  width: 18px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+  transform: rotate(-45deg);
+  transition: opacity 160ms ease;
+}
+
+.controls-collapse-handle.is-collapsed span::before {
+  transform: rotate(0deg) scale(0.88);
+}
+
+.controls-collapse-handle.is-collapsed span::after {
+  opacity: 0;
+}
+
+.controls.collapsed {
+  min-height: 14px;
+  padding: 0 !important;
+  border-color: transparent !important;
+  background: rgba(20, 21, 24, 0.58) !important;
+  box-shadow: none;
+}
+
+.controls.collapsed > :not(.controls-collapse-handle) {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.meeting-agenda {
+  min-width: 0;
+  max-width: 210px;
+  overflow: hidden;
+  color: #aab9d5 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-items {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.controls .meeting-control {
+  width: 44px !important;
+  height: 54px !important;
+  border-radius: 11px !important;
+  transition: transform 160ms ease, background 160ms ease !important;
+}
+
+.controls .meeting-control:hover {
+  background: rgba(255, 255, 255, 0.045) !important;
+  transform: translateY(-2px);
+}
+
+.controls .meeting-control > span {
+  border-color: rgba(255, 255, 255, 0.055) !important;
+  background: #292a2f !important;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.16);
+}
+
+.controls .meeting-control > span img {
+  filter: brightness(0) invert(0.82) !important;
+}
+
+.controls .meeting-control small {
+  color: #8f9199 !important;
+}
+
+.controls .meeting-control.active > span,
+.controls .meeting-control.primary > span {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: #3a3b41 !important;
+}
+
+.controls .meeting-control.active > span img,
+.controls .meeting-control.primary > span img {
+  filter: brightness(0) invert(1) !important;
+}
+
+.controls .meeting-control.active small,
+.controls .meeting-control.primary small {
+  color: #e2e3e7 !important;
+}
+
+.controls .hangup {
+  width: 72px !important;
+  border-radius: 12px !important;
+  background: #a92f35 !important;
+  box-shadow: 0 8px 18px rgba(93, 12, 16, 0.22);
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.controls .hangup:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+.chat-panel {
+  grid-template-rows: 62px minmax(0, 1fr) 94px !important;
+  border: 1px solid var(--meeting-border) !important;
+  border-radius: 20px !important;
+  background: var(--meeting-surface-strong) !important;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.participants-panel {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto !important;
+  overflow: hidden;
+}
+
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 12px;
+}
+
+.side-panel-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.side-panel-header small {
+  color: #858892;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.side-panel-header h2 {
+  margin: 0;
+  color: #f5f5f6;
+  font-size: 18px;
+}
+
+.side-panel-header > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d9dade;
+  font-size: 22px;
+}
+
+.participants-panel .meeting-invite-section {
+  margin: 0 14px 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.meeting-invite-trigger {
+  justify-self: start;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 999px;
+  background: transparent;
+  color: #f0f0f2;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.meeting-invite-trigger:hover,
+.meeting-invite-trigger[aria-expanded='true'] {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.meeting-invite-trigger span {
+  margin-right: 5px;
+  font-size: 15px;
+}
+
+.meeting-invite-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.participants-panel .meeting-invite-section input {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.participants-panel .meeting-invite-section input::placeholder {
+  color: #858892;
+}
+
+.participants-panel .meeting-invite-section form button,
+.participants-panel .meeting-invite-results button {
+  border-color: #4a4b51;
+  background: #3a3b40;
+}
+
+.participants-panel .meeting-invite-results article {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.participants-panel .meeting-invite-results span b {
+  color: #f2f2f4;
+}
+
+.participant-list-heading {
+  padding: 4px 18px 8px;
+  color: #e8e8eb;
+  font-size: 14px;
+}
+
+.side-participant-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  padding: 4px 14px 16px;
+  overflow-y: auto;
+}
+
+.side-participant-list > article {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.side-participant-list > article > i {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: #3a3b40;
+  color: #fff;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.side-participant-list > article > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.side-participant-list > article > span b {
+  overflow: hidden;
+  color: #f1f1f3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-participant-list > article > span small {
+  color: #92949c;
+}
+
+.side-participant-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.side-participant-actions button {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d9dade;
+  font-size: 9px;
+}
+
+.side-participant-actions button.danger {
+  color: #e39a9a;
+}
+
+.side-transfer-confirm {
+  margin: 0 14px 14px;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #24252a;
+}
+
+.side-transfer-confirm b {
+  color: #f0f0f2;
+}
+
+.chat-tabs {
+  gap: 6px;
+  margin: 10px;
+  padding: 4px;
+  border: 0 !important;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.chat-tabs button {
+  border: 0 !important;
+  border-radius: 9px;
+  background: transparent !important;
+  color: #9eafd0 !important;
+  font-size: 11px;
+  font-weight: 700;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.chat-tabs button.active {
+  border: 0 !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+}
+
+.messages {
+  padding: 18px 16px !important;
+}
+
+.messages article b {
+  color: #e9efff;
+}
+
+.messages p {
+  line-height: 1.5;
+  box-shadow: 0 6px 16px rgba(2, 10, 27, 0.12);
+}
+
+.chat-empty-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  min-height: 100%;
+  color: #d8e1f5;
+  text-align: center;
+}
+
+.chat-empty-state i {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 5px;
+  border: 1px solid rgba(147, 169, 216, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 20px;
+  font-style: normal;
+}
+
+.chat-empty-state b {
+  font-size: 12px;
+}
+
+.chat-empty-state small {
+  color: #92949c;
+  font-size: 9px;
+}
+
+.meeting-pin {
+  background: #34353a !important;
+  color: #f2f2f4 !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28) !important;
+}
+
+.meeting-pin:hover {
+  background: #45464c !important;
+}
+
+.meeting-pin.is-pinned {
+  background: #202126 !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 7px 16px rgba(0, 0, 0, 0.34) !important;
+}
+
+.direct-contact i {
+  background: #3a3b40 !important;
+  color: #fff;
+}
+
+.direct-conversation article.me p,
+.messages article.me p {
+  background: #3a3b40 !important;
+  color: #fff !important;
+}
+
+.chat-input {
+  align-self: center;
+  min-height: 54px;
+  margin: 12px !important;
+  padding: 8px 9px 8px 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 10px 24px rgba(1, 8, 22, 0.2);
+}
+
+.chat-input button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px !important;
+  background: #303137 !important;
+  color: #fff !important;
+}
+
+.chat-input button:disabled {
+  background: #e2e3e6 !important;
+  color: #9a9ca3 !important;
+}
+
+@media (max-width: 1080px) {
+  .meeting-content {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 292px) !important;
+    padding: 10px !important;
+  }
+
+  .meeting-agenda {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .meeting-content {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .chat-panel {
+    position: absolute;
+    inset: 78px 10px 10px auto;
+    z-index: 20;
+    width: min(360px, calc(100vw - 20px));
+  }
+
+  .meeting-help b,
+  .participant-count > b {
+    display: none;
+  }
+}
+
 :deep(.meeting-info-modal) {
   width: min(520px, calc(100vw - 32px));
+}
+
+:deep(.meeting-info-modal > small) {
+  color: #55565d !important;
+}
+
+.meeting-invite-section {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #dedfe3;
+  border-radius: 14px;
+  background: #f6f6f7;
+}
+
+.meeting-invite-section form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.meeting-invite-section input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 13px;
+  border: 1px solid #d4d5da;
+  border-radius: 10px;
+  background: #fff;
+  color: #202126;
+}
+
+.meeting-invite-section form button,
+.meeting-invite-results button {
+  height: 40px;
+  padding: 0 15px;
+  border: 1px solid #38393f;
+  border-radius: 10px;
+  background: #38393f;
+  color: #fff;
+  font-weight: 700;
+}
+
+.meeting-invite-section button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.meeting-invite-results {
+  display: grid;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.meeting-invite-results article {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.meeting-invite-results i {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: #e6e7ea;
+  color: #33343a;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.meeting-invite-results span {
+  display: grid;
+  min-width: 0;
+}
+
+.meeting-invite-results small {
+  overflow: hidden;
+  color: #727987;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meeting-invite-results button {
+  height: 34px;
+}
+
+.meeting-invite-empty {
+  margin: 0;
+  color: #777d88;
+  font-size: 12px;
+  text-align: center;
 }
 
 .meeting-member-list {
@@ -972,8 +1794,8 @@ async function send() {
 }
 
 .meeting-member-row.is-host {
-  border-color: #cad5ff;
-  background: #eef2ff !important;
+  border-color: #d4d5d9;
+  background: #f2f2f3 !important;
 }
 
 .participant-role {
@@ -988,27 +1810,48 @@ async function send() {
 }
 
 .meeting-member-row.is-host .participant-role {
-  background: #d9e1ff;
-  color: #4059d6 !important;
+  background: #dfe0e3;
+  color: #35363b !important;
+}
+
+.participant-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .transfer-host-button {
   min-width: 86px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #6178e8;
+  border: 1px solid #55565d;
   border-radius: 8px;
   background: #fff;
-  color: #4059d6;
+  color: #35363b;
   font-size: 10px;
   font-weight: 700;
 }
 
 .transfer-host-button:hover:not(:disabled) {
-  background: #edf1ff;
+  background: #ededee;
+}
+
+.kick-participant-button {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d3b7b7;
+  border-radius: 8px;
+  background: #fff;
+  color: #a04444;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.kick-participant-button:hover:not(:disabled) {
+  background: #f8eeee;
 }
 
 .transfer-host-button:disabled,
+.kick-participant-button:disabled,
 .host-transfer-confirm button:disabled {
   cursor: wait;
   opacity: 0.55;
@@ -1019,9 +1862,9 @@ async function send() {
   gap: 14px;
   margin-top: 16px;
   padding: 16px;
-  border: 1px solid #cfd8ff;
+  border: 1px solid #d5d6da;
   border-radius: 12px;
-  background: #f5f7ff;
+  background: #f5f5f6;
 }
 
 .host-transfer-confirm > div {
@@ -1052,8 +1895,8 @@ async function send() {
 }
 
 .host-transfer-confirm .confirm-transfer-button {
-  border-color: #536be0;
-  background: #536be0;
+  border-color: #303137;
+  background: #303137;
   color: #fff;
 }
 
@@ -1084,8 +1927,13 @@ async function send() {
 }
 
 .device-setup-options > button.selected {
-  border-color: #7188ff;
-  background: #eef2ff;
+  border-color: #55565d;
+  background: #eeeeef;
+}
+
+.meeting-member-row > i {
+  background: #3a3b40 !important;
+  color: #fff !important;
 }
 
 .device-setup-options i {
@@ -1094,8 +1942,8 @@ async function send() {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: #e5eaff;
-  color: #4059d6;
+  background: #dedfe2;
+  color: #35363b;
   font-size: 18px;
   font-style: normal;
 }
@@ -1119,7 +1967,7 @@ async function send() {
 }
 
 .device-setup-options .selected em {
-  color: #4059d6;
+  color: #292a2f;
 }
 
 .device-setup-actions {
@@ -1141,14 +1989,38 @@ async function send() {
 }
 
 .device-setup-actions .enable-entry-devices {
-  border-color: #536be0;
-  background: #536be0;
+  border-color: #303137;
+  background: #303137;
   color: #fff;
 }
 
 .device-setup-actions button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.meeting-more-menu {
+  border-color: #d7d7da !important;
+  color: #24252a !important;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.2) !important;
+}
+
+.meeting-more-menu > button {
+  color: #303137 !important;
+}
+
+.meeting-more-menu > button:hover,
+.meeting-more-menu > button.enabled {
+  background: #f0f0f1 !important;
+}
+
+.meeting-more-menu > button > i {
+  background: #dedfe2 !important;
+  color: #35363b !important;
+}
+
+.meeting-more-menu > button > em {
+  color: #35363b !important;
 }
 
 .meeting-room:fullscreen {
