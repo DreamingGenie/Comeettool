@@ -4,7 +4,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import com.ssafy.backend.meeting.service.MeetingTranscriptionStartProcessor;
+import com.ssafy.backend.meeting.service.MeetingTranscriptionProcessor;
 
 import lombok.RequiredArgsConstructor;
 
@@ -12,15 +12,25 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class MeetingTranscriptionEventListener {
 
-    private final MeetingTranscriptionStartProcessor transcriptionStartProcessor;
+    private final MeetingTranscriptionProcessor transcriptionProcessor;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleMeetingTranscriptionStarted(
             MeetingTranscriptionStartedEvent event
     ) {
-        transcriptionStartProcessor.startTranscription(
+        transcriptionProcessor.startTranscription(
                 event.meetingId(),
                 event.startedAt()
+        );
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleMeetingTranscriptionEnded(
+            MeetingTranscriptionEndedEvent event
+    ) {
+        transcriptionProcessor.endTranscription(
+                event.meetingId(),
+                event.endedAt()
         );
     }
 }

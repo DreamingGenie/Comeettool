@@ -40,6 +40,7 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
+import com.ssafy.backend.meeting.event.MeetingTranscriptionEndedEvent;
 import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
@@ -1039,7 +1040,7 @@ class MeetingServiceImplTest {
     }
 
     @Test
-    @DisplayName("호스트가 회의를 종료하면 LiveKit 방과 모든 참여자 상태를 정리한다")
+    @DisplayName("호스트가 회의를 종료하면 상태를 정리하고 AI 종료 이벤트를 발행한다")
     void endMeeting_endsLiveKitRoomAndSoftDeletesMeeting() {
         MeetingRoom savedMeetingRoom = createSavedMeetingRoom();
         given(meetingRoomRepository.findActiveByIdForUpdate(MEETING_ID))
@@ -1051,6 +1052,20 @@ class MeetingServiceImplTest {
         assertThat(savedMeetingRoom.getDeletedAt()).isNotNull();
         verify(liveKitRoomManager).endRoom(MEETING_ID);
         verify(participantRepository).leaveAllByMeetingRoomId(MEETING_ID);
+
+        ArgumentCaptor<MeetingTranscriptionEndedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        MeetingTranscriptionEndedEvent.class
+                );
+        verify(applicationEventPublisher)
+                .publishEvent(eventCaptor.capture());
+
+        MeetingTranscriptionEndedEvent event = eventCaptor.getValue();
+        assertThat(event.meetingId()).isEqualTo(MEETING_ID);
+        assertThat(event.endedAt()).isEqualTo(
+                savedMeetingRoom.getDeletedAt()
+                        .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        );
     }
 
     @Test
@@ -1070,6 +1085,8 @@ class MeetingServiceImplTest {
 
         assertThat(savedMeetingRoom.isDeleted()).isFalse();
         verifyNoInteractions(liveKitRoomManager, participantRepository);
+        verify(applicationEventPublisher, never())
+                .publishEvent(any(MeetingTranscriptionEndedEvent.class));
     }
 
     @Test
@@ -1087,6 +1104,8 @@ class MeetingServiceImplTest {
         );
 
         verifyNoInteractions(liveKitRoomManager, participantRepository);
+        verify(applicationEventPublisher, never())
+                .publishEvent(any(MeetingTranscriptionEndedEvent.class));
     }
 
     @Test
@@ -1110,6 +1129,8 @@ class MeetingServiceImplTest {
         assertThat(savedMeetingRoom.isDeleted()).isFalse();
         verify(participantRepository, never())
                 .leaveAllByMeetingRoomId(MEETING_ID);
+        verify(applicationEventPublisher, never())
+                .publishEvent(any(MeetingTranscriptionEndedEvent.class));
     }
 
     @Test
