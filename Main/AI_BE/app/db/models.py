@@ -11,11 +11,23 @@ schema.py(MeetingMinutes)/schema_facilitator.py(FacilitatorReport)의 필드 구
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
+
+# meeting_rooms는 Main Backend(Java/JPA)가 소유·마이그레이션하는 테이블이다.
+# AI_BE는 이 테이블을 만들거나 매핑 클래스로 관리하지 않고, FK 대상 해석용으로만
+# PK 컬럼 하나짜리 Table을 같은 MetaData에 등록해둔다(등록해야 SQLAlchemy가
+# ForeignKey("meeting_rooms.meeting_room_id")를 resolve해서 flush 순서를 계산할 수 있음).
+# create_all()은 checkfirst=True라 이미 존재하는 테이블은 건드리지 않는다 - 단,
+# Main Backend 마이그레이션이 AI_BE 기동보다 먼저 적용되어 있어야 한다.
+meeting_rooms = Table(
+    "meeting_rooms",
+    Base.metadata,
+    Column("meeting_room_id", BigInteger, primary_key=True),
+)
 
 
 class ProcessingJob(Base):
