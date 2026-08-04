@@ -16,19 +16,36 @@
         class="day"
         :class="{
           muted: day < 1 || day > calendar.totalDays,
-          'has-events': day > 0 && day <= calendar.totalDays && eventsFor(day).length
+          'has-events': day > 0 && day <= calendar.totalDays && eventsFor(day).length,
+          'segment-origin': day > 0 && day <= calendar.totalDays && segmentsFor(day).length
         }"
       >
         <template v-if="day > 0 && day <= calendar.totalDays">
           <span class="day-number">{{ day }}</span>
-          <span
-            v-for="event in eventsFor(day)"
-            :key="event.id || `${day}-${event.title}`"
-            class="event"
-            :class="event.tone === 'default' ? '' : event.tone"
+          <button
+            v-if="editable"
+            class="add-event"
+            type="button"
+            :aria-label="`${calendar.month}월 ${day}일 일정 추가`"
+            @click.stop="$emit('select-date', day)"
           >
-            {{ event.title }}
-          </span>
+            ＋
+          </button>
+          <button
+            v-for="segment in segmentsFor(day)"
+            :key="`${segment.event.id || segment.event.title}-${segment.startDay}`"
+            class="event"
+            :class="[
+              segment.event.tone === 'default' ? '' : segment.event.tone,
+              { 'continues-before': segment.continuesBefore, 'continues-after': segment.continuesAfter }
+            ]"
+            :style="{ width: `calc(${segment.span * 100}% + ${(segment.span - 1) * 12.8}px)` }"
+            type="button"
+            :disabled="!editable"
+            @click.stop="$emit('select-event', segment.event)"
+          >
+            {{ segment.event.title }}
+          </button>
         </template>
       </div>
     </div>
@@ -50,10 +67,11 @@ const props = defineProps({
       events: []
     })
   },
-  title: { type: String, default: '팀 일정' }
+  title: { type: String, default: '팀 일정' },
+  editable: { type: Boolean, default: false }
 })
 
-defineEmits(['change-month'])
+defineEmits(['change-month', 'select-date', 'select-event'])
 
 const days = computed(() => {
   const count = Math.ceil(
@@ -66,6 +84,55 @@ const days = computed(() => {
 })
 
 const eventsFor = day => props.calendar.events.filter(event => event.day === day)
+
+const toValidDate = value => {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const eventSegments = computed(() => {
+  const year = props.calendar.year
+  const monthIndex = props.calendar.month - 1
+  const monthStart = new Date(year, monthIndex, 1)
+  const monthEnd = new Date(year, monthIndex, props.calendar.totalDays, 23, 59, 59, 999)
+
+  return props.calendar.events.flatMap(event => {
+    let start = toValidDate(event.startTime || event.startAt || event.date)
+    let end = toValidDate(event.endTime || event.endAt) || start
+
+    if (!start) {
+      const day = Number(event.day)
+      if (!Number.isInteger(day)) return []
+      start = new Date(year, monthIndex, day)
+      end = start
+    }
+
+    if (end < monthStart || start > monthEnd) return []
+    const visibleStart = start < monthStart ? monthStart : start
+    const visibleEnd = end > monthEnd ? monthEnd : end
+    let startDay = visibleStart.getDate()
+    const endDay = visibleEnd.getDate()
+    const segments = []
+
+    while (startDay <= endDay) {
+      const weekday = new Date(year, monthIndex, startDay).getDay()
+      const segmentEnd = Math.min(endDay, startDay + (6 - weekday))
+      segments.push({
+        event,
+        startDay,
+        span: segmentEnd - startDay + 1,
+        continuesBefore: startDay > visibleStart.getDate() || start < monthStart,
+        continuesAfter: segmentEnd < endDay || end > monthEnd
+      })
+      startDay = segmentEnd + 1
+    }
+
+    return segments
+  })
+})
+
+const segmentsFor = day => eventSegments.value.filter(segment => segment.startDay === day)
 </script>
 
 <style scoped>
@@ -179,6 +246,48 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
   transform: scale(1.08);
 }
 
+.day.segment-origin {
+  z-index: 2;
+  overflow: visible;
+}
+
+.day.segment-origin:hover {
+  z-index: 3;
+}
+
+.add-event {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #7086e8;
+  border-radius: 50%;
+  background: #7086e8;
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(-3px) scale(0.9);
+  transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.day:not(.muted):hover .add-event,
+.day:not(.muted):focus-within .add-event {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.add-event:hover,
+.add-event:focus-visible {
+  box-shadow: 0 5px 12px #4059ca45;
+  outline: none;
+}
+
 .day.has-events .day-number {
   color: #5870dc;
   font-weight: 700;
@@ -190,12 +299,30 @@ const eventsFor = day => props.calendar.events.filter(event => event.day === day
 
 .event {
   position: relative;
+  width: 100%;
+  border: 0;
   overflow: hidden;
+  text-align: left;
+  cursor: pointer;
   transform-origin: center;
   transition:
     filter 0.18s ease,
     box-shadow 0.18s ease,
     transform 0.18s ease;
+}
+
+.event.continues-before {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.event.continues-after {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.event:disabled {
+  cursor: default;
 }
 
 .event::after {
