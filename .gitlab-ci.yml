@@ -13,6 +13,8 @@ stages:
   - build
   - security
   - oidc-verify
+  - package
+  - release
 
 default:
   tags:
@@ -46,6 +48,8 @@ variables:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
         - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
     - when: never
 
 backend:verify:
@@ -159,6 +163,8 @@ migration:verify:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
         - Main/Frontend/**/*
     - when: never
 
@@ -176,6 +182,8 @@ frontend:verify:
     VITE_USE_MOCK_SPACE_API: "false"
     VITE_USE_MOCK_DOCUMENT_API: "false"
     VITE_USE_MOCK_MEETING_API: "false"
+    VITE_USE_MOCK_SCHEDULE_API: "false"
+    VITE_USE_MOCK_NOTIFICATION_API: "false"
     VITE_USE_MOCK_PASSWORD_RESET_API: "false"
     VITE_USE_MOCK_USER_WITHDRAW_API: "false"
     VITE_USE_MOCK_USER_SEARCH_API: "false"
@@ -193,7 +201,7 @@ frontend:verify:
     - npm ci --prefer-offline --no-audit
   script:
     - npm run format:check
-    - npm run build
+    - npm run build -- --outDir dist
   artifacts:
     expire_in: 7 days
     paths:
@@ -217,8 +225,9 @@ frontend:verify:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
+        - Main/Backend/**/*
         - Main/Backend-Yjs/**/*
-        - Main/Backend/src/main/resources/db/migration/**/*
+        - Main/Frontend/**/*
     - when: never
 
 yjs:verify:
@@ -391,39 +400,125 @@ oidc:verify-aws:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: never
   script:
-    - |
-      set -eu
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+    - echo "GitLab OIDC to AWS STS authentication succeeded."
 
-      if [ -z "${AWS_OIDC_ROLE_ARN:-}" ]; then
-        echo "AWS_OIDC_ROLE_ARN is not configured."
-        exit 1
-      fi
+production:package-images:
+  stage: package
+  image:
+    name: quay.io/buildah/stable:v1.42.2
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  variables:
+    STORAGE_DRIVER: "vfs"
+    BUILDAH_FORMAT: "docker"
+    BUILDAH_ISOLATION: "chroot"
+    AWS_OIDC_DURATION_SECONDS: "3600"
+  environment:
+    name: production
+    action: prepare
+  interruptible: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+      when: manual
+      allow_failure: false
+    - when: never
+  before_script:
+    - dnf install --assumeyes --quiet awscli2 jq >/dev/null
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+  script:
+    - sh .gitlab/ci/scripts/package-container-images.sh
+  timeout: 60 minutes
 
-      if [ -z "${GITLAB_OIDC_TOKEN:-}" ]; then
-        echo "GitLab OIDC ID token was not issued."
-        exit 1
-      fi
+production:package-frontend:
+  stage: package
+  image:
+    name: node:22-alpine
+  variables:
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm-cache/frontend-production"
+    VITE_USE_MOCK_API: "false"
+    VITE_USE_MOCK_AUTH_API: "false"
+    VITE_USE_MOCK_USER_API: "false"
+    VITE_USE_MOCK_BOARD_API: "false"
+    VITE_USE_MOCK_SPACE_API: "false"
+    VITE_USE_MOCK_DOCUMENT_API: "false"
+    VITE_USE_MOCK_MEETING_API: "false"
+    VITE_USE_MOCK_SCHEDULE_API: "false"
+    VITE_USE_MOCK_NOTIFICATION_API: "false"
+    VITE_USE_MOCK_PASSWORD_RESET_API: "false"
+    VITE_USE_MOCK_USER_WITHDRAW_API: "false"
+    VITE_USE_MOCK_USER_SEARCH_API: "false"
+    VITE_API_BASE_URL: "$DEPLOY_API_BASE_URL"
+    VITE_YJS_WEBSOCKET_URL: "$DEPLOY_YJS_WEBSOCKET_URL"
+  environment:
+    name: production
+    action: prepare
+  interruptible: false
+  needs:
+    - job: production:package-images
+      artifacts: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+  before_script:
+    - sh .gitlab/ci/scripts/validate-production-inputs.sh frontend
+    - cd Main/Frontend
+    - npm ci --prefer-offline --no-audit
+  script:
+    - npm run build -- --outDir dist
+  artifacts:
+    name: "production-frontend-${CI_COMMIT_SHORT_SHA}"
+    expire_in: 1 day
+    paths:
+      - Main/Frontend/dist/
 
-      aws_sts_output="$(
-        aws sts assume-role-with-web-identity \
-          --role-arn "${AWS_OIDC_ROLE_ARN}" \
-          --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
-          --web-identity-token "${GITLAB_OIDC_TOKEN}" \
-          --duration-seconds 900 \
-          --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
-          --output text
-      )"
-
-      set -- ${aws_sts_output}
-      if [ "$#" -ne 3 ]; then
-        echo "AWS STS did not return the expected temporary credentials."
-        exit 1
-      fi
-
-      export AWS_ACCESS_KEY_ID="$1"
-      export AWS_SECRET_ACCESS_KEY="$2"
-      export AWS_SESSION_TOKEN="$3"
-      unset aws_sts_output GITLAB_OIDC_TOKEN
-
-      aws sts get-caller-identity >/dev/null
-      echo "GitLab OIDC to AWS STS authentication succeeded."
+production:release:
+  stage: release
+  image:
+    name: amazon/aws-cli:2.27.49
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  variables:
+    AWS_OIDC_DURATION_SECONDS: "3600"
+  environment:
+    name: production
+    url: "$DEPLOY_FRONTEND_URL"
+    deployment_tier: production
+  resource_group: production
+  interruptible: false
+  needs:
+    - job: production:package-images
+      artifacts: false
+    - job: production:package-frontend
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+  before_script:
+    - yum install --assumeyes --quiet jq >/dev/null
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+  script:
+    - sh .gitlab/ci/scripts/production-release.sh
+  timeout: 60 minutes
