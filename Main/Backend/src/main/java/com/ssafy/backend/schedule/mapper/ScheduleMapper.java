@@ -22,7 +22,8 @@ public class ScheduleMapper {
                 schedule.getDescription(),
                 schedule.getStartTime(),
                 schedule.getEndTime(),
-                schedule.getUserIdArr()
+                schedule.getUserIdArr(),
+                schedule.getColor()
         );
     }
 

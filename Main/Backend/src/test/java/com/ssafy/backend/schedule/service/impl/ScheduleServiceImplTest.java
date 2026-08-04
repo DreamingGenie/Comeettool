@@ -122,7 +122,7 @@ class ScheduleServiceImplTest {
     class AddSchedule {
 
         private RequestCreateScheduleDto request(List<Long> userIdArr, OffsetDateTime start, OffsetDateTime end) {
-            return new RequestCreateScheduleDto("회의", "제목", "설명", start, end, userIdArr);
+            return new RequestCreateScheduleDto("회의", "제목", "설명", start, end, userIdArr, null);
         }
 
         @Test
@@ -164,6 +164,34 @@ class ScheduleServiceImplTest {
         }
 
         @Test
+        @DisplayName("색상 미지정 시 기본색(#566FEA)으로 저장한다")
+        void defaultsColor() {
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, USER_ID)).willReturn(true);
+            given(scheduleRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+
+            scheduleService.addSchedule(USER_ID, SPACE_ID, request(null, null, null));
+
+            ArgumentCaptor<Schedule> captor = ArgumentCaptor.forClass(Schedule.class);
+            verify(scheduleRepository).save(captor.capture());
+            assertThat(captor.getValue().getColor()).isEqualTo("#566FEA");
+        }
+
+        @Test
+        @DisplayName("색상을 지정하면 그대로 저장한다")
+        void keepsProvidedColor() {
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, USER_ID)).willReturn(true);
+            given(scheduleRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+
+            RequestCreateScheduleDto req =
+                    new RequestCreateScheduleDto("회의", "제목", "설명", null, null, null, "#FF0000");
+            scheduleService.addSchedule(USER_ID, SPACE_ID, req);
+
+            ArgumentCaptor<Schedule> captor = ArgumentCaptor.forClass(Schedule.class);
+            verify(scheduleRepository).save(captor.capture());
+            assertThat(captor.getValue().getColor()).isEqualTo("#FF0000");
+        }
+
+        @Test
         @DisplayName("시작이 종료보다 늦으면 VALIDATION_FAILED")
         void rejectsInvalidTimeRange() {
             given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, USER_ID)).willReturn(true);
@@ -182,7 +210,7 @@ class ScheduleServiceImplTest {
     class ModifySchedule {
 
         private RequestUpdateScheduleDto titleUpdate() {
-            return new RequestUpdateScheduleDto(null, "수정된 제목", null, null, null, null);
+            return new RequestUpdateScheduleDto(null, "수정된 제목", null, null, null, null, null);
         }
 
         @Test

@@ -25,6 +25,10 @@ public record RequestCreateScheduleDto(
         OffsetDateTime endTime,
 
         // 참여자 user_id 목록. 미지정(null/빈 배열) 시 생성자만 포함한다.
-        List<Long> userIdArr
+        List<Long> userIdArr,
+
+        // 캘린더 색상(#RRGGBB). 미지정 시 기본색(#566FEA) 적용.
+        @Size(max = 20)
+        String color
 ) {
 }

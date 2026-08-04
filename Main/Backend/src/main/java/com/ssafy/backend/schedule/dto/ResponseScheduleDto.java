@@ -15,6 +15,7 @@ public record ResponseScheduleDto(
         String description,
         OffsetDateTime startTime,
         OffsetDateTime endTime,
-        List<Long> userIdArr
+        List<Long> userIdArr,
+        String color
 ) {
 }
