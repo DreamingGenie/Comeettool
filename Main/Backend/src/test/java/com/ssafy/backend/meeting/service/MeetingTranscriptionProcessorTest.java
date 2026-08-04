@@ -31,6 +31,7 @@ import com.ssafy.backend.meeting.client.AiTranscriptionException;
 import com.ssafy.backend.meeting.client.AiTranscriptionFailureType;
 import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
+import com.ssafy.backend.meeting.vad.VadUploadFlightTracker;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("회의 STT 시작·종료 Processor 테스트")
@@ -44,6 +45,9 @@ class MeetingTranscriptionProcessorTest {
 
     @Mock
     private AiTranscriptionClient aiTranscriptionClient;
+
+    @Mock
+    private VadUploadFlightTracker vadUploadFlightTracker;
 
     @Mock
     private TaskExecutor transcriptionTaskExecutor;
@@ -60,6 +64,7 @@ class MeetingTranscriptionProcessorTest {
     void setUp() {
         processor = new MeetingTranscriptionProcessor(
                 aiTranscriptionClient,
+                vadUploadFlightTracker,
                 transcriptionTaskExecutor,
                 transcriptionRetryScheduler,
                 3,
@@ -95,6 +100,7 @@ class MeetingTranscriptionProcessorTest {
     @DisplayName("회의 종료 작업을 전용 Executor에 제출한다")
     void endTranscription_submitsFirstAttemptToExecutor() {
         captureExecutorTasks();
+        given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
         given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
                 ENDED_AT
@@ -107,11 +113,34 @@ class MeetingTranscriptionProcessorTest {
 
         runNextExecutorTask();
 
+        verify(vadUploadFlightTracker).awaitIdle(MEETING_ID);
         verify(aiTranscriptionClient).endTranscription(
                 MEETING_ID,
                 ENDED_AT
         );
+        verify(vadUploadFlightTracker).clear(MEETING_ID);
         assertThat(retryTasks).isEmpty();
+    }
+
+    @Test
+    @DisplayName("VAD drain timeout이어도 AI 종료 호출을 진행한다")
+    void endTranscription_proceedsAfterDrainTimeout() {
+        captureExecutorTasks();
+        given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(false);
+        given(aiTranscriptionClient.endTranscription(
+                MEETING_ID,
+                ENDED_AT
+        )).willReturn(endSuccessResponse());
+
+        processor.endTranscription(MEETING_ID, ENDED_AT);
+        runNextExecutorTask();
+
+        verify(vadUploadFlightTracker).awaitIdle(MEETING_ID);
+        verify(aiTranscriptionClient).endTranscription(
+                MEETING_ID,
+                ENDED_AT
+        );
+        verify(vadUploadFlightTracker).clear(MEETING_ID);
     }
 
     @Test
@@ -119,6 +148,7 @@ class MeetingTranscriptionProcessorTest {
     void endTranscription_schedulesRetryForRetryableFailure() {
         captureExecutorTasks();
         captureRetryTasks();
+        given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
         given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
                 ENDED_AT
@@ -143,12 +173,15 @@ class MeetingTranscriptionProcessorTest {
                 MEETING_ID,
                 ENDED_AT
         );
+        verify(vadUploadFlightTracker, times(2)).awaitIdle(MEETING_ID);
+        verify(vadUploadFlightTracker).clear(MEETING_ID);
     }
 
     @Test
     @DisplayName("종료 요청의 재시도 불가능한 오류는 추가 시도를 예약하지 않는다")
     void endTranscription_doesNotRetryNonRetryableFailure() {
         captureExecutorTasks();
+        given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
         given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
                 ENDED_AT
@@ -162,6 +195,7 @@ class MeetingTranscriptionProcessorTest {
                 never()
         ).schedule(any(Runnable.class), any(Instant.class));
         assertThat(retryTasks).isEmpty();
+        verify(vadUploadFlightTracker, never()).clear(MEETING_ID);
     }
 
     @Test
@@ -169,6 +203,7 @@ class MeetingTranscriptionProcessorTest {
     void endTranscription_stopsAfterMaximumAttempts() {
         captureExecutorTasks();
         captureRetryTasks();
+        given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
         given(aiTranscriptionClient.endTranscription(
                 MEETING_ID,
                 ENDED_AT

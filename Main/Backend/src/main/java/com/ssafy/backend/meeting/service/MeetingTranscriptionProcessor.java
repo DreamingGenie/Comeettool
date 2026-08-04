@@ -15,6 +15,7 @@ import com.ssafy.backend.meeting.client.AiTranscriptionException;
 import com.ssafy.backend.meeting.config.MeetingTranscriptionTaskConfig;
 import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
 import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
+import com.ssafy.backend.meeting.vad.VadUploadFlightTracker;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 public class MeetingTranscriptionProcessor {
 
     private final AiTranscriptionClient aiTranscriptionClient;
+    private final VadUploadFlightTracker vadUploadFlightTracker;
     private final TaskExecutor transcriptionTaskExecutor;
     private final TaskScheduler transcriptionRetryScheduler;
     private final int maxAttempts;
@@ -31,6 +33,7 @@ public class MeetingTranscriptionProcessor {
 
     public MeetingTranscriptionProcessor(
             AiTranscriptionClient aiTranscriptionClient,
+            VadUploadFlightTracker vadUploadFlightTracker,
             @Qualifier(
                     MeetingTranscriptionTaskConfig.TRANSCRIPTION_TASK_EXECUTOR
             )
@@ -47,6 +50,7 @@ public class MeetingTranscriptionProcessor {
             Duration maxRetryDelay
     ) {
         this.aiTranscriptionClient = aiTranscriptionClient;
+        this.vadUploadFlightTracker = vadUploadFlightTracker;
         this.transcriptionTaskExecutor = transcriptionTaskExecutor;
         this.transcriptionRetryScheduler = transcriptionRetryScheduler;
         this.maxAttempts = Math.max(1, maxAttempts);
@@ -121,6 +125,16 @@ public class MeetingTranscriptionProcessor {
                 return;
             }
 
+            boolean drained = vadUploadFlightTracker.awaitIdle(meetingId);
+            if (!drained) {
+                log.warn(
+                        "Proceeding AI transcription end after VAD drain "
+                                + "timeout: meetingId={}, attempt={}",
+                        meetingId,
+                        attempt
+                );
+            }
+
             ResponseEndTranscriptionDto response =
                     aiTranscriptionClient.endTranscription(
                             meetingId,
@@ -131,6 +145,7 @@ public class MeetingTranscriptionProcessor {
                     response.meetingRoomId(),
                     attempt
             );
+            vadUploadFlightTracker.clear(meetingId);
         } catch (AiTranscriptionException exception) {
             handleFailure(
                     operation,
