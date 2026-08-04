@@ -71,6 +71,7 @@ const state = reactive({
     feedback: null
   },
   meetingRoom: { ...emptyMeetingRoom },
+  meetingInviteCandidates: [],
   inviteMembers: [],
   teamRoles: []
 })
@@ -108,6 +109,7 @@ function resetState() {
     chatMessages: [],
     directContacts: []
   }
+  state.meetingInviteCandidates = []
   state.inviteMembers = []
   state.teamRoles = []
 }
@@ -338,6 +340,30 @@ export const boardStore = {
     await boardStore.loadMeetingParticipants(meetingId)
     return result
   },
+  async kickMeetingParticipant(meetingId, participantId) {
+    const result = await withLoading(() =>
+      dataSource.board.kickMeetingParticipant(meetingId, participantId)
+    )
+    await boardStore.loadMeetingParticipants(meetingId)
+    return result
+  },
+  async loadMeetingInviteCandidates(meetingId, keyword = '') {
+    const candidates = await withLoading(() =>
+      dataSource.board.getMeetingInviteCandidates(meetingId, keyword)
+    )
+    state.meetingInviteCandidates = candidates || []
+    return state.meetingInviteCandidates
+  },
+  async inviteMeetingMember(meetingId, userId) {
+    const result = await withLoading(() =>
+      dataSource.board.inviteMeetingMember(meetingId, userId)
+    )
+    state.meetingInviteCandidates = state.meetingInviteCandidates.filter(
+      candidate => String(candidate.userId) !== String(userId)
+    )
+    await boardStore.loadMeetingParticipants(meetingId)
+    return result
+  },
   setMeetingConnectionStatus(status) {
     state.meetingRoom.connectionStatus = status
   },
@@ -350,6 +376,7 @@ export const boardStore = {
       chatMessages: [],
       directContacts: []
     }
+    state.meetingInviteCandidates = []
   },
   async createSchedule(teamId, data) {
     const response = await withLoading(() => dataSource.board.createSchedule(teamId, data))
