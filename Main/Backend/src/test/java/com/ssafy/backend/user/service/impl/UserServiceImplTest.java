@@ -4,7 +4,8 @@ import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
-import com.ssafy.backend.global.storage.FileStorageService;
+import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
+import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
@@ -48,8 +49,8 @@ import static org.mockito.Mockito.verify;
 
 /**
  * UserServiceImpl 단위 테스트 (AUTH-05 findMyProfile, AUTH-06 modifyMyProfile, AUTH-07 changePassword, AUTH-08 withdraw,
- * AUTH-10 findUserList).
- * UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서 "필드가 정확히 매핑되는지"까지 이 테스트에서 검증한다.
+ * AUTH-10 findUserList). UserRepository만 Mock — UserProfileMapper는 의존성이 없는 순수 변환기라 실제 구현체를 그대로 써서 "필드가 정확히 매핑되는지"까지 이
+ * 테스트에서 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserServiceImpl 단위 테스트")
@@ -70,7 +71,7 @@ class UserServiceImplTest {
     private RefreshTokenService refreshTokenService;
 
     @Mock
-    private FileStorageService fileStorageService;
+    private ProfileImageStorageService fileStorageService;
 
     private final UserProfileMapper userProfileMapper = new UserProfileMapper();
 
@@ -790,7 +791,7 @@ class UserServiceImplTest {
             // given
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), eq("profile-images")))
+            given(fileStorageService.upload(any(), eq(ProfileImageOwner.user(USER_ID))))
                     .willReturn("http://localhost:8080/files/profile-images/new.jpg");
 
             // when
@@ -808,7 +809,7 @@ class UserServiceImplTest {
             User user = buildUser();
             ReflectionTestUtils.setField(user, "profileImageUrl", "http://localhost:8080/files/profile-images/old.jpg");
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString()))
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class)))
                     .willReturn("http://localhost:8080/files/profile-images/new.jpg");
 
             // when
@@ -824,7 +825,7 @@ class UserServiceImplTest {
             // given: profileImageUrl = null (온보딩 전 상태)
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString()))
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class)))
                     .willReturn("http://localhost:8080/files/profile-images/new.jpg");
 
             // when
@@ -866,7 +867,7 @@ class UserServiceImplTest {
                     .isInstanceOf(CustomException.class);
 
             // then
-            verify(fileStorageService, never()).upload(any(), anyString());
+            verify(fileStorageService, never()).upload(any(), any(ProfileImageOwner.class));
             assertThat(user.getProfileImageUrl()).isNull();
         }
 
@@ -923,7 +924,7 @@ class UserServiceImplTest {
                     .isInstanceOf(CustomException.class);
 
             // then
-            verify(fileStorageService, never()).upload(any(), anyString());
+            verify(fileStorageService, never()).upload(any(), any(ProfileImageOwner.class));
         }
     }
 
@@ -937,7 +938,8 @@ class UserServiceImplTest {
             // given
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpg");
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class))).willReturn(
+                    "http://localhost:8080/files/profile-images/a.jpg");
             MockMultipartFile file = new MockMultipartFile("profileImage", "photo.jpg", "image/jpeg", new byte[1024]);
 
             // when & then: 예외 없이 통과
@@ -950,7 +952,8 @@ class UserServiceImplTest {
             // given
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpeg");
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class))).willReturn(
+                    "http://localhost:8080/files/profile-images/a.jpeg");
             MockMultipartFile file = new MockMultipartFile("profileImage", "photo.jpeg", "image/jpeg", new byte[1024]);
 
             // when & then
@@ -963,7 +966,8 @@ class UserServiceImplTest {
             // given
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.png");
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class))).willReturn(
+                    "http://localhost:8080/files/profile-images/a.png");
             MockMultipartFile file = new MockMultipartFile("profileImage", "photo.png", "image/png", new byte[1024]);
 
             // when & then
@@ -976,7 +980,8 @@ class UserServiceImplTest {
             // given
             User user = buildUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(fileStorageService.upload(any(), anyString())).willReturn("http://localhost:8080/files/profile-images/a.jpg");
+            given(fileStorageService.upload(any(), any(ProfileImageOwner.class))).willReturn(
+                    "http://localhost:8080/files/profile-images/a.jpg");
             MockMultipartFile file = new MockMultipartFile("profileImage", "photo.JPG", "image/jpeg", new byte[1024]);
 
             // when & then: toLowerCase()로 정규화되어 통과

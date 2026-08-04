@@ -1,0 +1,45 @@
+FROM flyway/flyway:12.11.0
+
+USER root
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        --no-install-recommends \
+        --only-upgrade \
+        libc6 \
+        libc-bin \
+        curl \
+        libcurl4t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 10001 migration \
+    && useradd --system --uid 10001 --gid migration \
+        --home-dir /flyway --shell /usr/sbin/nologin migration
+
+COPY --chown=migration:migration --chmod=0555 \
+    docker/migration-entrypoint.sh \
+    /usr/local/bin/a707-migration-entrypoint
+COPY --chown=migration:migration --chmod=0444 \
+    src/main/resources/db/migration/*.sql \
+    /flyway/sql/
+COPY --chown=migration:migration --chmod=0444 \
+    certs/ap-northeast-2-bundle.pem \
+    /flyway/certs/rds-ca-bundle.pem
+
+RUN chmod 0555 /flyway/sql /flyway/certs
+
+ENV FLYWAY_LOCATIONS=filesystem:/flyway/sql \
+    FLYWAY_DEFAULT_SCHEMA=public \
+    FLYWAY_SCHEMAS=public \
+    FLYWAY_CREATE_SCHEMAS=false \
+    FLYWAY_CLEAN_DISABLED=true \
+    FLYWAY_BASELINE_ON_MIGRATE=false \
+    FLYWAY_VALIDATE_ON_MIGRATE=true \
+    FLYWAY_VALIDATE_MIGRATION_NAMING=true \
+    FLYWAY_OUT_OF_ORDER=false \
+    FLYWAY_CONNECT_RETRIES=10
+
+USER 10001:10001
+
+ENTRYPOINT ["/usr/local/bin/a707-migration-entrypoint"]
+CMD ["migrate"]

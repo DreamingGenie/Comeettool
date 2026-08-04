@@ -26,6 +26,8 @@ management:
 
 # JWT (RS256) — 키는 gitignore된 keys/ 에서 로드, 배포는 환경변수 경로 주입
 jwt:
+  private-key-base64: ${JWT_PRIVATE_KEY_BASE64:}
+  public-key-base64: ${JWT_PUBLIC_KEY_BASE64:}
   # classpath 로드(실행 디렉터리 무관). prod는 외부 파일 주입: file:/secure/path
   private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt_private.pem}
   public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt_public.pem}
@@ -57,7 +59,11 @@ livekit:
   token-ttl: ${LIVEKIT_TOKEN_TTL:1h}
 
 # 파일 스토리지 — PROFILE_IMG=FILE(기본) 또는 S3로 구현체 전환
+storage:
+  provider: ${STORAGE_PROVIDER:${PROFILE_IMG:FILE}}
+
 profile-img: ${PROFILE_IMG:FILE}
+
 file:
   upload-dir: ${FILE_UPLOAD_DIR:/uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080}
@@ -108,10 +114,14 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: ${DB_URL}
+    url: "jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}"
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      data-source-properties:
+        sslmode: verify-full
+        sslrootcert: ${DB_SSL_ROOT_CERT:/app/certs/rds-ca-bundle.pem}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -120,3 +130,7 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true

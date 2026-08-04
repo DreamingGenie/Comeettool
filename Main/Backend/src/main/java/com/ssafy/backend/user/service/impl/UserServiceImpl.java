@@ -4,7 +4,8 @@ import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
-import com.ssafy.backend.global.storage.FileStorageService;
+import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
+import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
@@ -41,7 +42,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenService refreshTokenService;
-    private final FileStorageService fileStorageService;
+    private final ProfileImageStorageService profileImageStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -133,11 +134,14 @@ public class UserServiceImpl implements UserService {
 
         // 기존 사진 삭제 (없으면 스킵)
         if (user.getProfileImageUrl() != null) {
-            fileStorageService.delete(user.getProfileImageUrl());
+            profileImageStorageService.delete(user.getProfileImageUrl());
         }
 
         // 새 사진 업로드 후 URL 갱신 (더티 체킹 — save() 불필요)
-        String newUrl = fileStorageService.upload(file, "profile-images");
+        String newUrl = profileImageStorageService.upload(
+                file,
+                ProfileImageOwner.user(userId)
+        );
         user.updateProfileImage(newUrl);
 
         return new ResponseProfileImageDto(newUrl);
