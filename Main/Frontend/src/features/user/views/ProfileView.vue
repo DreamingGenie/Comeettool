@@ -128,31 +128,20 @@
             </fieldset>
             <label class="field">
               연령대
-              <select v-model.number="form.age">
-                <option
-                  v-for="option in userState.profileOptions.ageGroups"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
+              <AppSelect v-model="form.age" :options="ageOptions" aria-label="연령대" />
             </label>
             <label class="field">
               직군
-              <select v-model="form.jobFamily" @change="onJobFamilyChange">
-                <option v-for="option in userState.profileOptions.jobFamilies" :key="option">
-                  {{ option }}
-                </option>
-              </select>
+              <AppSelect
+                v-model="form.jobFamily"
+                :options="jobFamilyOptions"
+                aria-label="직군"
+                @change="onJobFamilyChange"
+              />
             </label>
             <label class="field">
               세부 직무
-              <select v-model="form.jobRole">
-                <option v-for="option in availableJobRoles" :key="option">
-                  {{ option }}
-                </option>
-              </select>
+              <AppSelect v-model="form.jobRole" :options="jobRoleOptions" aria-label="세부 직무" />
             </label>
           </div>
           <button class="primary profile-submit" :disabled="saving">저장</button>
@@ -167,6 +156,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import AppShell from '../../../shared/components/AppShell.vue'
 import AsyncState from '../../../shared/components/AsyncState.vue'
 import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import SettingsSidebar from '../components/SettingsSidebar.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { useUserPage } from '../composables/useUserPage'
@@ -194,11 +184,18 @@ const form = reactive({
 })
 
 const colorOptions = computed(() => userState.profileOptions.colors || [])
+const ageOptions = computed(() => userState.profileOptions.ageGroups || [])
+const jobFamilyOptions = computed(() =>
+  (userState.profileOptions.jobFamilies || []).map((option) => ({ value: option, label: option }))
+)
 const availableJobRoles = computed(
   () =>
     userState.profileOptions.jobRolesByFamily?.[form.jobFamily] ||
     userState.profileOptions.jobRoles ||
     []
+)
+const jobRoleOptions = computed(() =>
+  availableJobRoles.value.map((option) => ({ value: option, label: option }))
 )
 const selectedColor = computed(
   () => form.userColor || colorOptions.value[0]?.value || '#496FBD'

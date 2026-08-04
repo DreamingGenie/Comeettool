@@ -71,7 +71,8 @@ const state = reactive({
     feedback: null
   },
   meetingRoom: { ...emptyMeetingRoom },
-  inviteMembers: []
+  inviteMembers: [],
+  teamRoles: []
 })
 
 function resetState() {
@@ -108,9 +109,10 @@ function resetState() {
     directContacts: []
   }
   state.inviteMembers = []
+  state.teamRoles = []
 }
 
-const withLoading = async request => {
+const withLoading = async (request) => {
   state.pendingRequests += 1
   state.loading = true
   state.error = ''
@@ -128,7 +130,7 @@ const withLoading = async request => {
 
 function removeWorkspaceFromState(spaceId) {
   state.workspaces = state.workspaces.filter(
-    workspace => String(workspace.id) !== String(spaceId)
+    (workspace) => String(workspace.id) !== String(spaceId)
   )
   if (String(state.currentTeamId) === String(spaceId)) {
     state.currentTeamId = ''
@@ -155,10 +157,11 @@ export const boardStore = {
       calendar: () => boardStore.loadCalendar(teamId, year, month),
       meetingRoom: () => boardStore.loadMeetingRoom(meetingId),
       inviteMembers: () => boardStore.loadInviteMembers(teamId),
+      teamRoles: () => boardStore.loadTeamRoles(teamId),
       archive: () => boardStore.loadArchive(teamId, section)
     }
     const uniqueResources = [...new Set(resources)]
-    const unknownResource = uniqueResources.find(resource => !loaders[resource])
+    const unknownResource = uniqueResources.find((resource) => !loaders[resource])
 
     if (unknownResource) {
       throw new Error(`지원하지 않는 board resource입니다: ${unknownResource}`)
@@ -169,17 +172,15 @@ export const boardStore = {
     }
     await Promise.all(
       uniqueResources
-        .filter(resource => resource !== 'workspaces')
-        .map(resource => loaders[resource]())
+        .filter((resource) => resource !== 'workspaces')
+        .map((resource) => loaders[resource]())
     )
     return state
   },
   async loadWorkspaces(search = '') {
     const requestSequence = ++workspaceLoadSequence
     const keyword = String(search || '').trim()
-    const dashboard = await withLoading(() =>
-      dataSource.board.getDashboard(keyword)
-    )
+    const dashboard = await withLoading(() => dataSource.board.getDashboard(keyword))
     if (requestSequence !== workspaceLoadSequence) return state.workspaces
 
     state.workspaceQuery = keyword
@@ -190,13 +191,11 @@ export const boardStore = {
     const normalizedOrder = spaceOrder.map(String)
     const previousWorkspaces = [...state.workspaces]
     const workspaceMap = new Map(
-      previousWorkspaces.map(workspace => [String(workspace.id), workspace])
+      previousWorkspaces.map((workspace) => [String(workspace.id), workspace])
     )
-    const reordered = normalizedOrder
-      .map(spaceId => workspaceMap.get(spaceId))
-      .filter(Boolean)
+    const reordered = normalizedOrder.map((spaceId) => workspaceMap.get(spaceId)).filter(Boolean)
     const remaining = previousWorkspaces.filter(
-      workspace => !normalizedOrder.includes(String(workspace.id))
+      (workspace) => !normalizedOrder.includes(String(workspace.id))
     )
 
     state.workspaces = [...reordered, ...remaining]
@@ -221,8 +220,7 @@ export const boardStore = {
     return state.members
   },
   async loadMeetings(teamId, options = {}) {
-    const resolvedTeamId =
-      String(teamId || state.currentTeamId || state.workspaces[0]?.id || '')
+    const resolvedTeamId = String(teamId || state.currentTeamId || state.workspaces[0]?.id || '')
     if (!resolvedTeamId) {
       state.meetings = []
       state.activeMeeting = { ...emptyMeeting }
@@ -230,9 +228,7 @@ export const boardStore = {
     }
 
     const requestMeetings = () => dataSource.board.getMeetings(resolvedTeamId)
-    const meetings = options.silent
-      ? await requestMeetings()
-      : await withLoading(requestMeetings)
+    const meetings = options.silent ? await requestMeetings() : await withLoading(requestMeetings)
     state.meetings = meetings || []
     state.activeMeeting = state.meetings[0] || { ...emptyMeeting }
     return state.meetings
@@ -242,16 +238,12 @@ export const boardStore = {
     return state.activeMeeting
   },
   async loadCalendar(teamId, year, month) {
-    const response = await withLoading(() =>
-      dataSource.board.getEvents(teamId, year, month)
-    )
+    const response = await withLoading(() => dataSource.board.getEvents(teamId, year, month))
     state.calendar = toCalendarViewModel(response, { year, month })
     return state.calendar
   },
   async loadMeetingRoom(meetingId) {
-    const connection = await withLoading(() =>
-      dataSource.board.joinMeeting(meetingId)
-    )
+    const connection = await withLoading(() => dataSource.board.joinMeeting(meetingId))
     state.meetingRoom = {
       ...emptyMeetingRoom,
       connection,
@@ -262,7 +254,7 @@ export const boardStore = {
     }
     state.currentMeetingId = meetingId
     const selectedMeeting = state.meetings.find(
-      meeting => String(meeting.id) === String(meetingId)
+      (meeting) => String(meeting.id) === String(meetingId)
     )
     if (selectedMeeting) state.activeMeeting = selectedMeeting
     await boardStore.loadMeetingParticipants(meetingId)
@@ -270,24 +262,23 @@ export const boardStore = {
   },
   async loadMeetingParticipants(meetingId = state.currentMeetingId) {
     if (!meetingId) return []
-    const participants = await withLoading(() =>
-      dataSource.board.getParticipants(meetingId)
-    )
+    const participants = await withLoading(() => dataSource.board.getParticipants(meetingId))
     state.meetingRoom.participants = participants || []
     state.meetingRoom.totalParticipants = state.meetingRoom.participants.length
     return state.meetingRoom.participants
   },
   async loadInviteMembers(teamId) {
-    const members = await withLoading(() =>
-      dataSource.board.getInviteMembers(teamId)
-    )
+    const members = await boardStore.loadMembers(teamId)
     state.inviteMembers = members || []
     return state.inviteMembers
   },
+  async loadTeamRoles(teamId) {
+    const roles = await withLoading(() => dataSource.board.getTeamRoles(teamId))
+    state.teamRoles = Array.isArray(roles) ? roles : []
+    return state.teamRoles
+  },
   async loadArchive(teamId, section) {
-    const result = await withLoading(() =>
-      dataSource.board.getArchive(teamId, section)
-    )
+    const result = await withLoading(() => dataSource.board.getArchive(teamId, section))
     state.archives[section] = result?.rows || result || []
     state.archiveStats[section] = result?.stats || null
     return state.archives[section]
@@ -307,15 +298,9 @@ export const boardStore = {
   },
   async transferWorkspaceOwnership(spaceId, newOwnerUserId) {
     const result = await withLoading(() =>
-      dataSource.board.transferWorkspaceOwnership(
-        spaceId,
-        Number(newOwnerUserId)
-      )
+      dataSource.board.transferWorkspaceOwnership(spaceId, Number(newOwnerUserId))
     )
-    await Promise.all([
-      boardStore.loadTeam(spaceId),
-      boardStore.loadWorkspaces()
-    ])
+    await Promise.all([boardStore.loadTeam(spaceId), boardStore.loadWorkspaces()])
     return result
   },
   async createMeeting(data) {
@@ -331,26 +316,19 @@ export const boardStore = {
     return meeting
   },
   async leaveMeeting(meetingId = state.currentMeetingId) {
-    const result = await withLoading(() =>
-      dataSource.board.leaveMeeting(meetingId)
-    )
+    const result = await withLoading(() => dataSource.board.leaveMeeting(meetingId))
     state.meetingRoom.connectionStatus = 'leaving'
     return result
   },
   async endMeeting(meetingId = state.currentMeetingId) {
     await withLoading(() => dataSource.board.endMeeting(meetingId))
-    state.meetings = state.meetings.filter(
-      meeting => String(meeting.id) !== String(meetingId)
-    )
+    state.meetings = state.meetings.filter((meeting) => String(meeting.id) !== String(meetingId))
     state.activeMeeting = state.meetings[0] || { ...emptyMeeting }
     state.meetingRoom.connectionStatus = 'ending'
   },
   async transferMeetingHost(meetingId, nextHostParticipantId) {
     const result = await withLoading(() =>
-      dataSource.board.transferMeetingHost(
-        meetingId,
-        nextHostParticipantId
-      )
+      dataSource.board.transferMeetingHost(meetingId, nextHostParticipantId)
     )
     if (state.meetingRoom.connection) {
       state.meetingRoom.connection.isHost = false
@@ -377,17 +355,13 @@ export const boardStore = {
     return event
   },
   async updateTeam(teamId, data) {
-    const updatedTeam = await withLoading(() =>
-      dataSource.board.updateTeam(teamId, data)
-    )
+    const updatedTeam = await withLoading(() => dataSource.board.updateTeam(teamId, data))
     state.team = {
       ...state.team,
       ...updatedTeam,
       members: state.team.members
     }
-    const workspaceIndex = state.workspaces.findIndex(
-      item => String(item.id) === String(teamId)
-    )
+    const workspaceIndex = state.workspaces.findIndex((item) => String(item.id) === String(teamId))
     if (workspaceIndex >= 0) {
       state.workspaces[workspaceIndex] = {
         ...state.workspaces[workspaceIndex],
@@ -396,10 +370,42 @@ export const boardStore = {
     }
     return state.team
   },
-  async inviteMember(teamId, data) {
-    const member = await dataSource.board.inviteMember(teamId, data)
-    state.inviteMembers.push(member)
-    return member
+  async inviteMember(teamId, targetUserId) {
+    return withLoading(() => dataSource.board.inviteMember(teamId, targetUserId))
+  },
+  async kickMember(teamId, memberId) {
+    await withLoading(() => dataSource.board.kickMember(teamId, memberId))
+    await Promise.all([boardStore.loadTeam(teamId), boardStore.loadMembers(teamId)])
+  },
+  async changeMemberAuthority(teamId, memberId, authority) {
+    const result = await withLoading(() =>
+      dataSource.board.changeMemberAuthority(teamId, memberId, authority)
+    )
+    await Promise.all([boardStore.loadTeam(teamId), boardStore.loadMembers(teamId)])
+    return result
+  },
+  async assignTeamRole(teamId, memberId, teamRoleId) {
+    const result = await withLoading(() =>
+      dataSource.board.assignTeamRole(teamId, memberId, teamRoleId)
+    )
+    await Promise.all([boardStore.loadTeam(teamId), boardStore.loadMembers(teamId)])
+    return result
+  },
+  async createTeamRole(teamId, data) {
+    const result = await withLoading(() => dataSource.board.createTeamRole(teamId, data))
+    await boardStore.loadTeamRoles(teamId)
+    return result
+  },
+  async updateTeamRole(teamId, teamRoleId, data) {
+    const result = await withLoading(() =>
+      dataSource.board.updateTeamRole(teamId, teamRoleId, data)
+    )
+    await boardStore.loadTeamRoles(teamId)
+    return result
+  },
+  async deleteTeamRole(teamId, teamRoleId) {
+    await withLoading(() => dataSource.board.deleteTeamRole(teamId, teamRoleId))
+    await Promise.all([boardStore.loadTeamRoles(teamId), boardStore.loadMembers(teamId)])
   },
   async sendMessage(meetingId, data) {
     const message = await dataSource.board.sendMessage(meetingId, data)
@@ -407,12 +413,8 @@ export const boardStore = {
     return message
   },
   async sendDirectMessage(meetingId, contactId, data) {
-    const message = await dataSource.board.sendDirectMessage(
-      meetingId,
-      contactId,
-      data
-    )
-    const contact = state.meetingRoom.directContacts.find(item => item.id === contactId)
+    const message = await dataSource.board.sendDirectMessage(meetingId, contactId, data)
+    const contact = state.meetingRoom.directContacts.find((item) => item.id === contactId)
     contact?.messages.push(message)
     if (contact) {
       contact.preview = message.body
@@ -421,14 +423,8 @@ export const boardStore = {
     return message
   },
   async updateParticipant(meetingId, participantId, data) {
-    const participant = await dataSource.board.updateParticipant(
-      meetingId,
-      participantId,
-      data
-    )
-    const index = state.meetingRoom.participants.findIndex(
-      item => item.id === participantId
-    )
+    const participant = await dataSource.board.updateParticipant(meetingId, participantId, data)
+    const index = state.meetingRoom.participants.findIndex((item) => item.id === participantId)
     if (index >= 0) state.meetingRoom.participants[index] = participant
     return participant
   },

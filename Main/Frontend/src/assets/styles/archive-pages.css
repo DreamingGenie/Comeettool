@@ -45,18 +45,23 @@
 }
 .filter-tabs {
   display: flex;
+  flex: 0 0 auto;
   gap: 4px;
   margin-right: auto;
   background: #f0f2f7;
   padding: 3.2px;
   border-radius: 7.2px;
+  white-space: nowrap;
 }
 .filter-tabs button {
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   border-radius: 5.6px;
   padding: 6.4px 12px;
   color: #687084;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 .filter-tabs button.active {
   background: white;
@@ -64,10 +69,14 @@
   box-shadow: 0 0.8px 3.2px #27355022;
 }
 .archive-tools label {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   border: 0.8px solid var(--line);
   border-radius: 6.4px;
   padding: 7.2px 9.6px;
   color: #8a92a2;
+  white-space: nowrap;
 }
 .archive-tools input {
   width: 176px;
@@ -75,11 +84,12 @@
   outline: 0;
   margin-left: 4.8px;
 }
-.archive-tools select {
-  border: 0.8px solid var(--line);
-  border-radius: 6.4px;
-  padding: 7.2px;
+.archive-sort {
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 132px;
 }
+
 .archive-row {
   min-height: 67.2px;
   display: grid;
@@ -308,6 +318,11 @@
   .archive-tools label,
   .archive-tools input {
     width: 100%;
+  }
+  .archive-sort {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
   }
   .archive-row {
     grid-template-columns: 36px 1fr 52px;
@@ -1644,16 +1659,7 @@
   margin: 0;
 }
 .profile-grid > .field::after {
-  content: '';
-  position: absolute;
-  right: 14px;
-  bottom: 15px;
-  width: 7px;
-  height: 7px;
-  border-right: 1.6px solid #697287;
-  border-bottom: 1.6px solid #697287;
-  pointer-events: none;
-  transform: rotate(45deg);
+  display: none;
 }
 .profile-grid > .field:focus-within::after {
   border-color: var(--blue);
@@ -1663,14 +1669,13 @@
   appearance: none;
   -webkit-appearance: none;
   padding: 0 38px 0 14px;
-  border: 1px solid #d7dce7;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--dropdown-border);
+  border-radius: var(--dropdown-radius);
   color: #253047;
   cursor: pointer;
 }
 .profile-grid .field select:hover {
-  border-color: #aeb9dc;
+  border-color: var(--dropdown-border-hover);
   background: #fbfcff;
 }
 .profile-grid .field select:focus-visible {

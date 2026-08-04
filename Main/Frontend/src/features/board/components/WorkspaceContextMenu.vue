@@ -88,11 +88,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
   display: grid;
   width: 188px;
   padding: 7px;
-  border: 1px solid #dfe3ec;
-  border-radius: 12px;
+  border: 1px solid var(--dropdown-border);
+  border-radius: var(--dropdown-panel-radius);
   background: #fff;
   color: #1b2539;
-  box-shadow: 0 16px 40px rgba(12, 22, 45, 0.24);
+  box-shadow: var(--dropdown-shadow);
   animation: workspace-menu-in 0.16s ease-out;
 }
 
@@ -150,7 +150,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
   min-height: 34px;
   padding: 0 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: inherit;
   font-size: 11px;
@@ -161,7 +161,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
 .workspace-context-menu button:hover,
 .workspace-context-menu button:focus-visible {
   outline: 0;
-  background: #f1f3ff;
+  background: var(--dropdown-option-hover);
   color: #4f65dc;
 }
 

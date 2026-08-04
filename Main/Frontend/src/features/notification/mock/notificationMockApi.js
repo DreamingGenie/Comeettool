@@ -10,14 +10,16 @@ const invitations = [
 
 export const notificationMockApi = {
   async getInvitations() {
-    return invitations.map(invitation => ({ ...invitation }))
+    return invitations.map((invitation) => ({ ...invitation }))
   },
   async acceptInvitation(invitationId) {
-    const index = invitations.findIndex(
-      invitation => invitation.invitationId === invitationId
-    )
+    const index = invitations.findIndex((invitation) => invitation.invitationId === invitationId)
+    if (index >= 0) invitations.splice(index, 1)
+    return null
+  },
+  async rejectInvitation(invitationId) {
+    const index = invitations.findIndex((invitation) => invitation.invitationId === invitationId)
     if (index >= 0) invitations.splice(index, 1)
     return null
   }
 }
-

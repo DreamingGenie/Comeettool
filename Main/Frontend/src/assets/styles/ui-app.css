@@ -10,6 +10,14 @@
   --white: #fff;
   --green: #1fbd78;
   --orange: #ff7417;
+  --dropdown-border: #cfd6e6;
+  --dropdown-border-hover: #aeb9dc;
+  --dropdown-surface: #fff;
+  --dropdown-option: #f5f6fb;
+  --dropdown-option-hover: #eceffd;
+  --dropdown-radius: 12px;
+  --dropdown-panel-radius: 14px;
+  --dropdown-shadow: 0 16px 36px #1d2c4d24;
 }
 * {
   box-sizing: border-box;
@@ -34,6 +42,44 @@ textarea {
 }
 button {
   cursor: pointer;
+}
+
+select {
+  min-height: 42px;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--dropdown-border);
+  border-radius: var(--dropdown-radius);
+  outline: 0;
+  background-color: var(--dropdown-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23697287' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: #253047;
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+select:hover:not(:disabled) {
+  border-color: var(--dropdown-border-hover);
+  background-color: #fbfcff;
+}
+
+select:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px #566fea1f;
+}
+
+select:disabled {
+  cursor: default;
+  background-color: #f4f5f8;
+  color: #7d8595;
+  opacity: 0.8;
 }
 .logo {
   display: flex;
@@ -169,9 +215,13 @@ button {
   width: 100%;
   height: 39.2px;
   border: 0.8px solid var(--line);
-  border-radius: 5.6px;
+  border-radius: var(--dropdown-radius);
   padding: 0 12.8px;
   background: #fff;
+}
+
+.field select {
+  padding-right: 40px;
 }
 .password-box {
   position: relative;

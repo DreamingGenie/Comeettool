@@ -29,10 +29,7 @@
           </button>
         </div>
         <label>⌕<input v-model.trim="query" :placeholder="`${info.name} 검색`" /></label>
-        <select v-model="sort">
-          <option value="recent">최근 수정 순</option>
-          <option value="name">이름 순</option>
-        </select>
+        <AppSelect v-model="sort" class="archive-sort" :options="sortOptions" aria-label="목록 정렬" />
       </div>
       <div class="archive-list">
         <article
@@ -69,6 +66,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import DocumentPreviewModal from '../components/DocumentPreviewModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
@@ -108,6 +106,10 @@ const tabs = ['전체', '최근 열어본', '내 문서']
 const activeTab = ref('전체')
 const query = ref('')
 const sort = ref('recent')
+const sortOptions = [
+  { value: 'recent', label: '최근 수정 순' },
+  { value: 'name', label: '이름 순' }
+]
 const selectedRow = ref(null)
 const eyebrow = computed(() => archiveEyebrows[props.section] || archiveEyebrows.documents)
 const info = computed(() => archiveInfo[props.section] || archiveInfo.documents)

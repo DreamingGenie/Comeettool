@@ -44,10 +44,12 @@
           <span>⌕</span>
           <input v-model.trim="query" type="search" placeholder="문서 제목 검색" />
         </label>
-        <select v-model="sort">
-          <option value="recent">최근 수정 순</option>
-          <option value="name">이름 순</option>
-        </select>
+        <AppSelect
+          v-model="sort"
+          class="document-sort"
+          :options="sortOptions"
+          aria-label="문서 정렬"
+        />
       </div>
 
       <AsyncState
@@ -129,6 +131,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AsyncState from '../../../shared/components/AsyncState.vue'
+import AppSelect from '../../../shared/components/AppSelect.vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import TeamLayout from '../../board/components/TeamLayout.vue'
@@ -143,6 +146,10 @@ const { boardState, teamId, reloadBoard } = useBoardPage({
 const documentState = documentStore.state
 const query = ref('')
 const sort = ref('recent')
+const sortOptions = [
+  { value: 'recent', label: '최근 수정 순' },
+  { value: 'name', label: '이름 순' }
+]
 const deleteTarget = ref(null)
 
 const authority = computed(() => String(boardState.team.role || '').toUpperCase())
@@ -348,11 +355,9 @@ watch(teamId, loadDocuments)
   border: 0;
   outline: 0;
 }
-.document-tools select {
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fff;
+.document-sort {
+  width: auto;
+  min-width: 120px;
 }
 .document-list {
   min-height: 80px;
@@ -607,12 +612,8 @@ watch(teamId, loadDocuments)
   font-size: 12.8px;
 }
 
-.document-tools select {
+.document-sort {
   min-width: 120px;
-  min-height: 40px;
-  padding: 8px 12px;
-  border-width: 0.8px;
-  border-radius: 7.2px;
   font-size: 12.8px;
 }
 

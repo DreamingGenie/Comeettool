@@ -17,6 +17,7 @@ provide(notificationContextKey, {
   async accept(invitationId) {
     await notificationStore.acceptInvitation(invitationId)
     await boardStore.loadWorkspaces()
-  }
+  },
+  reject: (invitationId) => notificationStore.rejectInvitation(invitationId)
 })
 </script>

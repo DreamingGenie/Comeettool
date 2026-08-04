@@ -14,12 +14,15 @@
     </div>
     <div class="meeting-cards">
       <article v-for="meeting in boardState.meetings" :key="meeting.id" class="live-card">
-        <h2>{{ meeting.title }}　<small style="color:#15a866">{{ meeting.status }}</small></h2>
+        <h2>
+          {{ meeting.title }}　<small style="color: #15a866">{{ meeting.status }}</small>
+        </h2>
         <p>{{ meeting.description }}</p>
         <footer>
-          ◷ {{ meeting.date }} · {{ meeting.time }}
-          　♙ {{ meeting.participantCount }}명 참여 중
-          <button type="button" @click="$router.push(`/meetings/${meeting.id}`)">회의 입장 →</button>
+          ◷ {{ meeting.date }} · {{ meeting.time }} 　♙ {{ meeting.participantCount }}명 참여 중
+          <button type="button" @click="$router.push(`/meetings/${meeting.id}`)">
+            회의 입장 →
+          </button>
         </footer>
       </article>
       <button class="create-card" type="button" @click="showMeeting = true">
@@ -31,7 +34,7 @@
   <InviteModal
     v-if="showInvite"
     :team-id="teamId"
-    :members="boardState.inviteMembers"
+    :members="boardState.team.members"
     @close="showInvite = false"
   />
   <NewMeetingModal
@@ -52,13 +55,7 @@ import { useBoardPage } from '../composables/useBoardPage'
 import { boardStore } from '../stores/boardStore'
 
 const { boardState, teamId, changeMonth, reloadBoard } = useBoardPage({
-  resources: [
-    'workspaces',
-    'team',
-    'activeMeeting',
-    'calendar',
-    'inviteMembers'
-  ]
+  resources: ['workspaces', 'team', 'activeMeeting', 'calendar']
 })
 const showInvite = ref(false)
 const showMeeting = ref(false)

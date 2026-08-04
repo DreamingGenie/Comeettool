@@ -20,9 +20,7 @@
           <small>NOTIFICATIONS</small>
           <h2>초대 알림</h2>
         </div>
-        <button type="button" :disabled="loading" @click="$emit('refresh')">
-          새로고침
-        </button>
+        <button type="button" :disabled="loading" @click="$emit('refresh')">새로고침</button>
       </header>
 
       <div v-if="loading && !invitations.length" class="notification-state">
@@ -38,26 +36,30 @@
         <p>팀 스페이스 초대가 도착하면 여기에 표시됩니다.</p>
       </div>
       <div v-else class="notification-list">
-        <article
-          v-for="invitation in invitations"
-          :key="invitation.invitationId"
-        >
+        <article v-for="invitation in invitations" :key="invitation.invitationId">
           <i>{{ invitation.spaceName?.trim().slice(0, 1) || '팀' }}</i>
           <div>
             <b>{{ invitation.spaceName }}</b>
-            <p>
-              {{ invitation.inviterNickname || '팀 관리자' }}님이 팀 스페이스에
-              초대했습니다.
-            </p>
+            <p>{{ invitation.inviterNickname || '팀 관리자' }}님이 팀 스페이스에 초대했습니다.</p>
             <time>{{ formatDate(invitation.createdAt) }}</time>
           </div>
-          <button
-            type="button"
-            :disabled="acceptingId === invitation.invitationId"
-            @click="$emit('accept', invitation.invitationId)"
-          >
-            {{ acceptingId === invitation.invitationId ? '수락 중' : '수락' }}
-          </button>
+          <span class="notification-actions">
+            <button
+              class="reject"
+              type="button"
+              :disabled="isProcessing(invitation.invitationId)"
+              @click="$emit('reject', invitation.invitationId)"
+            >
+              {{ rejectingId === invitation.invitationId ? '거절 중' : '거절' }}
+            </button>
+            <button
+              type="button"
+              :disabled="isProcessing(invitation.invitationId)"
+              @click="$emit('accept', invitation.invitationId)"
+            >
+              {{ acceptingId === invitation.invitationId ? '수락 중' : '수락' }}
+            </button>
+          </span>
         </article>
         <p v-if="error" class="notification-inline-error">{{ error }}</p>
       </div>
@@ -72,10 +74,11 @@ const props = defineProps({
   invitations: { type: Array, default: () => [] },
   loading: Boolean,
   acceptingId: { type: String, default: '' },
+  rejectingId: { type: String, default: '' },
   error: { type: String, default: '' }
 })
 
-defineEmits(['refresh', 'accept'])
+defineEmits(['refresh', 'accept', 'reject'])
 
 const root = ref(null)
 const open = ref(false)
@@ -84,6 +87,10 @@ const countLabel = computed(() => (count.value > 99 ? '99+' : String(count.value
 
 function toggle() {
   open.value = !open.value
+}
+
+function isProcessing(invitationId) {
+  return props.acceptingId === invitationId || props.rejectingId === invitationId
 }
 
 function closeOnOutside(event) {
@@ -132,7 +139,10 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .notification-trigger:hover {
@@ -289,7 +299,13 @@ onBeforeUnmount(() => {
   font-size: 9px;
 }
 
-.notification-list article > button {
+.notification-actions {
+  align-self: center;
+  display: flex;
+  gap: 5px;
+}
+
+.notification-actions button {
   align-self: center;
   padding: 7px 11px;
   border: 0;
@@ -300,7 +316,13 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.notification-list article > button:disabled {
+.notification-actions button.reject {
+  border: 1px solid #d6dbe6;
+  background: #fff;
+  color: #697287;
+}
+
+.notification-actions button:disabled {
   opacity: 0.55;
 }
 
@@ -322,4 +344,3 @@ onBeforeUnmount(() => {
   }
 }
 </style>
-
