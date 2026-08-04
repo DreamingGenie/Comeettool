@@ -26,14 +26,17 @@ import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.entity.AudioTranscription;
+import com.ssafy.backend.report.entity.MeetingMinutes;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
 import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
+import com.ssafy.backend.report.repository.MeetingMinutesRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
 
@@ -70,6 +73,9 @@ class ReportServiceImplTest {
     private AudioTranscriptionRepository audioTranscriptionRepository;
 
     @Mock
+    private MeetingMinutesRepository meetingMinutesRepository;
+
+    @Mock
     private TranscriptMarkdownRenderer transcriptMarkdownRenderer;
 
     @Mock
@@ -102,6 +108,23 @@ class ReportServiceImplTest {
             AudioTranscription entity = constructor.newInstance();
             ReflectionTestUtils.setField(entity, "meetingId", meetingId);
             ReflectionTestUtils.setField(entity, "transcript", transcript);
+            ReflectionTestUtils.setField(entity, "createdAt", createdAt);
+            return entity;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // MeetingMinutes도 AudioTranscription과 동일하게 순수 조회 전용(@Immutable, 빌더 없음) 엔티티라
+    // protected 기본 생성자를 리플렉션으로 열어 ReflectionTestUtils로 필드를 채운다.
+    private MeetingMinutes minutesOf(Long meetingId, String title, Boolean isConfirmed, OffsetDateTime createdAt) {
+        try {
+            Constructor<MeetingMinutes> constructor = MeetingMinutes.class.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            MeetingMinutes entity = constructor.newInstance();
+            ReflectionTestUtils.setField(entity, "meetingId", meetingId);
+            ReflectionTestUtils.setField(entity, "title", title);
+            ReflectionTestUtils.setField(entity, "isConfirmed", isConfirmed);
             ReflectionTestUtils.setField(entity, "createdAt", createdAt);
             return entity;
         } catch (ReflectiveOperationException e) {
@@ -465,6 +488,147 @@ class ReportServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.TRANSCRIPT_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-04 회의록 목록 조회")
+    class GetMinutesList {
+
+        @Test
+        @DisplayName("정상 조회 시 Page 결과가 PageResponse 필드로 정확히 매핑된다")
+        void getMinutesList_returnsMappedPageResponse() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            List<MinutesSummaryDto> content = List.of(
+                    new MinutesSummaryDto(
+                            34L, "8월 4주차 스프린트 회의", "스프린트 리뷰 회의록", false,
+                            OffsetDateTime.parse("2026-08-04T05:10:00Z")),
+                    new MinutesSummaryDto(
+                            33L, "7월 회고", "7월 회고 회의록", true,
+                            OffsetDateTime.parse("2026-07-28T05:10:00Z")));
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<MinutesSummaryDto> page = new PageImpl<>(content, pageable, 12);
+            given(meetingMinutesRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<MinutesSummaryDto> result = reportService.getMinutesList(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.content().get(0).meetingId()).isEqualTo(34L);
+            assertThat(result.content().get(0).meetingRoomName()).isEqualTo("8월 4주차 스프린트 회의");
+            assertThat(result.content().get(0).title()).isEqualTo("스프린트 리뷰 회의록");
+            assertThat(result.content().get(0).isConfirmed()).isFalse();
+            assertThat(result.page()).isEqualTo(0);
+            assertThat(result.size()).isEqualTo(10);
+            assertThat(result.totalElements()).isEqualTo(12);
+            assertThat(result.totalPages()).isEqualTo(2);
+            assertThat(result.hasNext()).isTrue();
+        }
+
+        @Test
+        @DisplayName("결과가 없으면 빈 content를 반환한다(예외 아님)")
+        void getMinutesList_returnsEmptyContentWhenNoneExist() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<MinutesSummaryDto> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+            given(meetingMinutesRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(emptyPage);
+
+            PageResponse<MinutesSummaryDto> result = reportService.getMinutesList(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content()).isEmpty();
+            assertThat(result.totalElements()).isEqualTo(0);
+            assertThat(result.totalPages()).isEqualTo(0);
+            assertThat(result.hasNext()).isFalse();
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 멤버·회의록 조회를 시도하지 않는다")
+        void getMinutesList_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getMinutesList(OWNER_ID, SPACE_ID, PageRequest.of(0, 10)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 회의록 조회를 시도하지 않는다")
+        void getMinutesList_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() -> reportService.getMinutesList(nonMemberId, SPACE_ID, PageRequest.of(0, 10)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 정상 조회된다(오너 제한 없음)")
+        void getMinutesList_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<MinutesSummaryDto> page = new PageImpl<>(List.of(), pageable, 0);
+            given(meetingMinutesRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<MinutesSummaryDto> result = reportService.getMinutesList(guestUserId, SPACE_ID, pageable);
+
+            assertThat(result.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("isConfirmed=true/false가 필터 없이 목록에 섞여서 그대로 반환된다")
+        void getMinutesList_returnsBothConfirmedAndUnconfirmedWithoutFiltering() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            List<MinutesSummaryDto> content = List.of(
+                    new MinutesSummaryDto(34L, "회의A", "회의록A", true, OffsetDateTime.parse("2026-08-04T05:10:00Z")),
+                    new MinutesSummaryDto(33L, "회의B", "회의록B", false, OffsetDateTime.parse("2026-07-28T05:10:00Z")));
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<MinutesSummaryDto> page = new PageImpl<>(content, pageable, 2);
+            given(meetingMinutesRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<MinutesSummaryDto> result = reportService.getMinutesList(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content())
+                    .extracting(MinutesSummaryDto::isConfirmed)
+                    .containsExactly(true, false);
+        }
+
+        @Test
+        @DisplayName("page=1, size=5 요청 시 Repository에 동일한 페이지 파라미터가 그대로 전달된다")
+        void getMinutesList_passesPageableToRepository() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            Pageable requested = PageRequest.of(1, 5);
+            Page<MinutesSummaryDto> page = new PageImpl<>(List.of(), requested, 0);
+            given(meetingMinutesRepository.findAllByTeamId(eq(SPACE_ID), any(Pageable.class))).willReturn(page);
+
+            reportService.getMinutesList(OWNER_ID, SPACE_ID, requested);
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(meetingMinutesRepository).findAllByTeamId(eq(SPACE_ID), captor.capture());
+            assertThat(captor.getValue().getPageNumber()).isEqualTo(1);
+            assertThat(captor.getValue().getPageSize()).isEqualTo(5);
         }
     }
 }

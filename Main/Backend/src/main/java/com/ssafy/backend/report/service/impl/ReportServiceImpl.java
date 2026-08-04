@@ -15,6 +15,7 @@ import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
@@ -23,6 +24,7 @@ import com.ssafy.backend.report.entity.AudioTranscription;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
 import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
+import com.ssafy.backend.report.repository.MeetingMinutesRepository;
 import com.ssafy.backend.report.service.ReportService;
 import com.ssafy.backend.space.repository.TeamRepository;
 
@@ -38,6 +40,7 @@ public class ReportServiceImpl implements ReportService {
     private final MemberRepository memberRepository;
     private final MeetingRoomRepository meetingRoomRepository;
     private final AudioTranscriptionRepository audioTranscriptionRepository;
+    private final MeetingMinutesRepository meetingMinutesRepository;
     private final TranscriptMarkdownRenderer transcriptMarkdownRenderer;
     private final MarkdownToPdfConverter markdownToPdfConverter;
     private final FileStorageService fileStorageService;
@@ -118,5 +121,23 @@ public class ReportServiceImpl implements ReportService {
         }
 
         return new ResponseExportDto(meetingId, format, url);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<MinutesSummaryDto> getMinutesList(Long requesterId, Long spaceId, Pageable pageable) {
+        teamRepository.findByIdAndIsDeletedFalse(spaceId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+        // 조회는 OWNER 제한 없이 스페이스 멤버 전체(OWNER/MEMBER/GUEST)에게 허용 — REPORTS-01과 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(spaceId, requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        // 쿼리 자체가 createdAt desc로 고정 정렬돼 있어 클라이언트가 넘긴 sort는 반영 대상이 아니다.
+        // 그대로 흘려보내면 select 절에 없는 프로퍼티로 정렬 시도 시 500(InvalidDataAccessApiUsageException)이 나므로 페이지 정보만 취한다.
+        Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<MinutesSummaryDto> page = meetingMinutesRepository.findAllByTeamId(spaceId, pageOnly);
+        return PageResponse.from(page);
     }
 }

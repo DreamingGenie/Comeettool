@@ -1,6 +1,7 @@
 package com.ssafy.backend.report.controller;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
@@ -55,5 +57,17 @@ public class ReportController {
             @RequestBody RequestExportDto request) {
         ResponseExportDto response = reportService.exportTranscript(Long.parseLong(userId), meetingId, request);
         return ResponseEntity.ok(ApiResponse.success("전사 내보내기 성공", response));
+    }
+
+    // REPORTS-04: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 회의록 목록을 페이지 단위로 조회한다.
+    @GetMapping("/api/v1/spaces/{spaceId}/reports/minutes")
+    public ResponseEntity<ApiResponse<PageResponse<MinutesSummaryDto>>> getMinutesList(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
+                    Pageable pageable) {
+        PageResponse<MinutesSummaryDto> response =
+                reportService.getMinutesList(Long.parseLong(userId), spaceId, pageable);
+        return ResponseEntity.ok(ApiResponse.success("회의록 목록 조회 성공", response));
     }
 }

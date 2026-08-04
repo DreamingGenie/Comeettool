@@ -26,6 +26,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
@@ -305,6 +306,77 @@ class ReportControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("TRANSCRIPT_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-04 GET /api/v1/spaces/{spaceId}/reports/minutes")
+    class GetMinutesList {
+
+        @Test
+        @DisplayName("정상 조회면 200 SUCCESS, message='회의록 목록 조회 성공', data에 content(isConfirmed 포함)·페이지 메타를 반환한다")
+        void getMinutesList_returns200() throws Exception {
+            List<MinutesSummaryDto> content = List.of(
+                    new MinutesSummaryDto(
+                            34L, "8월 4주차 스프린트 회의", "스프린트 리뷰 회의록", false,
+                            OffsetDateTime.parse("2026-08-04T05:10:00Z")));
+            PageResponse<MinutesSummaryDto> response = new PageResponse<>(content, 0, 10, 12, 2, true);
+            given(reportService.getMinutesList(eq(1L), eq(SPACE_ID), any(Pageable.class))).willReturn(response);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/minutes", SPACE_ID)
+                            .param("page", "0")
+                            .param("size", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("회의록 목록 조회 성공"))
+                    .andExpect(jsonPath("$.data.content[0].meetingId").value(34))
+                    .andExpect(jsonPath("$.data.content[0].meetingRoomName").value("8월 4주차 스프린트 회의"))
+                    .andExpect(jsonPath("$.data.content[0].title").value("스프린트 리뷰 회의록"))
+                    .andExpect(jsonPath("$.data.content[0].isConfirmed").value(false))
+                    .andExpect(jsonPath("$.data.page").value(0))
+                    .andExpect(jsonPath("$.data.size").value(10))
+                    .andExpect(jsonPath("$.data.totalElements").value(12))
+                    .andExpect(jsonPath("$.data.totalPages").value(2))
+                    .andExpect(jsonPath("$.data.hasNext").value(true));
+
+            verify(reportService).getMinutesList(eq(1L), eq(SPACE_ID), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("쿼리 파라미터를 지정하지 않으면 page=0, size=10 기본값이 적용된다")
+        void getMinutesList_appliesDefaultPageable() throws Exception {
+            PageResponse<MinutesSummaryDto> response = new PageResponse<>(List.of(), 0, 10, 0, 0, false);
+            given(reportService.getMinutesList(eq(1L), eq(SPACE_ID), any(Pageable.class))).willReturn(response);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/minutes", SPACE_ID))
+                    .andExpect(status().isOk());
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(reportService).getMinutesList(eq(1L), eq(SPACE_ID), captor.capture());
+            assertThat(captor.getValue().getPageNumber()).isEqualTo(0);
+            assertThat(captor.getValue().getPageSize()).isEqualTo(10);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void getMinutesList_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(reportService).getMinutesList(eq(1L), eq(SPACE_ID), any(Pageable.class));
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/minutes", SPACE_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void getMinutesList_returns403WhenNotMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED))
+                    .when(reportService).getMinutesList(eq(1L), eq(SPACE_ID), any(Pageable.class));
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/minutes", SPACE_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
         }
     }
 }
