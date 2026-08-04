@@ -9,7 +9,12 @@
       </label>
       <label class="field">
         담당 팀
-        <AppSelect v-model="form.teamId" :options="workspaceOptions" aria-label="담당 팀" />
+        <AppSelect
+          v-model="form.teamId"
+          :options="workspaceOptions"
+          :disabled="teamLocked"
+          :aria-label="teamLocked ? '담당 팀 고정' : '담당 팀'"
+        />
       </label>
       <div style="height:84px"></div>
       <button class="primary block" :disabled="submitting">회의 만들기</button>
@@ -27,7 +32,8 @@ import { boardStore } from '../stores/boardStore'
 
 const props = defineProps({
   workspaces: { type: Array, default: () => [] },
-  teamId: { type: String, default: '' }
+  teamId: { type: String, default: '' },
+  teamLocked: { type: Boolean, default: false }
 })
 const workspaceOptions = computed(() =>
   props.workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))
@@ -40,14 +46,19 @@ const submitting = ref(false)
 const form = reactive({ name: '', teamId: props.teamId })
 
 watchEffect(() => {
+  if (props.teamLocked && props.teamId) {
+    form.teamId = props.teamId
+    return
+  }
   if (!form.teamId) form.teamId = props.teamId || props.workspaces[0]?.id || ''
 })
 
 async function submit() {
   submitting.value = true
   try {
+    const selectedTeamId = props.teamLocked ? props.teamId : form.teamId
     const meeting = await boardStore.createMeeting({
-      teamId: form.teamId,
+      teamId: selectedTeamId,
       name: form.name,
       title: form.name,
       roomTitle: form.name
