@@ -128,6 +128,35 @@
 
       <footer class="table-foot member-pagination">
         <span>총 {{ filteredMembers.length }}명의 멤버</span>
+        <nav v-if="totalPages > 1" class="member-page-controls" aria-label="멤버 목록 페이지">
+          <button
+            type="button"
+            aria-label="이전 페이지"
+            :disabled="currentPage === 1"
+            @click="currentPage -= 1"
+          >
+            ‹
+          </button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            type="button"
+            :class="{ active: currentPage === page }"
+            :aria-current="currentPage === page ? 'page' : undefined"
+            :aria-label="`${page}페이지`"
+            @click="currentPage = page"
+          >
+            {{ page }}
+          </button>
+          <button
+            type="button"
+            aria-label="다음 페이지"
+            :disabled="currentPage === totalPages"
+            @click="currentPage += 1"
+          >
+            ›
+          </button>
+        </nav>
       </footer>
 
       <div v-if="canManage && activeTab !== 'all'" class="member-save-bar">
@@ -195,6 +224,8 @@ const savingAuthority = ref(false)
 const savingJobs = ref(false)
 const authorityDrafts = ref({})
 const jobDrafts = ref({})
+const pageSize = 10
+const currentPage = ref(1)
 const authorityOptions = [
   { value: 'OWNER', label: 'Owner' },
   { value: 'MEMBER', label: 'Member' },
@@ -235,7 +266,11 @@ const jobChanges = computed(() =>
 )
 const authorityChangeCount = computed(() => authorityChanges.value.length)
 const jobChangeCount = computed(() => jobChanges.value.length)
-const visibleMembers = computed(() => filteredMembers.value.slice(0, 10))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredMembers.value.length / pageSize)))
+const visibleMembers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredMembers.value.slice(start, start + pageSize)
+})
 
 function jobName(teamRoleId) {
   if (teamRoleId === null || teamRoleId === undefined || teamRoleId === '') return '직무 없음'
@@ -267,6 +302,14 @@ watch(
   },
   { immediate: true }
 )
+
+watch([query, activeTab, authorityFilter, reverse], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (pageCount) => {
+  if (currentPage.value > pageCount) currentPage.value = pageCount
+})
 
 async function runMemberAction(member, action, successMessage) {
   pendingMemberId.value = member.memberId
@@ -509,6 +552,43 @@ function kickMember(member) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.member-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.member-page-controls button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #dce1ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #616b80;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.member-page-controls button:hover:not(:disabled):not(.active) {
+  border-color: #aeb9e8;
+  background: #f4f6ff;
+  color: #536bdd;
+}
+
+.member-page-controls button.active {
+  border-color: #6372e6;
+  background: #6372e6;
+  color: #fff;
+}
+
+.member-page-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .member-save-bar {
