@@ -288,7 +288,7 @@
         :class="{ selected: entryDeviceSelection.microphone }"
         @click="entryDeviceSelection.microphone = !entryDeviceSelection.microphone"
       >
-        <i>🎙</i>
+        <i class="material-symbols-rounded" aria-hidden="true">mic</i>
         <span><b>마이크</b><small>회의에서 내 음성을 전달합니다.</small></span>
         <em>{{ entryDeviceSelection.microphone ? '켜기' : '끄기' }}</em>
       </button>
@@ -297,7 +297,7 @@
         :class="{ selected: entryDeviceSelection.camera }"
         @click="entryDeviceSelection.camera = !entryDeviceSelection.camera"
       >
-        <i>▣</i>
+        <i class="material-symbols-rounded" aria-hidden="true">videocam</i>
         <span><b>카메라</b><small>회의에서 내 영상을 공유합니다.</small></span>
         <em>{{ entryDeviceSelection.camera ? '켜기' : '끄기' }}</em>
       </button>
@@ -1946,6 +1946,7 @@ async function send() {
   color: #35363b;
   font-size: 18px;
   font-style: normal;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
 
 .device-setup-options span {
