@@ -23,6 +23,7 @@ export const mockMode = {
   meeting: getMockMode(import.meta.env.VITE_USE_MOCK_MEETING_API),
   notification: getMockMode(import.meta.env.VITE_USE_MOCK_NOTIFICATION_API),
   passwordReset: getMockMode(import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API),
+  schedule: getMockMode(import.meta.env.VITE_USE_MOCK_SCHEDULE_API),
   space: getMockMode(import.meta.env.VITE_USE_MOCK_SPACE_API),
   user: getMockMode(import.meta.env.VITE_USE_MOCK_USER_API),
   userSearch: getMockMode(import.meta.env.VITE_USE_MOCK_USER_SEARCH_API),
@@ -33,6 +34,7 @@ const authSource = mockMode.auth ? authMockApi : authApi
 const boardSource = mockMode.board ? boardMockApi : boardApi
 const meetingSource = mockMode.meeting ? boardMockApi : boardApi
 const spaceSource = mockMode.space ? boardMockApi : boardApi
+const scheduleSource = mockMode.schedule ? boardMockApi : boardApi
 const documentSource = mockMode.document ? documentMockApi : documentApi
 const notificationSource = mockMode.notification ? notificationMockApi : notificationApi
 const userSource = mockMode.user ? userMockApi : userApi
@@ -67,7 +69,12 @@ export const dataSource = {
     endMeeting: meetingSource.endMeeting,
     getParticipants: meetingSource.getParticipants,
     transferMeetingHost: meetingSource.transferMeetingHost,
-    createMeeting: meetingSource.createMeeting
+    createMeeting: meetingSource.createMeeting,
+    getMySchedules: scheduleSource.getMySchedules,
+    getSchedules: scheduleSource.getSchedules,
+    createSchedule: scheduleSource.createSchedule,
+    updateSchedule: scheduleSource.updateSchedule,
+    deleteSchedule: scheduleSource.deleteSchedule
   },
   document: documentSource,
   notification: notificationSource,

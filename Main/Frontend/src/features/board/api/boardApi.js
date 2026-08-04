@@ -14,6 +14,7 @@ import {
   toMeetingParticipantsViewModel,
   toMeetingViewModel
 } from '../mappers/meetingMapper'
+import { toScheduleRequest } from '../mappers/calendarMapper'
 
 export const boardApi = {
   getDashboard: async (search = '') => {
@@ -149,11 +150,18 @@ export const boardApi = {
       method: 'PATCH',
       body: JSON.stringify(data)
     }),
-  getEvents: (teamId, year, month) =>
-    request(`/api/teams/${teamId}/events?year=${year}&month=${month}`),
-  createEvent: (data) =>
-    request('/api/events', {
+  getMySchedules: () => request('/api/v1/me/schedules'),
+  getSchedules: (spaceId) => request(`/api/v1/spaces/${spaceId}/schedules`),
+  createSchedule: (spaceId, data) =>
+    request(`/api/v1/spaces/${spaceId}/schedules`, {
       method: 'POST',
-      body: JSON.stringify(data)
-    })
+      body: JSON.stringify(toScheduleRequest(data))
+    }),
+  updateSchedule: (scheduleId, data) =>
+    request(`/api/v1/schedules/${scheduleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(toScheduleRequest(data))
+    }),
+  deleteSchedule: (scheduleId) =>
+    request(`/api/v1/schedules/${scheduleId}`, { method: 'DELETE' })
 }
