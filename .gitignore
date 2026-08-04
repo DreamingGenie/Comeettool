@@ -33,6 +33,9 @@ application-local.yml
 application-local.properties
 *.env
 .env
+# Private key stores
+*.p12
+*.pfx
 
 # ===== Node / Frontend =====
 node_modules/
