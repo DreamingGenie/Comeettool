@@ -36,11 +36,88 @@ export function useLiveKitMeeting(options = {}) {
     camera: false,
     screen: false
   })
+  const availableDevices = reactive({
+    audioinput: [],
+    videoinput: [],
+    audiooutput: []
+  })
+  const selectedDeviceIds = reactive({
+    audioinput: localStorage.getItem('comeet-device-audioinput') || '',
+    videoinput: localStorage.getItem('comeet-device-videoinput') || '',
+    audiooutput: localStorage.getItem('comeet-device-audiooutput') || ''
+  })
 
   const mediaByIdentity = new Map()
   const containerByMediaKey = new Map()
   let requestedExit = ''
   let disposed = false
+  let listeningForDeviceChanges = false
+
+  const ensureMediaDevices = () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      throw new Error('이 주소에서는 미디어 장치를 사용할 수 없습니다. HTTPS 또는 localhost로 접속해주세요.')
+    }
+  }
+
+  const syncSelectedDevice = kind => {
+    const devices = availableDevices[kind]
+    if (!devices.length) {
+      selectedDeviceIds[kind] = ''
+      return
+    }
+    if (!devices.some(device => device.deviceId === selectedDeviceIds[kind])) {
+      selectedDeviceIds[kind] = devices[0].deviceId
+    }
+  }
+
+  const loadMediaDevices = async ({ requestPermission = false } = {}) => {
+    ensureMediaDevices()
+    if (requestPermission && navigator.mediaDevices.getUserMedia) {
+      const permissionResults = await Promise.allSettled([
+        navigator.mediaDevices.getUserMedia({ audio: true }),
+        navigator.mediaDevices.getUserMedia({ video: true })
+      ])
+      permissionResults.forEach(result => {
+        if (result.status === 'fulfilled') {
+          result.value.getTracks().forEach(track => track.stop())
+        }
+      })
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    for (const kind of Object.keys(availableDevices)) {
+      availableDevices[kind] = devices.filter(device => device.kind === kind)
+      syncSelectedDevice(kind)
+    }
+
+    if (!listeningForDeviceChanges) {
+      navigator.mediaDevices.addEventListener?.('devicechange', handleDeviceChange)
+      listeningForDeviceChanges = true
+    }
+    return availableDevices
+  }
+
+  const handleDeviceChange = () => {
+    loadMediaDevices().catch(() => undefined)
+  }
+
+  const selectDevice = (kind, deviceId) => {
+    if (!(kind in selectedDeviceIds)) return
+    selectedDeviceIds[kind] = deviceId
+  }
+
+  const applySelectedDevices = async () => {
+    const currentRoom = room.value
+    if (!currentRoom) throw new Error('회의 연결이 완료되지 않았습니다.')
+
+    for (const kind of ['audioinput', 'videoinput', 'audiooutput']) {
+      if (kind === 'audiooutput' && !('setSinkId' in HTMLMediaElement.prototype)) continue
+      const deviceId = selectedDeviceIds[kind]
+      if (!deviceId || !availableDevices[kind].some(device => device.deviceId === deviceId)) continue
+      await currentRoom.switchActiveDevice(kind, deviceId)
+      localStorage.setItem(`comeet-device-${kind}`, deviceId)
+    }
+  }
 
   const syncParticipants = () => {
     const currentRoom = room.value
@@ -260,6 +337,9 @@ export function useLiveKitMeeting(options = {}) {
 
   onBeforeUnmount(async () => {
     disposed = true
+    if (listeningForDeviceChanges) {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange)
+    }
     if (room.value) await room.value.disconnect()
     clearMedia()
   })
@@ -272,7 +352,12 @@ export function useLiveKitMeeting(options = {}) {
     screenShareIdentities,
     activeSpeakerIdentities,
     deviceState,
+    availableDevices,
+    selectedDeviceIds,
     connect,
+    loadMediaDevices,
+    selectDevice,
+    applySelectedDevices,
     mountParticipantMedia,
     setDeviceEnabled,
     requestServerExit,

@@ -146,6 +146,11 @@
               <span><b>전체 화면</b><small>회의 화면을 브라우저 전체 화면으로 보기</small></span>
               <em>{{ isFullscreen ? '✓' : '›' }}</em>
             </button>
+            <button type="button" @click="openDeviceSettings">
+              <i class="material-symbols-rounded" aria-hidden="true">settings_input_component</i>
+              <span><b>장치 설정</b><small>마이크·카메라·출력 장치 변경</small></span>
+              <em>›</em>
+            </button>
           </section>
         </footer>
       </section>
@@ -273,14 +278,16 @@
   </main>
 
   <BaseModal
-    v-if="modal === 'device-setup'"
+    v-if="modal === 'device-setup' || modal === 'device-settings'"
     modal-class="meeting-info-modal device-setup-modal"
-    @close="skipEntryDeviceSetup"
+    @close="closeDeviceSetup"
   >
     <small>DEVICE SETUP</small>
-    <h2>카메라와 마이크를 켤까요?</h2>
+    <h2>{{ modal === 'device-setup' ? '카메라와 마이크를 켤까요?' : '회의 장치 설정' }}</h2>
     <p class="device-setup-description">
-      회의에 입장했습니다. 사용할 장치를 선택하면 브라우저 권한 요청이 표시됩니다.
+      {{ modal === 'device-setup'
+        ? '회의에 입장했습니다. 사용할 장치를 선택하면 브라우저 권한 요청이 표시됩니다.'
+        : '회의 연결을 유지한 상태로 사용할 장치를 변경합니다.' }}
     </p>
     <div class="device-setup-options">
       <button
@@ -302,17 +309,57 @@
         <em>{{ entryDeviceSelection.camera ? '켜기' : '끄기' }}</em>
       </button>
     </div>
+    <div class="device-selectors">
+      <label>
+        <span><i class="material-symbols-rounded" aria-hidden="true">mic</i>마이크 장치</span>
+        <select
+          :value="selectedDeviceIds.audioinput"
+          :disabled="!availableDevices.audioinput.length"
+          @change="selectMeetingDevice('audioinput', $event.target.value)"
+        >
+          <option v-for="(device, index) in availableDevices.audioinput" :key="device.deviceId" :value="device.deviceId">
+            {{ device.label || `마이크 ${index + 1}` }}
+          </option>
+        </select>
+      </label>
+      <label>
+        <span><i class="material-symbols-rounded" aria-hidden="true">videocam</i>카메라 장치</span>
+        <select
+          :value="selectedDeviceIds.videoinput"
+          :disabled="!availableDevices.videoinput.length"
+          @change="selectMeetingDevice('videoinput', $event.target.value)"
+        >
+          <option v-for="(device, index) in availableDevices.videoinput" :key="device.deviceId" :value="device.deviceId">
+            {{ device.label || `카메라 ${index + 1}` }}
+          </option>
+        </select>
+      </label>
+      <label v-if="supportsAudioOutputSelection && availableDevices.audiooutput.length">
+        <span><i class="material-symbols-rounded" aria-hidden="true">speaker</i>출력 장치</span>
+        <select
+          :value="selectedDeviceIds.audiooutput"
+          @change="selectMeetingDevice('audiooutput', $event.target.value)"
+        >
+          <option v-for="(device, index) in availableDevices.audiooutput" :key="device.deviceId" :value="device.deviceId">
+            {{ device.label || `스피커 ${index + 1}` }}
+          </option>
+        </select>
+      </label>
+      <p v-else class="audio-output-notice">이 브라우저에서는 별도 출력 장치 선택을 지원하지 않습니다.</p>
+    </div>
     <footer class="device-setup-actions">
-      <button type="button" :disabled="deviceSetupPending" @click="skipEntryDeviceSetup">
-        끄고 참여
+      <button type="button" :disabled="deviceSetupPending" @click="closeDeviceSetup">
+        {{ modal === 'device-setup' ? '끄고 참여' : '취소' }}
       </button>
       <button
         class="enable-entry-devices"
         type="button"
-        :disabled="deviceSetupPending || !hasSelectedEntryDevice"
+        :disabled="deviceSetupPending || (modal === 'device-setup' && !hasSelectedEntryDevice)"
         @click="enableSelectedEntryDevices"
       >
-        {{ deviceSetupPending ? '장치 연결 중…' : '선택한 장치 켜기' }}
+        {{ deviceSetupPending
+          ? '장치 연결 중…'
+          : modal === 'device-setup' ? '선택한 장치 켜기' : '장치 적용' }}
       </button>
     </footer>
   </BaseModal>
@@ -353,7 +400,12 @@ const {
   screenShareIdentities,
   activeSpeakerIdentities,
   deviceState,
+  availableDevices,
+  selectedDeviceIds,
   connect: connectLiveKit,
+  loadMediaDevices,
+  selectDevice,
+  applySelectedDevices,
   mountParticipantMedia,
   setDeviceEnabled,
   requestServerExit,
@@ -481,6 +533,7 @@ const entryDeviceSelection = reactive({ microphone: true, camera: true })
 const hasSelectedEntryDevice = computed(() =>
   entryDeviceSelection.microphone || entryDeviceSelection.camera
 )
+const supportsAudioOutputSelection = 'setSinkId' in HTMLMediaElement.prototype
 const messageList = ref(null)
 const meetingRoomElement = ref(null)
 const showMore = ref(false)
@@ -539,6 +592,7 @@ watch(
         hasAskedDeviceSetup.value = true
         entryDeviceSelection.microphone = !deviceState.microphone
         entryDeviceSelection.camera = !deviceState.camera
+        await loadMediaDevices({ requestPermission: true })
         modal.value = 'device-setup'
       }
     } catch (error) {
@@ -770,25 +824,58 @@ async function kickMeetingParticipant(participant) {
   }
 }
 
-function skipEntryDeviceSetup() {
+function closeDeviceSetup() {
   if (deviceSetupPending.value) return
   modal.value = ''
 }
 
+function selectMeetingDevice(kind, deviceId) {
+  selectDevice(kind, deviceId)
+}
+
+async function openDeviceSettings() {
+  showMore.value = false
+  activeControls.delete('more')
+  try {
+    await loadMediaDevices({ requestPermission: true })
+    entryDeviceSelection.microphone = deviceState.microphone
+    entryDeviceSelection.camera = deviceState.camera
+    modal.value = 'device-settings'
+  } catch (error) {
+    notify(error?.message || '사용 가능한 장치를 불러오지 못했습니다.')
+  }
+}
+
 async function enableSelectedEntryDevices() {
-  if (deviceSetupPending.value || !hasSelectedEntryDevice.value) return
+  if (
+    deviceSetupPending.value ||
+    (modal.value === 'device-setup' && !hasSelectedEntryDevice.value)
+  ) return
+  const isInMeetingSettings = modal.value === 'device-settings'
   deviceSetupPending.value = true
   try {
-    if (entryDeviceSelection.microphone && !deviceState.microphone) {
-      await setDeviceEnabled('microphone', true)
-      activeControls.add('mic')
+    await applySelectedDevices()
+    if (isInMeetingSettings) {
+      if (entryDeviceSelection.microphone !== deviceState.microphone) {
+        await setDeviceEnabled('microphone', entryDeviceSelection.microphone)
+      }
+      if (entryDeviceSelection.camera !== deviceState.camera) {
+        await setDeviceEnabled('camera', entryDeviceSelection.camera)
+      }
+    } else {
+      if (entryDeviceSelection.microphone && !deviceState.microphone) {
+        await setDeviceEnabled('microphone', true)
+      }
+      if (entryDeviceSelection.camera && !deviceState.camera) {
+        await setDeviceEnabled('camera', true)
+      }
     }
-    if (entryDeviceSelection.camera && !deviceState.camera) {
-      await setDeviceEnabled('camera', true)
-      activeControls.add('camera')
-    }
+    if (entryDeviceSelection.microphone) activeControls.add('mic')
+    else activeControls.delete('mic')
+    if (entryDeviceSelection.camera) activeControls.add('camera')
+    else activeControls.delete('camera')
     modal.value = ''
-    notify('선택한 회의 장치를 켰습니다.')
+    notify(isInMeetingSettings ? '회의 장치를 변경했습니다.' : '선택한 회의 장치를 켰습니다.')
   } catch (error) {
     notify(error?.message || '장치를 켜지 못했습니다. 브라우저 권한을 확인해주세요.')
   } finally {
@@ -1969,6 +2056,70 @@ async function send() {
 
 .device-setup-options .selected em {
   color: #292a2f;
+}
+
+.device-selectors {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e4e9;
+}
+
+.device-selectors label {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.device-selectors label > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #41434a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.device-selectors label > span i {
+  color: #64666e;
+  font-size: 18px;
+  font-style: normal;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+}
+
+.device-selectors select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 34px 0 13px;
+  border: 1px solid #d5d9e4;
+  border-radius: 11px;
+  outline: none;
+  background: #f8f9fb;
+  color: #292b31;
+  font: inherit;
+  font-size: 11px;
+}
+
+.device-selectors select:focus {
+  border-color: #55565d;
+  box-shadow: 0 0 0 3px rgba(48, 49, 55, 0.08);
+}
+
+.device-selectors select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.audio-output-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #747b89;
+  font-size: 10px;
 }
 
 .device-setup-actions {
