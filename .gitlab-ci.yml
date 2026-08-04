@@ -8,6 +8,8 @@ variables:
 
 oidc:verify-aws:
   stage: oidc-verify
+  tags:
+    - a707-docker
   image:
     name: amazon/aws-cli:2.27.49
     entrypoint: [""]
