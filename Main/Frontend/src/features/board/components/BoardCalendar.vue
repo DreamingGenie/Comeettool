@@ -10,29 +10,53 @@
     </header>
     <div class="calendar-grid">
       <b v-for="weekday in calendar.weekdays" :key="weekday">{{ weekday }}</b>
-      <div
-        v-for="(day, index) in days"
-        :key="index"
-        class="day"
-        :class="{
-          muted: day < 1 || day > calendar.totalDays,
-          'has-events': day > 0 && day <= calendar.totalDays && eventsFor(day).length,
-          'segment-origin': day > 0 && day <= calendar.totalDays && segmentsFor(day).length
-        }"
-      >
-        <template v-if="day > 0 && day <= calendar.totalDays">
-          <span class="day-number">{{ day }}</span>
+      <section v-for="(week, weekIndex) in weeks" :key="weekIndex" class="calendar-week">
+        <div
+          v-for="(day, dayIndex) in week"
+          :key="dayIndex"
+          class="day"
+          :class="{
+            muted: !isCurrentMonthDay(day),
+            'has-events': isCurrentMonthDay(day) && segmentsCovering(day).length
+          }"
+        >
+          <template v-if="isCurrentMonthDay(day)">
+            <span class="day-number">{{ day }}</span>
+            <button
+              v-if="editable"
+              class="add-event"
+              type="button"
+              :aria-label="`${calendar.month}월 ${day}일 일정 추가`"
+              @click.stop="$emit('select-date', day)"
+            >
+              ＋
+            </button>
+            <button
+              v-if="hiddenSegmentsFor(day).length"
+              class="more-events"
+              type="button"
+              :aria-label="`${calendar.month}월 ${day}일 숨겨진 일정 ${hiddenSegmentsFor(day).length}개 보기`"
+            >
+              +{{ hiddenSegmentsFor(day).length }}개
+            </button>
+            <section v-if="hiddenSegmentsFor(day).length" class="event-overflow-popover">
+              <header><b>{{ calendar.month }}월 {{ day }}일</b><small>일정 {{ segmentsCovering(day).length }}개</small></header>
+              <button
+                v-for="segment in segmentsCovering(day)"
+                :key="`popover-${segment.event.id || segment.event.title}-${segment.startDay}`"
+                type="button"
+                :disabled="!editable"
+                @click.stop="$emit('select-event', segment.event)"
+              >
+                <i :style="{ backgroundColor: segment.event.color || '#7086E8' }"></i>
+                <span>{{ segment.event.title }}</span>
+              </button>
+            </section>
+          </template>
+        </div>
+        <div class="week-event-layer" aria-label="주간 일정">
           <button
-            v-if="editable"
-            class="add-event"
-            type="button"
-            :aria-label="`${calendar.month}월 ${day}일 일정 추가`"
-            @click.stop="$emit('select-date', day)"
-          >
-            ＋
-          </button>
-          <button
-            v-for="segment in segmentsFor(day)"
+            v-for="segment in visibleSegmentsForWeek(weekIndex)"
             :key="`${segment.event.id || segment.event.title}-${segment.startDay}`"
             class="event"
             :class="[
@@ -40,7 +64,8 @@
               { 'continues-before': segment.continuesBefore, 'continues-after': segment.continuesAfter }
             ]"
             :style="{
-              width: `calc(${segment.span * 100}% + ${(segment.span - 1) * 12.8}px)`,
+              gridColumn: `${segment.startColumn} / span ${segment.span}`,
+              gridRow: segment.lane + 1,
               backgroundColor: segment.event.color || '#7086E8'
             }"
             type="button"
@@ -49,8 +74,8 @@
           >
             {{ segment.event.title }}
           </button>
-        </template>
-      </div>
+        </div>
+      </section>
     </div>
   </section>
 </template>
@@ -86,7 +111,15 @@ const days = computed(() => {
   )
 })
 
-const eventsFor = day => props.calendar.events.filter(event => event.day === day)
+const weeks = computed(() => {
+  const result = []
+  for (let index = 0; index < days.value.length; index += 7) {
+    result.push(days.value.slice(index, index + 7))
+  }
+  return result
+})
+
+const isCurrentMonthDay = day => day > 0 && day <= props.calendar.totalDays
 
 const toValidDate = value => {
   if (!value) return null
@@ -124,6 +157,8 @@ const eventSegments = computed(() => {
       segments.push({
         event,
         startDay,
+        weekIndex: Math.floor((props.calendar.leadingBlankDays + startDay - 1) / 7),
+        startColumn: weekday + 1,
         span: segmentEnd - startDay + 1,
         continuesBefore: startDay > visibleStart.getDate() || start < monthStart,
         continuesAfter: segmentEnd < endDay || end > monthEnd
@@ -135,11 +170,47 @@ const eventSegments = computed(() => {
   })
 })
 
-const segmentsFor = day => eventSegments.value.filter(segment => segment.startDay === day)
+const maxVisibleLanes = 2
+const laidOutSegments = computed(() => {
+  const byWeek = new Map()
+  eventSegments.value.forEach(segment => {
+    const weekSegments = byWeek.get(segment.weekIndex) || []
+    weekSegments.push(segment)
+    byWeek.set(segment.weekIndex, weekSegments)
+  })
+
+  return [...byWeek.values()].flatMap(segments => {
+    const laneEnds = []
+    return [...segments]
+      .sort((left, right) => left.startColumn - right.startColumn || right.span - left.span)
+      .map(segment => {
+        let lane = laneEnds.findIndex(endColumn => endColumn < segment.startColumn)
+        if (lane < 0) lane = laneEnds.length
+        laneEnds[lane] = segment.startColumn + segment.span - 1
+        return { ...segment, lane }
+      })
+  })
+})
+
+const visibleSegmentsForWeek = weekIndex => laidOutSegments.value.filter(
+  segment => segment.weekIndex === weekIndex && segment.lane < maxVisibleLanes
+)
+
+const segmentsCovering = day => {
+  if (!isCurrentMonthDay(day)) return []
+  return laidOutSegments.value.filter(
+    segment => day >= segment.startDay && day < segment.startDay + segment.span
+  )
+}
+
+const hiddenSegmentsFor = day => segmentsCovering(day).filter(
+  segment => segment.lane >= maxVisibleLanes
+)
 </script>
 
 <style scoped>
 .calendar {
+  --calendar-cell-padding: 8px;
   border: 1px solid #c8d3f5;
   background: #fff;
   box-shadow:
@@ -155,6 +226,17 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
   box-shadow:
     0 16px 38px #314c8d1c,
     0 0 0 1px #7086e817;
+}
+
+:global(.app-shell) .calendar {
+  --calendar-cell-padding: 6.4px;
+}
+
+.calendar-week {
+  position: relative;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .calendar-head {
@@ -207,7 +289,10 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
 
 .day {
   position: relative;
-  z-index: 0;
+  min-width: 0;
+  padding-right: var(--calendar-cell-padding);
+  padding-left: var(--calendar-cell-padding);
+  overflow: visible !important;
   background: #fff;
   border-color: #dce2ef;
   transition:
@@ -249,13 +334,9 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
   transform: scale(1.08);
 }
 
-.day.segment-origin {
-  z-index: 2;
-  overflow: visible;
-}
-
-.day.segment-origin:hover {
-  z-index: 3;
+.day:hover,
+.day:focus-within {
+  z-index: 5;
 }
 
 .add-event {
@@ -302,7 +383,10 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
 
 .event {
   position: relative;
-  width: 100%;
+  min-width: 0;
+  height: 15px;
+  margin: 0 var(--calendar-cell-padding);
+  padding: 2px 4px;
   border: 0;
   overflow: hidden;
   text-align: left;
@@ -312,6 +396,23 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
     filter 0.18s ease,
     box-shadow 0.18s ease,
     transform 0.18s ease;
+}
+
+.week-event-layer {
+  position: absolute;
+  top: 27px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: 15px;
+  gap: 3px 0;
+  pointer-events: none;
+}
+
+.week-event-layer .event {
+  pointer-events: auto;
 }
 
 .event.continues-before {
@@ -349,6 +450,114 @@ const segmentsFor = day => eventSegments.value.filter(segment => segment.startDa
 .event:hover::after {
   opacity: 1;
   transform: translateX(105%);
+}
+
+.more-events {
+  position: absolute;
+  right: var(--calendar-cell-padding);
+  bottom: 4px;
+  z-index: 3;
+  display: block;
+  width: auto;
+  margin: 0;
+  padding: 2px 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: #eef1f8;
+  color: #606a7d;
+  cursor: default;
+  font-size: 8px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-overflow-popover {
+  position: absolute;
+  top: 28px;
+  left: 7px;
+  z-index: 30;
+  display: grid;
+  gap: 5px;
+  width: max(190px, calc(100% - 14px));
+  max-height: 230px;
+  padding: 10px;
+  overflow-y: auto;
+  border: 1px solid #d8deeb;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 34px rgba(34, 48, 83, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-5px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.day:nth-child(7) .event-overflow-popover {
+  right: 7px;
+  left: auto;
+}
+
+.day:hover .event-overflow-popover,
+.day:focus-within .event-overflow-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.event-overflow-popover header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.event-overflow-popover header b {
+  color: #222a3b;
+  font-size: 10px;
+}
+
+.event-overflow-popover header small {
+  color: #8790a2;
+  font-size: 8px;
+}
+
+.event-overflow-popover > button {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 27px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: #f7f8fb;
+  color: #31394b;
+  font-size: 9px;
+  text-align: left;
+}
+
+.event-overflow-popover > button:not(:disabled) {
+  cursor: pointer;
+}
+
+.event-overflow-popover > button:not(:disabled):hover {
+  background: #eef1f8;
+}
+
+.event-overflow-popover > button i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.event-overflow-popover > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {
