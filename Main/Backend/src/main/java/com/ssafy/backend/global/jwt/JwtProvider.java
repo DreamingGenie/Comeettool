@@ -34,10 +34,19 @@ public class JwtProvider {
 
     @Autowired
     public JwtProvider(JwtProperties props) {
+        this(props, RsaKeyUtil.loadKeyPair(
+                props.privateKeyBase64(),
+                props.publicKeyBase64(),
+                props.privateKeyPath(),
+                props.publicKeyPath()
+        ));
+    }
+
+    private JwtProvider(JwtProperties props, RsaKeyUtil.LoadedRsaKeyPair keyPair) {
         this(
                 props,
-                RsaKeyUtil.loadPrivateKey(props.privateKeyPath()),
-                (RSAPublicKey) RsaKeyUtil.loadPublicKey(props.publicKeyPath())
+                keyPair.privateKey(),
+                keyPair.publicKey()
         );
     }
 

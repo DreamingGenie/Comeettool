@@ -24,9 +24,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class JwtProviderTest {
 
     private static final JwtProperties PROPERTIES =
-            new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", "a707-api", "a707-api",
+            new JwtProperties(
+                    "", // privateKeyBase64
+                    "", // publicKeyBase64
+                    "classpath:keys/jwt_private.pem",
+                    "classpath:keys/jwt_public.pem",
+                    "a707-api",
+                    "a707-api",
                     "a707-yjs",
-                    1800, 1209600, 300);
+                    1800,
+                    1209600,
+                    300
+            );
     private static final KeyPair KEY_PAIR = generateKeyPair();
 
     private final JwtProvider provider = new JwtProvider(
@@ -58,9 +67,18 @@ class JwtProviderTest {
     void expiredTokenThrowsException() {
         // 만료폭을 clock skew(60s)보다 크게 두어 확실히 만료 처리되게 함
         JwtProvider expired = new JwtProvider(
-                new JwtProperties("classpath:keys/jwt_private.pem", "classpath:keys/jwt_public.pem", "a707-api",
-                        "a707-api", "a707-yjs",
-                        -120, -120, 300),
+                new JwtProperties(
+                        "", // privateKeyBase64
+                        "", // publicKeyBase64
+                        "classpath:keys/jwt_private.pem",
+                        "classpath:keys/jwt_public.pem",
+                        "a707-api",
+                        "a707-api",
+                        "a707-yjs",
+                        -120,
+                        -120,
+                        300
+                ),
                 KEY_PAIR.getPrivate(),
                 (RSAPublicKey) KEY_PAIR.getPublic()
         );

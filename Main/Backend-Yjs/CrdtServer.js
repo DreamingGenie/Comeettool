@@ -1,6 +1,7 @@
 import express from 'express'
 import http from 'node:http'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import * as Y from 'yjs'
 import {Hocuspocus} from '@hocuspocus/server'
 import {Database} from '@hocuspocus/extension-database'
@@ -13,7 +14,18 @@ import {
 
 const {Pool} = pg
 const port = Number(process.env.PORT || 3000)
-const databaseUrl = process.env.DATABASE_URL
+const databaseUrl = process.env.DATABASE_URL?.trim()
+const databaseHost = process.env.DB_HOST?.trim()
+const databasePort = Number(process.env.DB_PORT || 5432)
+const databaseName = process.env.DB_NAME?.trim()
+const databaseUsername = process.env.DB_USERNAME?.trim()
+const databasePassword = process.env.DB_PASSWORD
+const databaseSslEnabled = readBooleanEnvironmentVariable(
+    'DB_SSL_ENABLED',
+    process.env.NODE_ENV === 'production',
+)
+const databaseSslRootCert = process.env.DB_SSL_ROOT_CERT?.trim()
+    || '/app/certs/rds-ca-bundle.pem'
 const springJwksUrl = process.env.SPRING_JWKS_URL
     || 'http://localhost:8080/.well-known/jwks.json'
 const jwtIssuer = process.env.JWT_ISSUER || 'a707-api'
@@ -23,13 +35,66 @@ const internalApiToken = process.env.YJS_INTERNAL_TOKEN
 const titleFragmentField = 'title-content'
 
 if (!databaseUrl) {
-    throw new Error('DATABASE_URL 환경변수가 필요합니다.')
+    const missingDatabaseVariables = [
+        ['DB_HOST', databaseHost],
+        ['DB_NAME', databaseName],
+        ['DB_USERNAME', databaseUsername],
+        ['DB_PASSWORD', databasePassword],
+    ]
+        .filter(([, value]) => value === undefined || value === '')
+        .map(([name]) => name)
+
+    if (missingDatabaseVariables.length > 0) {
+        throw new Error(
+            `DB 환경변수가 필요합니다: ${missingDatabaseVariables.join(', ')}`,
+        )
+    }
+
+    if (!Number.isInteger(databasePort)
+        || databasePort < 1
+        || databasePort > 65535) {
+        throw new Error('DB_PORT는 1~65535 범위의 정수여야 합니다.')
+    }
 }
 
+const databaseSsl = databaseSslEnabled
+    ? {
+        ca: fs.readFileSync(databaseSslRootCert, 'utf8'),
+        rejectUnauthorized: true,
+    }
+    : undefined
+
 const pool = new Pool({
-    connectionString: databaseUrl,
+    ...(databaseUrl
+        ? {connectionString: databaseUrl}
+        : {
+            host: databaseHost,
+            port: databasePort,
+            database: databaseName,
+            user: databaseUsername,
+            password: databasePassword,
+        }),
+    ...(databaseSsl ? {ssl: databaseSsl} : {}),
     max: 10,
 })
+
+function readBooleanEnvironmentVariable(name, defaultValue) {
+    const value = process.env[name]?.trim().toLowerCase()
+
+    if (!value) {
+        return defaultValue
+    }
+
+    if (value === 'true') {
+        return true
+    }
+
+    if (value === 'false') {
+        return false
+    }
+
+    throw new Error(`${name} must be either "true" or "false".`)
+}
 
 function insertTitleIntoFragment(fragment, title) {
     const paragraph = new Y.XmlElement('paragraph')

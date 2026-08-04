@@ -41,7 +41,8 @@ public class SecurityConfig {
             "/api/v1/webhooks/livekit",
             "/swagger-ui/**",
             "/swagger-ui.html",
-            "/v3/api-docs/**"
+            "/v3/api-docs/**",
+            "/files/profile-images/**",
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

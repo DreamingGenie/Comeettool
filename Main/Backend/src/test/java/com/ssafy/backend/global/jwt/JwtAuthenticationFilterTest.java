@@ -145,6 +145,8 @@ class JwtAuthenticationFilterTest {
     void protectedExpiredTokenReturns401Expired() throws Exception {
         JwtProvider expired = new JwtProvider(
                 new JwtProperties(
+                        "",
+                        "",
                         "classpath:keys/jwt_private.pem",
                         "classpath:keys/jwt_public.pem",
                         "a707-api",
