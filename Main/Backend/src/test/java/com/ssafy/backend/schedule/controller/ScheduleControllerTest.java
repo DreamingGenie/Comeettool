@@ -67,7 +67,7 @@ class ScheduleControllerTest {
     }
 
     private ResponseScheduleDto sample(Long id, String title) {
-        return new ResponseScheduleDto(id, 10L, 7L, "회의", title, "설명", null, null, List.of(7L));
+        return new ResponseScheduleDto(id, 10L, 7L, "회의", title, "설명", null, null, List.of(7L), "#566FEA");
     }
 
     @Test
@@ -95,7 +95,7 @@ class ScheduleControllerTest {
     @DisplayName("SCHEDULE-03 POST /spaces/{id}/schedules → 201")
     void addSchedule() throws Exception {
         RequestCreateScheduleDto request =
-                new RequestCreateScheduleDto("회의", "주간", "설명", null, null, null);
+                new RequestCreateScheduleDto("회의", "주간", "설명", null, null, null, null);
         given(scheduleService.addSchedule(eq(7L), eq(10L), any(RequestCreateScheduleDto.class)))
                 .willReturn(sample(1L, "주간"));
 
@@ -110,7 +110,7 @@ class ScheduleControllerTest {
     @DisplayName("SCHEDULE-04 PATCH /schedules/{id} → 200")
     void modifySchedule() throws Exception {
         RequestUpdateScheduleDto request =
-                new RequestUpdateScheduleDto(null, "수정", null, null, null, null);
+                new RequestUpdateScheduleDto(null, "수정", null, null, null, null, null);
         given(scheduleService.modifySchedule(eq(7L), eq(1L), any(RequestUpdateScheduleDto.class)))
                 .willReturn(sample(1L, "수정"));
 
@@ -135,7 +135,7 @@ class ScheduleControllerTest {
     @DisplayName("없는 일정 수정 시 404 SCHEDULE_NOT_FOUND")
     void modifyNotFound() throws Exception {
         RequestUpdateScheduleDto request =
-                new RequestUpdateScheduleDto(null, "수정", null, null, null, null);
+                new RequestUpdateScheduleDto(null, "수정", null, null, null, null, null);
         given(scheduleService.modifySchedule(eq(7L), eq(1L), any(RequestUpdateScheduleDto.class)))
                 .willThrow(new CustomException(ErrorCode.SCHEDULE_NOT_FOUND));
 

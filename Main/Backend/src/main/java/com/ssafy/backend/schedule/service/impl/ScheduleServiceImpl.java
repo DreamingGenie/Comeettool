@@ -54,6 +54,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         Schedule schedule = Schedule.builder()
                 .teamId(spaceId)
                 .creatorId(userId)
+                .color(request.color())
                 .category(request.category())
                 .title(request.title())
                 .description(request.description())
@@ -73,6 +74,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         validateTimeRange(request.startTime(), request.endTime());
 
         schedule.updateInfo(
+                request.color(),
                 request.category(),
                 request.title(),
                 request.description(),

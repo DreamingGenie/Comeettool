@@ -24,6 +24,9 @@ public record RequestUpdateScheduleDto(
 
         OffsetDateTime endTime,
 
-        List<Long> userIdArr
+        List<Long> userIdArr,
+
+        @Size(max = 20)
+        String color
 ) {
 }

@@ -40,6 +40,10 @@ public class Schedule {
     @Column(name = "creator_id", nullable = false)
     private Long creatorId;
 
+    // 캘린더 이벤트 색상(#RRGGBB). NOT NULL — 미지정 시 생성자에서 기본색을 채운다.
+    @Column(name = "schedule_color", nullable = false)
+    private String color;
+
     @Column(name = "schedule_category", length = 1000)
     private String category;
 
@@ -66,12 +70,16 @@ public class Schedule {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    private static final String DEFAULT_COLOR = "#566FEA";
+
     @Builder
-    private Schedule(Long teamId, Long creatorId, String category, String title,
+    private Schedule(Long teamId, Long creatorId, String color, String category, String title,
                      String description, OffsetDateTime startTime, OffsetDateTime endTime,
                      List<Long> userIdArr) {
         this.teamId = teamId;
         this.creatorId = creatorId;
+        // 미지정 시 기본색(#566FEA)을 적용한다.
+        this.color = (color != null && !color.isBlank()) ? color : DEFAULT_COLOR;
         this.category = category;
         this.title = title;
         this.description = description;
@@ -86,8 +94,12 @@ public class Schedule {
     }
 
     // SCHEDULE-04: 부분 수정 — null이 아닌 필드만 갱신한다(전달되지 않은 필드는 유지).
-    public void updateInfo(String category, String title, String description,
+    // color는 NOT NULL이므로 공백은 무시하고 유효한 값일 때만 갱신한다.
+    public void updateInfo(String color, String category, String title, String description,
                            OffsetDateTime startTime, OffsetDateTime endTime, List<Long> userIdArr) {
+        if (color != null && !color.isBlank()) {
+            this.color = color;
+        }
         if (category != null) {
             this.category = category;
         }
