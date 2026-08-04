@@ -1,5 +1,6 @@
 package com.ssafy.backend.report.service.impl;
 
+import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -21,8 +22,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.meeting.entity.MeetingRoom;
+import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
+import com.ssafy.backend.report.entity.AudioTranscription;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
@@ -44,12 +49,16 @@ class ReportServiceImplTest {
 
     private static final Long OWNER_ID = 1L;
     private static final Long SPACE_ID = 10L;
+    private static final Long MEETING_ID = 34L;
 
     @Mock
     private TeamRepository teamRepository;
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private MeetingRoomRepository meetingRoomRepository;
 
     @Mock
     private AudioTranscriptionRepository audioTranscriptionRepository;
@@ -61,6 +70,28 @@ class ReportServiceImplTest {
         Team team = Team.builder().name("팀A").description("설명").ownerId(ownerId).color("#123456").build();
         ReflectionTestUtils.setField(team, "id", spaceId);
         return team;
+    }
+
+    private MeetingRoom meetingRoomOf(Long meetingId, Long teamId) {
+        MeetingRoom meetingRoom = MeetingRoom.builder().teamId(teamId).hostId(OWNER_ID).name("스프린트 회의").build();
+        ReflectionTestUtils.setField(meetingRoom, "id", meetingId);
+        return meetingRoom;
+    }
+
+    // AudioTranscription은 순수 조회 전용 엔티티라 빌더/공개 생성자를 두지 않는다 —
+    // 테스트에서는 protected 기본 생성자를 리플렉션으로 열어 ReflectionTestUtils로 필드를 채운다.
+    private AudioTranscription transcriptionOf(Long meetingId, String transcript, OffsetDateTime createdAt) {
+        try {
+            Constructor<AudioTranscription> constructor = AudioTranscription.class.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            AudioTranscription entity = constructor.newInstance();
+            ReflectionTestUtils.setField(entity, "meetingId", meetingId);
+            ReflectionTestUtils.setField(entity, "transcript", transcript);
+            ReflectionTestUtils.setField(entity, "createdAt", createdAt);
+            return entity;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Nested
@@ -175,6 +206,89 @@ class ReportServiceImplTest {
             verify(audioTranscriptionRepository).findAllByTeamId(eq(SPACE_ID), captor.capture());
             assertThat(captor.getValue().getPageNumber()).isEqualTo(1);
             assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-02 전사 상세 조회")
+    class GetTranscript {
+
+        private static final String TRANSCRIPT_JSON =
+                "[{\"speaker\":\"ssong123\",\"start\":12.5,\"end\":15.8,\"text\":\"그럼 다음 안건으로 넘어가겠습니다\"}]";
+
+        @Test
+        @DisplayName("정상 조회 시 transcript가 JSON 배열 원문 그대로 응답 DTO에 매핑된다")
+        void getTranscript_returnsMappedDetail() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            OffsetDateTime createdAt = OffsetDateTime.parse("2026-08-04T05:00:00Z");
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, createdAt);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+
+            TranscriptDetailDto result = reportService.getTranscript(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.transcript()).isEqualTo(TRANSCRIPT_JSON);
+            assertThat(result.createdAt()).isEqualTo(createdAt);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·전사 조회를 시도하지 않는다")
+        void getTranscript_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getTranscript(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(audioTranscriptionRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 전사 조회를 시도하지 않는다")
+        void getTranscript_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() -> reportService.getTranscript(nonMemberId, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(audioTranscriptionRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 정상 조회된다(오너 제한 없음)")
+        void getTranscript_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            OffsetDateTime createdAt = OffsetDateTime.parse("2026-08-04T05:00:00Z");
+            AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, createdAt);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
+
+            TranscriptDetailDto result = reportService.getTranscript(guestUserId, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 전사가 없으면(처리 중) TRANSCRIPT_NOT_FOUND 예외가 발생한다")
+        void getTranscript_throwsWhenTranscriptNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getTranscript(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.TRANSCRIPT_NOT_FOUND);
         }
     }
 }
