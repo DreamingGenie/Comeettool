@@ -416,9 +416,6 @@ production:package-images:
     BUILDAH_FORMAT: "docker"
     BUILDAH_ISOLATION: "chroot"
     AWS_OIDC_DURATION_SECONDS: "3600"
-  environment:
-    name: production
-    action: prepare
   interruptible: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
@@ -458,9 +455,6 @@ production:package-frontend:
     VITE_USE_MOCK_USER_SEARCH_API: "false"
     VITE_API_BASE_URL: "$DEPLOY_API_BASE_URL"
     VITE_YJS_WEBSOCKET_URL: "$DEPLOY_YJS_WEBSOCKET_URL"
-  environment:
-    name: production
-    action: prepare
   interruptible: false
   needs:
     - job: production:package-images
@@ -496,10 +490,6 @@ production:release:
       aud: sts.amazonaws.com
   variables:
     AWS_OIDC_DURATION_SECONDS: "3600"
-  environment:
-    name: production
-    url: "$DEPLOY_FRONTEND_URL"
-    deployment_tier: production
   resource_group: production
   interruptible: false
   needs:

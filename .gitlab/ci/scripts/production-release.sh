@@ -34,6 +34,41 @@ release_work_dir="$(mktemp -d)" \
   || fail_release "a temporary workspace could not be created."
 trap 'rm -rf -- "$release_work_dir"' 0 1 2 15
 
+[ -n "${CI_API_V4_URL:-}" ] \
+  || fail_release "the GitLab API URL is unavailable."
+[ -n "${CI_PROJECT_ID:-}" ] \
+  || fail_release "the GitLab project identifier is unavailable."
+[ -n "${CI_JOB_TOKEN:-}" ] \
+  || fail_release "the GitLab job token is unavailable."
+printf '%s' "$CI_PROJECT_ID" | grep -Eq '^[0-9]+$' \
+  || fail_release "the GitLab project identifier is invalid."
+
+gitlab_api_url="${CI_API_V4_URL%/}"
+case "$gitlab_api_url" in
+  https://*) ;;
+  *) fail_release "the GitLab API must use HTTPS." ;;
+esac
+
+curl --fail --silent --show-error \
+  --connect-timeout 10 --max-time 30 \
+  --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+  "${gitlab_api_url}/projects/${CI_PROJECT_ID}/repository/branches?search=%5Emain%24&per_page=100" \
+  >"$release_work_dir/main-branch.json" 2>/dev/null \
+  || fail_release "the current main branch could not be verified."
+
+latest_main_sha="$(
+  jq -r \
+    '[.[] | select(.name == "main") | .commit.id]
+     | if length == 1 then .[0] else empty end' \
+    "$release_work_dir/main-branch.json"
+)" || fail_release "the current main branch response is invalid."
+printf '%s' "$latest_main_sha" | grep -Eq '^[0-9a-f]{40}$' \
+  || fail_release "the current main branch commit is invalid."
+[ "$latest_main_sha" = "$CI_COMMIT_SHA" ] \
+  || fail_release "a newer main commit exists; this release is outdated."
+unset latest_main_sha gitlab_api_url
+echo "The release commit is the current main commit."
+
 aws_account_id="$(
   aws sts get-caller-identity --query Account --output text 2>/dev/null
 )" || fail_release "the AWS account could not be resolved."
