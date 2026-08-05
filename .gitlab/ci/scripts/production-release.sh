@@ -126,7 +126,17 @@ check_service_contract() {
       and (.services | length) == 1
       and .services[0].status == "ACTIVE"
       and .services[0].desiredCount >= 1
-      and .services[0].launchType == "FARGATE"
+      and (
+        .services[0].launchType == "FARGATE"
+        or (
+          (.services[0].launchType // "") == ""
+          and (.services[0].capacityProviderStrategy | length) > 0
+          and all(
+            .services[0].capacityProviderStrategy[];
+            .capacityProvider == "FARGATE"
+          )
+        )
+      )
       and .services[0].deploymentController.type == "ECS"
       and .services[0].enableExecuteCommand == false
       and .services[0].networkConfiguration.awsvpcConfiguration.assignPublicIp == "DISABLED"

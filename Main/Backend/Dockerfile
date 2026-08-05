@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk-jammy AS builder
+FROM docker.io/library/eclipse-temurin:21-jdk-jammy AS builder
 
 WORKDIR /workspace
 
@@ -12,7 +12,7 @@ COPY src ./src
 
 RUN ./gradlew --no-daemon bootJar
 
-FROM eclipse-temurin:21-jre-noble AS runtime
+FROM docker.io/library/eclipse-temurin:21-jre-noble AS runtime
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --yes \
