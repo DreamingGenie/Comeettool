@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * MEET-12 in-flight 업로드 추적기.
  * MEET-12 서비스는 저장 시작 시 {@link #begin(long)}, 종료 시 {@link #end(long)}를 호출한다.
- * 회의 종료 후 AI transcription/end 호출 전에 {@link #awaitIdle(long)}로 대기를 수행한다.
+ * 회의 종료 후 AI process 호출 전에 {@link #awaitIdle(long)}로 대기를 수행한다.
  */
 @Slf4j
 @Component

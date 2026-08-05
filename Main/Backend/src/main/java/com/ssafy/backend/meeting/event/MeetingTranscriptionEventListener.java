@@ -15,22 +15,9 @@ public class MeetingTranscriptionEventListener {
     private final MeetingTranscriptionProcessor transcriptionProcessor;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleMeetingTranscriptionStarted(
-            MeetingTranscriptionStartedEvent event
-    ) {
-        transcriptionProcessor.startTranscription(
-                event.meetingId(),
-                event.startedAt()
-        );
-    }
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleMeetingTranscriptionEnded(
             MeetingTranscriptionEndedEvent event
     ) {
-        transcriptionProcessor.endTranscription(
-                event.meetingId(),
-                event.endedAt()
-        );
+        transcriptionProcessor.processMeeting(event.meetingId());
     }
 }

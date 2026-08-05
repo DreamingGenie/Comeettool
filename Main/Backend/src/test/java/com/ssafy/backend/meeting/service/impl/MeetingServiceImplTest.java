@@ -41,7 +41,6 @@ import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.event.MeetingTranscriptionEndedEvent;
-import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
@@ -174,18 +173,7 @@ class MeetingServiceImplTest {
         assertThat(createdParticipant.getParticipantRole()).isEqualTo("BE");
         assertThat(createdParticipant.isInMeeting()).isFalse();
 
-        ArgumentCaptor<MeetingTranscriptionStartedEvent> eventCaptor =
-                ArgumentCaptor.forClass(
-                        MeetingTranscriptionStartedEvent.class
-                );
-        verify(applicationEventPublisher)
-                .publishEvent(eventCaptor.capture());
-
-        MeetingTranscriptionStartedEvent event = eventCaptor.getValue();
-        assertThat(event.meetingId()).isEqualTo(MEETING_ID);
-        assertThat(event.startedAt()).isEqualTo(
-                CREATED_AT.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        );
+        verify(applicationEventPublisher, never()).publishEvent(any());
         assertThat(response).isEqualTo(expectedResponse);
     }
 

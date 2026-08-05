@@ -8,15 +8,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-import com.ssafy.backend.meeting.dto.RequestEndTranscriptionDto;
-import com.ssafy.backend.meeting.dto.RequestStartTranscriptionDto;
-import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
-import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
+import com.ssafy.backend.meeting.dto.ResponseProcessMeetingDto;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 public class AiTranscriptionClient {
 
     private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
-    private static final String SUCCESS_CODE = "SUCCESS";
 
     private final RestClient restClient;
 
@@ -53,43 +50,16 @@ public class AiTranscriptionClient {
         this.restClient = restClient;
     }
 
-    public ResponseStartTranscriptionDto startTranscription(
-            Long meetingId,
-            String startedAt
-    ) {
-        ResponseStartTranscriptionDto response = executeRequest(
+    public ResponseProcessMeetingDto processMeeting(Long meetingId) {
+        ResponseProcessMeetingDto response = executeRequest(
                 () -> restClient.post()
-                        .uri(
-                                "/internal/v1/meetings/{meetingId}/transcription/start",
-                                meetingId
-                        )
-                        .body(new RequestStartTranscriptionDto(startedAt))
+                        .uri("/meetings/{meetingId}/process", meetingId)
                         .retrieve()
-                        .body(ResponseStartTranscriptionDto.class),
-                "시작"
+                        .body(ResponseProcessMeetingDto.class),
+                "처리"
         );
 
-        validateStartResponse(meetingId, response);
-        return response;
-    }
-
-    public ResponseEndTranscriptionDto endTranscription(
-            Long meetingId,
-            String endedAt
-    ) {
-        ResponseEndTranscriptionDto response = executeRequest(
-                () -> restClient.post()
-                        .uri(
-                                "/internal/v1/meetings/{meetingId}/transcription/end",
-                                meetingId
-                        )
-                        .body(new RequestEndTranscriptionDto(endedAt))
-                        .retrieve()
-                        .body(ResponseEndTranscriptionDto.class),
-                "종료"
-        );
-
-        validateEndResponse(meetingId, response);
+        validateProcessResponse(meetingId, response);
         return response;
     }
 
@@ -125,43 +95,22 @@ public class AiTranscriptionClient {
         }
     }
 
-    private void validateStartResponse(
+    private void validateProcessResponse(
             Long meetingId,
-            ResponseStartTranscriptionDto response
+            ResponseProcessMeetingDto response
     ) {
-        String expectedS3Prefix = "conferences/" + meetingId + "/";
-
         if (response == null
-                || !SUCCESS_CODE.equals(response.code())
-                || !meetingId.equals(response.meetingRoomId())
-                || !expectedS3Prefix.equals(response.s3Prefix())) {
+                || !meetingId.equals(response.meetingId())
+                || !StringUtils.hasText(response.jobId())
+                || !StringUtils.hasText(response.status())) {
             log.warn(
-                    "AI 회의 시작 API 응답 불일치: meetingId={}, response={}",
+                    "AI 회의 처리 API 응답 불일치: meetingId={}, response={}",
                     meetingId,
                     response
             );
             throw new AiTranscriptionException(
                     AiTranscriptionFailureType.NON_RETRYABLE,
-                    "AI 회의 시작 API 응답 검증 실패"
-            );
-        }
-    }
-
-    private void validateEndResponse(
-            Long meetingId,
-            ResponseEndTranscriptionDto response
-    ) {
-        if (response == null
-                || !SUCCESS_CODE.equals(response.code())
-                || !meetingId.equals(response.meetingRoomId())) {
-            log.warn(
-                    "AI 회의 종료 API 응답 불일치: meetingId={}, response={}",
-                    meetingId,
-                    response
-            );
-            throw new AiTranscriptionException(
-                    AiTranscriptionFailureType.NON_RETRYABLE,
-                    "AI 회의 종료 API 응답 검증 실패"
+                    "AI 회의 처리 API 응답 검증 실패"
             );
         }
     }
