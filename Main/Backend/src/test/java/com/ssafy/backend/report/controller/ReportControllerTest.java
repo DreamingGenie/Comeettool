@@ -26,6 +26,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
@@ -624,6 +625,86 @@ class ReportControllerTest {
             mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/confirm", MEETING_ID))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-09 GET /api/v1/spaces/{spaceId}/reports/facilitator")
+    class GetFacilitatorReports {
+
+        @Test
+        @DisplayName("정상 조회면 200 SUCCESS, message='퍼실리테이터 리포트 목록 조회 성공', "
+                + "data에 content(meetingType null 포함)·페이지 메타를 반환한다")
+        void getFacilitatorReports_returns200() throws Exception {
+            List<FacilitatorReportSummaryDto> content = List.of(
+                    new FacilitatorReportSummaryDto(
+                            34L, "8월 4주차 스프린트 회의", "8월 4주차 회의 퍼실리테이션 리포트", "SPRINT_REVIEW",
+                            OffsetDateTime.parse("2026-08-04T05:15:00Z")),
+                    new FacilitatorReportSummaryDto(
+                            33L, "7월 회고", "7월 회고 퍼실리테이션 리포트", null,
+                            OffsetDateTime.parse("2026-07-28T05:15:00Z")));
+            PageResponse<FacilitatorReportSummaryDto> response = new PageResponse<>(content, 0, 10, 8, 1, false);
+            given(reportService.getFacilitatorReports(eq(1L), eq(SPACE_ID), any(Pageable.class)))
+                    .willReturn(response);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/facilitator", SPACE_ID)
+                            .param("page", "0")
+                            .param("size", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("퍼실리테이터 리포트 목록 조회 성공"))
+                    .andExpect(jsonPath("$.data.content[0].meetingId").value(34))
+                    .andExpect(jsonPath("$.data.content[0].meetingRoomName").value("8월 4주차 스프린트 회의"))
+                    .andExpect(jsonPath("$.data.content[0].title").value("8월 4주차 회의 퍼실리테이션 리포트"))
+                    .andExpect(jsonPath("$.data.content[0].meetingType").value("SPRINT_REVIEW"))
+                    .andExpect(jsonPath("$.data.content[1].meetingType").doesNotExist())
+                    .andExpect(jsonPath("$.data.page").value(0))
+                    .andExpect(jsonPath("$.data.size").value(10))
+                    .andExpect(jsonPath("$.data.totalElements").value(8))
+                    .andExpect(jsonPath("$.data.totalPages").value(1))
+                    .andExpect(jsonPath("$.data.hasNext").value(false));
+
+            verify(reportService).getFacilitatorReports(eq(1L), eq(SPACE_ID), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("쿼리 파라미터를 지정하지 않으면 page=0, size=10, sort=createdAt desc 기본값이 적용된다")
+        void getFacilitatorReports_appliesDefaultPageable() throws Exception {
+            PageResponse<FacilitatorReportSummaryDto> response = new PageResponse<>(List.of(), 0, 10, 0, 0, false);
+            given(reportService.getFacilitatorReports(eq(1L), eq(SPACE_ID), any(Pageable.class)))
+                    .willReturn(response);
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/facilitator", SPACE_ID))
+                    .andExpect(status().isOk());
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(reportService).getFacilitatorReports(eq(1L), eq(SPACE_ID), captor.capture());
+            assertThat(captor.getValue().getPageNumber()).isEqualTo(0);
+            assertThat(captor.getValue().getPageSize()).isEqualTo(10);
+            assertThat(captor.getValue().getSort().getOrderFor("createdAt")).isNotNull();
+            assertThat(captor.getValue().getSort().getOrderFor("createdAt").isDescending()).isTrue();
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void getFacilitatorReports_returns404WhenSpaceNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND))
+                    .when(reportService).getFacilitatorReports(eq(1L), eq(SPACE_ID), any(Pageable.class));
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/facilitator", SPACE_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void getFacilitatorReports_returns403WhenNotMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED))
+                    .when(reportService).getFacilitatorReports(eq(1L), eq(SPACE_ID), any(Pageable.class));
+
+            mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/facilitator", SPACE_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
         }
     }
 }

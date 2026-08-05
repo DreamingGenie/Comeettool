@@ -3,6 +3,7 @@ package com.ssafy.backend.report.service;
 import org.springframework.data.domain.Pageable;
 
 import com.ssafy.backend.global.common.PageResponse;
+import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
@@ -34,4 +35,7 @@ public interface ReportService {
 
     // REPORTS-07: 스페이스 OWNER/MEMBER(GUEST 제외)가 특정 회의의 회의록을 확정한다(멱등 — 이미 확정이면 그대로 반환).
     ResponseConfirmMinutesDto confirmMinutes(Long requesterId, Long meetingId);
+
+    // REPORTS-09: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 퍼실리테이터 리포트 목록을 페이지 단위로 조회한다.
+    PageResponse<FacilitatorReportSummaryDto> getFacilitatorReports(Long requesterId, Long spaceId, Pageable pageable);
 }

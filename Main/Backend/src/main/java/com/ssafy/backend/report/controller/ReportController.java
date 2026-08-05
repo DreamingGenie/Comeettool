@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
@@ -101,5 +102,17 @@ public class ReportController {
             @PathVariable Long meetingId) {
         ResponseConfirmMinutesDto response = reportService.confirmMinutes(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("회의록이 확정되었습니다.", response));
+    }
+
+    // REPORTS-09: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 퍼실리테이터 리포트 목록을 페이지 단위로 조회한다.
+    @GetMapping("/api/v1/spaces/{spaceId}/reports/facilitator")
+    public ResponseEntity<ApiResponse<PageResponse<FacilitatorReportSummaryDto>>> getFacilitatorReports(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
+                    Pageable pageable) {
+        PageResponse<FacilitatorReportSummaryDto> response =
+                reportService.getFacilitatorReports(Long.parseLong(userId), spaceId, pageable);
+        return ResponseEntity.ok(ApiResponse.success("퍼실리테이터 리포트 목록 조회 성공", response));
     }
 }

@@ -34,6 +34,7 @@ import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
@@ -47,6 +48,7 @@ import com.ssafy.backend.report.entity.MeetingMinutes;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
 import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
+import com.ssafy.backend.report.repository.FacilitatorReportRepository;
 import com.ssafy.backend.report.repository.MeetingMinutesRepository;
 import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.space.repository.TeamRepository;
@@ -86,6 +88,9 @@ class ReportServiceImplTest {
 
     @Mock
     private MeetingMinutesRepository meetingMinutesRepository;
+
+    @Mock
+    private FacilitatorReportRepository facilitatorReportRepository;
 
     @Mock
     private TranscriptMarkdownRenderer transcriptMarkdownRenderer;
@@ -1203,6 +1208,153 @@ class ReportServiceImplTest {
             ResponseConfirmMinutesDto result = reportService.confirmMinutes(memberUserId, MEETING_ID);
 
             assertThat(result.isConfirmed()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-09 퍼실리테이터 리포트 목록 조회")
+    class GetFacilitatorReports {
+
+        @Test
+        @DisplayName("정상 조회 시 Page 결과가 PageResponse 필드로 정확히 매핑된다")
+        void getFacilitatorReports_returnsMappedPageResponse() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            List<FacilitatorReportSummaryDto> content = List.of(
+                    new FacilitatorReportSummaryDto(
+                            34L, "8월 4주차 스프린트 회의", "8월 4주차 회의 퍼실리테이션 리포트", "SPRINT_REVIEW",
+                            OffsetDateTime.parse("2026-08-04T05:15:00Z")),
+                    new FacilitatorReportSummaryDto(
+                            33L, "7월 회고", "7월 회고 퍼실리테이션 리포트", "RETROSPECTIVE",
+                            OffsetDateTime.parse("2026-07-28T05:15:00Z")));
+            Pageable pageable = PageRequest.of(0, 10);
+            // PageImpl은 offset+pageSize가 total을 넘으면 total을 content.size()로 되돌려버리므로
+            // (GetMinutesList 테스트와 동일한 이유), pageSize(10) 이하로 total을 주면 안 되고 12처럼 더 크게 준다.
+            Page<FacilitatorReportSummaryDto> page = new PageImpl<>(content, pageable, 12);
+            given(facilitatorReportRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<FacilitatorReportSummaryDto> result =
+                    reportService.getFacilitatorReports(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.content().get(0).meetingId()).isEqualTo(34L);
+            assertThat(result.content().get(0).meetingRoomName()).isEqualTo("8월 4주차 스프린트 회의");
+            assertThat(result.content().get(0).title()).isEqualTo("8월 4주차 회의 퍼실리테이션 리포트");
+            assertThat(result.content().get(0).meetingType()).isEqualTo("SPRINT_REVIEW");
+            assertThat(result.page()).isEqualTo(0);
+            assertThat(result.size()).isEqualTo(10);
+            assertThat(result.totalElements()).isEqualTo(12);
+            assertThat(result.totalPages()).isEqualTo(2);
+            assertThat(result.hasNext()).isTrue();
+        }
+
+        @Test
+        @DisplayName("결과가 없으면 빈 content를 반환한다(예외 아님)")
+        void getFacilitatorReports_returnsEmptyContentWhenNoneExist() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<FacilitatorReportSummaryDto> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+            given(facilitatorReportRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(emptyPage);
+
+            PageResponse<FacilitatorReportSummaryDto> result =
+                    reportService.getFacilitatorReports(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content()).isEmpty();
+            assertThat(result.totalElements()).isEqualTo(0);
+            assertThat(result.totalPages()).isEqualTo(0);
+            assertThat(result.hasNext()).isFalse();
+        }
+
+        @Test
+        @DisplayName("meetingType이 null인 항목도 그대로 null로 매핑된다")
+        void getFacilitatorReports_mapsNullMeetingType() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            List<FacilitatorReportSummaryDto> content = List.of(
+                    new FacilitatorReportSummaryDto(
+                            34L, "8월 4주차 스프린트 회의", "8월 4주차 회의 퍼실리테이션 리포트", null,
+                            OffsetDateTime.parse("2026-08-04T05:15:00Z")));
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<FacilitatorReportSummaryDto> page = new PageImpl<>(content, pageable, 1);
+            given(facilitatorReportRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<FacilitatorReportSummaryDto> result =
+                    reportService.getFacilitatorReports(OWNER_ID, SPACE_ID, pageable);
+
+            assertThat(result.content().get(0).meetingType()).isNull();
+        }
+
+        @Test
+        @DisplayName("존재하지 않거나 삭제된 스페이스면 SPACE_NOT_FOUND 예외가 발생하고 멤버·리포트 조회를 시도하지 않는다")
+        void getFacilitatorReports_throwsWhenSpaceNotFound() {
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getFacilitatorReports(OWNER_ID, SPACE_ID, PageRequest.of(0, 10)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 해당 스페이스 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 리포트 조회를 시도하지 않는다")
+        void getFacilitatorReports_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() ->
+                    reportService.getFacilitatorReports(nonMemberId, SPACE_ID, PageRequest.of(0, 10)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 정상 조회된다(오너 제한 없음)")
+        void getFacilitatorReports_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<FacilitatorReportSummaryDto> page = new PageImpl<>(List.of(), pageable, 0);
+            given(facilitatorReportRepository.findAllByTeamId(SPACE_ID, pageable)).willReturn(page);
+
+            PageResponse<FacilitatorReportSummaryDto> result =
+                    reportService.getFacilitatorReports(guestUserId, SPACE_ID, pageable);
+
+            assertThat(result.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("page=1, size=5 요청 시 Repository에 동일한 페이지 파라미터가 그대로 전달된다")
+        void getFacilitatorReports_passesPageableToRepository() {
+            Team team = activeTeam(SPACE_ID, OWNER_ID);
+            given(teamRepository.findByIdAndIsDeletedFalse(SPACE_ID)).willReturn(Optional.of(team));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+
+            Pageable requested = PageRequest.of(1, 5);
+            Page<FacilitatorReportSummaryDto> page = new PageImpl<>(List.of(), requested, 0);
+            given(facilitatorReportRepository.findAllByTeamId(eq(SPACE_ID), any(Pageable.class))).willReturn(page);
+
+            reportService.getFacilitatorReports(OWNER_ID, SPACE_ID, requested);
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(facilitatorReportRepository).findAllByTeamId(eq(SPACE_ID), captor.capture());
+            assertThat(captor.getValue().getPageNumber()).isEqualTo(1);
+            assertThat(captor.getValue().getPageSize()).isEqualTo(5);
         }
     }
 }
