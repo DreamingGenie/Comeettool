@@ -2,6 +2,8 @@ package com.ssafy.backend.report.service.impl;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -25,6 +27,7 @@ import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
+import com.ssafy.backend.report.dto.ResponseConfirmMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -265,5 +268,35 @@ public class ReportServiceImpl implements ReportService {
         return new MinutesDetailDto(
                 meetingId, title, summary, topics, decisions, actionItems, openIssues,
                 minutes.getIsConfirmed(), minutes.getConfirmedAt(), minutes.getCreatedAt());
+    }
+
+    @Override
+    @Transactional
+    public ResponseConfirmMinutesDto confirmMinutes(Long requesterId, Long meetingId) {
+        MeetingRoom meetingRoom = meetingRoomRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 확정도 수정(REPORTS-06)과 동일하게 OWNER/MEMBER만 허용 — GUEST이거나 비멤버면 거부.
+        Member member = memberRepository.findByTeamIdAndUserId(meetingRoom.getTeamId(), requesterId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MINUTES_EDIT_DENIED));
+        if (member.getAuthority() == MemberAuthority.GUEST) {
+            throw new CustomException(ErrorCode.MINUTES_EDIT_DENIED);
+        }
+
+        MeetingMinutes minutes = meetingMinutesRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MINUTES_NOT_FOUND));
+
+        // 멱등 처리: 이미 확정된 회의록이면 쓰기 없이 기존 confirmedAt 그대로 응답한다(MEMBER-06/13과 동일한 무변경 컨벤션).
+        if (Boolean.TRUE.equals(minutes.getIsConfirmed())) {
+            return new ResponseConfirmMinutesDto(meetingId, true, minutes.getConfirmedAt());
+        }
+
+        // UPDATE 파라미터와 응답에 같은 값을 재사용 — MeetingMinutes가 @Immutable이라 재조회해도
+        // 1차 캐시의 갱신 전 인스턴스가 나오므로(REPORTS-06과 동일 이유), CURRENT_TIMESTAMP 대신
+        // 서비스에서 시각을 만들어 UPDATE와 응답 양쪽에 그대로 써서 값을 일치시킨다.
+        OffsetDateTime confirmedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        meetingMinutesRepository.confirm(meetingId, confirmedAt);
+
+        return new ResponseConfirmMinutesDto(meetingId, true, confirmedAt);
     }
 }

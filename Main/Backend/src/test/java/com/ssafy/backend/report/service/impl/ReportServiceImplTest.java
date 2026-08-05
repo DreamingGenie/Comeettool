@@ -38,6 +38,7 @@ import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
+import com.ssafy.backend.report.dto.ResponseConfirmMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -113,6 +114,21 @@ class ReportServiceImplTest {
         MeetingRoom meetingRoom = MeetingRoom.builder().teamId(teamId).hostId(OWNER_ID).name("스프린트 회의").build();
         ReflectionTestUtils.setField(meetingRoom, "id", meetingId);
         return meetingRoom;
+    }
+
+    // REPORTS-06/07: 회의록 수정·확정 인가 검사(OWNER/MEMBER만 허용, GUEST 거부)용 멤버 픽스처.
+    private Member ownerMember() {
+        return Member.owner(OWNER_ID, SPACE_ID, "닉네임");
+    }
+
+    private Member memberRoleMember(Long userId) {
+        return Member.invited(userId, SPACE_ID, "닉네임");
+    }
+
+    private Member guestMember(Long userId) {
+        Member guest = Member.invited(userId, SPACE_ID, "닉네임");
+        ReflectionTestUtils.setField(guest, "authority", MemberAuthority.GUEST);
+        return guest;
     }
 
     // AudioTranscription은 순수 조회 전용 엔티티라 빌더/공개 생성자를 두지 않는다 —
@@ -819,20 +835,6 @@ class ReportServiceImplTest {
                     false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
         }
 
-        private Member ownerMember() {
-            return Member.owner(OWNER_ID, SPACE_ID, "닉네임");
-        }
-
-        private Member memberRoleMember(Long userId) {
-            return Member.invited(userId, SPACE_ID, "닉네임");
-        }
-
-        private Member guestMember(Long userId) {
-            Member guest = Member.invited(userId, SPACE_ID, "닉네임");
-            ReflectionTestUtils.setField(guest, "authority", MemberAuthority.GUEST);
-            return guest;
-        }
-
         @Test
         @DisplayName("title만 수정하면 title만 갱신되고 나머지 필드는 기존 값을 유지한다")
         void updateMinutes_updatesOnlyTitle() {
@@ -1061,6 +1063,146 @@ class ReportServiceImplTest {
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.MINUTES_ALREADY_CONFIRMED);
             verify(meetingMinutesRepository, never()).updateTitle(any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-07 회의록 확정")
+    class ConfirmMinutes {
+
+        private MeetingMinutes unconfirmedMinutes() {
+            return minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", "[]", "[]", "[]", "[]",
+                    false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+        }
+
+        @Test
+        @DisplayName("미확정 회의록을 확정하면 isConfirmed=true로 바뀌고 confirmedAt이 채워지며 UPDATE가 호출된다")
+        void confirmMinutes_confirmsWhenNotYetConfirmed() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = unconfirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseConfirmMinutesDto result = reportService.confirmMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.isConfirmed()).isTrue();
+            assertThat(result.confirmedAt()).isNotNull();
+
+            ArgumentCaptor<OffsetDateTime> captor = ArgumentCaptor.forClass(OffsetDateTime.class);
+            verify(meetingMinutesRepository).confirm(eq(MEETING_ID), captor.capture());
+            // 응답의 confirmedAt과 UPDATE에 실제로 넘긴 값이 같은 인스턴스(재조회 없이 동일 값 재사용)인지 확인.
+            assertThat(captor.getValue()).isEqualTo(result.confirmedAt());
+        }
+
+        @Test
+        @DisplayName("이미 확정된 회의록이면 쓰기 없이 기존 confirmedAt 그대로 반환한다(멱등)")
+        void confirmMinutes_idempotentWhenAlreadyConfirmed() {
+            OffsetDateTime existingConfirmedAt = OffsetDateTime.parse("2026-08-05T02:00:00Z");
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", "[]", "[]", "[]", "[]",
+                    true, existingConfirmedAt, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseConfirmMinutesDto result = reportService.confirmMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.isConfirmed()).isTrue();
+            assertThat(result.confirmedAt()).isEqualTo(existingConfirmedAt);
+            verify(meetingMinutesRepository, never()).confirm(any(), any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·회의록 조회를 시도하지 않는다")
+        void confirmMinutes_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.confirmMinutes(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 GUEST면 MINUTES_EDIT_DENIED 예외가 발생하고 회의록 조회를 시도하지 않는다")
+        void confirmMinutes_throwsWhenRequesterIsGuest() {
+            Long guestUserId = 77L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, guestUserId))
+                    .willReturn(Optional.of(guestMember(guestUserId)));
+
+            assertThatThrownBy(() -> reportService.confirmMinutes(guestUserId, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_EDIT_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 스페이스 멤버가 아니면 MINUTES_EDIT_DENIED 예외가 발생한다")
+        void confirmMinutes_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.confirmMinutes(nonMemberId, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_EDIT_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 MINUTES_NOT_FOUND 예외가 발생한다")
+        void confirmMinutes_throwsWhenMinutesNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.confirmMinutes(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("OWNER는 정상적으로 회의록을 확정할 수 있다")
+        void confirmMinutes_allowsOwner() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = unconfirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseConfirmMinutesDto result = reportService.confirmMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.isConfirmed()).isTrue();
+        }
+
+        @Test
+        @DisplayName("MEMBER는 정상적으로 회의록을 확정할 수 있다")
+        void confirmMinutes_allowsMember() {
+            Long memberUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = unconfirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, memberUserId))
+                    .willReturn(Optional.of(memberRoleMember(memberUserId)));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseConfirmMinutesDto result = reportService.confirmMinutes(memberUserId, MEETING_ID);
+
+            assertThat(result.isConfirmed()).isTrue();
         }
     }
 }

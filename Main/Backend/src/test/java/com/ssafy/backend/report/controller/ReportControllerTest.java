@@ -30,6 +30,7 @@ import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
+import com.ssafy.backend.report.dto.ResponseConfirmMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -565,6 +566,64 @@ class ReportControllerTest {
                             .content("{\"title\":\"새 제목\"}"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("MINUTES_ALREADY_CONFIRMED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-07 POST /api/v1/meetings/{meetingId}/reports/minutes/confirm")
+    class ConfirmMinutes {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 확정이면 200 SUCCESS, message='회의록이 확정되었습니다.', data 필드를 반환한다")
+        void confirmMinutes_returns200() throws Exception {
+            ResponseConfirmMinutesDto response = new ResponseConfirmMinutesDto(
+                    MEETING_ID, true, OffsetDateTime.parse("2026-08-05T10:00:00Z"));
+            given(reportService.confirmMinutes(1L, MEETING_ID)).willReturn(response);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/confirm", MEETING_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("회의록이 확정되었습니다."))
+                    .andExpect(jsonPath("$.data.meetingId").value(MEETING_ID))
+                    .andExpect(jsonPath("$.data.isConfirmed").value(true))
+                    .andExpect(jsonPath("$.data.confirmedAt").value("2026-08-05T10:00:00Z"));
+
+            verify(reportService).confirmMinutes(1L, MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 확정 권한이 없는 요청자면 403 MINUTES_EDIT_DENIED를 반환한다")
+        void confirmMinutes_returns403WhenEditDenied() throws Exception {
+            doThrow(new CustomException(ErrorCode.MINUTES_EDIT_DENIED))
+                    .when(reportService).confirmMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/confirm", MEETING_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("MINUTES_EDIT_DENIED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void confirmMinutes_returns404WhenMeetingNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND))
+                    .when(reportService).confirmMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/confirm", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 404 MINUTES_NOT_FOUND를 반환한다")
+        void confirmMinutes_returns404WhenMinutesNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.MINUTES_NOT_FOUND))
+                    .when(reportService).confirmMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/confirm", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
         }
     }
 }

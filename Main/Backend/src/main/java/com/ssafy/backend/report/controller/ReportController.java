@@ -19,6 +19,7 @@ import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
+import com.ssafy.backend.report.dto.ResponseConfirmMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -91,5 +92,14 @@ public class ReportController {
             @RequestBody RequestUpdateMinutesDto request) {
         MinutesDetailDto response = reportService.updateMinutes(Long.parseLong(userId), meetingId, request);
         return ResponseEntity.ok(ApiResponse.success("회의록 수정 성공", response));
+    }
+
+    // REPORTS-07: 스페이스 OWNER/MEMBER(GUEST 제외)가 특정 회의의 회의록을 확정한다(멱등).
+    @PostMapping("/api/v1/meetings/{meetingId}/reports/minutes/confirm")
+    public ResponseEntity<ApiResponse<ResponseConfirmMinutesDto>> confirmMinutes(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId) {
+        ResponseConfirmMinutesDto response = reportService.confirmMinutes(Long.parseLong(userId), meetingId);
+        return ResponseEntity.ok(ApiResponse.success("회의록이 확정되었습니다.", response));
     }
 }

@@ -1,5 +1,7 @@
 package com.ssafy.backend.report.repository;
 
+import java.time.OffsetDateTime;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -58,4 +60,13 @@ public interface MeetingMinutesRepository extends JpaRepository<MeetingMinutes, 
     @Modifying
     @Query("UPDATE MeetingMinutes m SET m.openIssues = :openIssues WHERE m.meetingId = :meetingId")
     void updateOpenIssues(@Param("meetingId") Long meetingId, @Param("openIssues") String openIssues);
+
+    /**
+     * REPORTS-07: 회의록 확정. isConfirmed/confirmedAt을 한 번에 갱신한다.
+     * 서비스 계층에서 이미 isConfirmed=false인 것을 확인한 뒤에만 호출하며(멱등 처리는 호출 전에 끝남),
+     * confirmedAt은 서비스가 UPDATE 직전에 만든 값을 그대로 넘겨받아 응답에도 재사용한다(재조회 없이 일관성 유지).
+     */
+    @Modifying
+    @Query("UPDATE MeetingMinutes m SET m.isConfirmed = true, m.confirmedAt = :confirmedAt WHERE m.meetingId = :meetingId")
+    void confirm(@Param("meetingId") Long meetingId, @Param("confirmedAt") OffsetDateTime confirmedAt);
 }
