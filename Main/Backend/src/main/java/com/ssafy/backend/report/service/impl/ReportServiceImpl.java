@@ -1,7 +1,9 @@
 package com.ssafy.backend.report.service.impl;
 
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -11,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
-import com.ssafy.backend.global.storage.FileStorageService;
+import com.ssafy.backend.global.storage.ObjectStorageService;
+import com.ssafy.backend.global.storage.StorageObjectKey;
+import com.ssafy.backend.global.storage.StorageUploadRequest;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
@@ -44,7 +48,10 @@ public class ReportServiceImpl implements ReportService {
     private final MeetingMinutesRepository meetingMinutesRepository;
     private final TranscriptMarkdownRenderer transcriptMarkdownRenderer;
     private final MarkdownToPdfConverter markdownToPdfConverter;
-    private final FileStorageService fileStorageService;
+    private final ObjectStorageService objectStorageService;
+
+    @Value("${file.base-url}")
+    private String publicBaseUrl;
 
     @Override
     @Transactional(readOnly = true)
@@ -110,16 +117,26 @@ public class ReportServiceImpl implements ReportService {
 
         String markdown = transcriptMarkdownRenderer.render(meetingId, transcription.getTranscript());
 
-        String url;
+        byte[] content;
+        String contentType;
+        StorageObjectKey objectKey;
         if (isMd) {
-            byte[] content = markdown.getBytes(StandardCharsets.UTF_8);
-            String key = AiResultKeys.of(meetingId, "transcript", "md");
-            url = fileStorageService.upload(content, "text/markdown", key);
+            content = markdown.getBytes(StandardCharsets.UTF_8);
+            contentType = "text/markdown";
+            objectKey = AiResultKeys.of(meetingId, "transcript", "md");
+        } else {
+            content = markdownToPdfConverter.convert(markdown);
+            contentType = "application/pdf";
+            objectKey = AiResultKeys.of(meetingId, "transcript", "pdf");
+        }
+
+        StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
+        objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
+        String url = publicBaseUrl + "/files/" + objectKey.value();
+
+        if (isMd) {
             audioTranscriptionRepository.updateMdUrl(meetingId, url);
         } else {
-            byte[] content = markdownToPdfConverter.convert(markdown);
-            String key = AiResultKeys.of(meetingId, "transcript", "pdf");
-            url = fileStorageService.upload(content, "application/pdf", key);
             audioTranscriptionRepository.updatePdfUrl(meetingId, url);
         }
 

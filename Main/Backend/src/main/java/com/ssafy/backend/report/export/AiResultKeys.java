@@ -1,5 +1,8 @@
 package com.ssafy.backend.report.export;
 
+import com.ssafy.backend.global.storage.StorageDirectory;
+import com.ssafy.backend.global.storage.StorageObjectKey;
+
 /**
  * AI_BE 산출물(전사/회의록/퍼실리테이터 리포트) 내보내기 파일의 S3 오브젝트 키 규칙.
  * 합의된 저장 구조:
@@ -17,12 +20,10 @@ package com.ssafy.backend.report.export;
  */
 public final class AiResultKeys {
 
-    private static final String ROOT = "ai-results";
-
     private AiResultKeys() {
     }
 
-    public static String of(Long meetingId, String baseName, String format) {
-        return ROOT + "/" + meetingId + "/" + baseName + "." + format;
+    public static StorageObjectKey of(Long meetingId, String baseName, String format) {
+        return StorageObjectKey.of(StorageDirectory.AI_RESULTS, String.valueOf(meetingId), baseName + "." + format);
     }
 }

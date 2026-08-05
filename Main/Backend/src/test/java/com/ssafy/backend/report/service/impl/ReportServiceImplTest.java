@@ -1,10 +1,12 @@
 package com.ssafy.backend.report.service.impl;
 
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
-import com.ssafy.backend.global.storage.FileStorageService;
+import com.ssafy.backend.global.storage.ObjectStorageService;
+import com.ssafy.backend.global.storage.StorageUploadRequest;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
@@ -60,6 +63,7 @@ class ReportServiceImplTest {
     private static final Long OWNER_ID = 1L;
     private static final Long SPACE_ID = 10L;
     private static final Long MEETING_ID = 34L;
+    private static final String BASE_URL = "http://localhost:8080";
 
     @Mock
     private TeamRepository teamRepository;
@@ -83,10 +87,15 @@ class ReportServiceImplTest {
     private MarkdownToPdfConverter markdownToPdfConverter;
 
     @Mock
-    private FileStorageService fileStorageService;
+    private ObjectStorageService objectStorageService;
 
     @InjectMocks
     private ReportServiceImpl reportService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(reportService, "publicBaseUrl", BASE_URL);
+    }
 
     private Team activeTeam(Long spaceId, Long ownerId) {
         Team team = Team.builder().name("팀A").description("설명").ownerId(ownerId).color("#123456").build();
@@ -358,19 +367,20 @@ class ReportServiceImplTest {
             given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
             given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
             given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
-            given(fileStorageService.upload(any(byte[].class), eq("text/markdown"), eq("ai-results/34/transcript.md")))
-                    .willReturn("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
 
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
+            String expectedUrl = BASE_URL + "/files/ai-results/34/transcript.md";
             assertThat(result.meetingId()).isEqualTo(MEETING_ID);
             assertThat(result.format()).isEqualTo("md");
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
-            verify(fileStorageService)
-                    .upload(any(byte[].class), eq("text/markdown"), eq("ai-results/34/transcript.md"));
-            verify(audioTranscriptionRepository)
-                    .updateMdUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
+            assertThat(result.url()).isEqualTo(expectedUrl);
+
+            ArgumentCaptor<StorageUploadRequest> requestCaptor = ArgumentCaptor.forClass(StorageUploadRequest.class);
+            verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
+            assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/transcript.md");
+            assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
+            verify(audioTranscriptionRepository).updateMdUrl(MEETING_ID, expectedUrl);
             verify(markdownToPdfConverter, never()).convert(any());
             verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
         }
@@ -386,17 +396,20 @@ class ReportServiceImplTest {
             given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
             byte[] pdfBytes = {1, 2, 3};
             given(markdownToPdfConverter.convert(RENDERED_MARKDOWN)).willReturn(pdfBytes);
-            given(fileStorageService.upload(pdfBytes, "application/pdf", "ai-results/34/transcript.pdf"))
-                    .willReturn("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
 
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
+            String expectedUrl = BASE_URL + "/files/ai-results/34/transcript.pdf";
             assertThat(result.format()).isEqualTo("pdf");
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
-            verify(fileStorageService).upload(pdfBytes, "application/pdf", "ai-results/34/transcript.pdf");
-            verify(audioTranscriptionRepository)
-                    .updatePdfUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
+            assertThat(result.url()).isEqualTo(expectedUrl);
+
+            ArgumentCaptor<StorageUploadRequest> requestCaptor = ArgumentCaptor.forClass(StorageUploadRequest.class);
+            verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
+            assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/transcript.pdf");
+            assertThat(requestCaptor.getValue().contentType()).isEqualTo("application/pdf");
+            assertThat(requestCaptor.getValue().contentLength()).isEqualTo(pdfBytes.length);
+            verify(audioTranscriptionRepository).updatePdfUrl(MEETING_ID, expectedUrl);
             verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
         }
 
@@ -416,7 +429,7 @@ class ReportServiceImplTest {
             assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.md");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
-            verify(fileStorageService, never()).upload(any(byte[].class), any(), any());
+            verifyNoInteractions(objectStorageService);
             verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
         }
 
@@ -437,7 +450,7 @@ class ReportServiceImplTest {
             assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.pdf");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
-            verify(fileStorageService, never()).upload(any(byte[].class), any(), any());
+            verifyNoInteractions(objectStorageService);
             verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
         }
 
