@@ -96,6 +96,200 @@ const normalizeTranscript = (transcript) =>
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null)
 
+const normalizeKey = (key) =>
+  String(key || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .replace(/[^\p{L}\p{N}_]/gu, '')
+    .toLowerCase()
+
+const normalizeDynamicValue = (value) => {
+  const parsed = parseJsonValue(value)
+  if (Array.isArray(parsed)) return parsed.map(normalizeDynamicValue)
+  if (!parsed || typeof parsed !== 'object') return parsed
+
+  const entries = Object.entries(parsed)
+  if (entries.length === 1) {
+    const [key, wrapped] = entries[0]
+    if (['items', 'list', 'values', 'content', 'entries'].includes(normalizeKey(key))) {
+      return normalizeDynamicValue(wrapped)
+    }
+  }
+
+  return Object.fromEntries(entries.map(([key, item]) => [key, normalizeDynamicValue(item)]))
+}
+
+const collectObjectScopes = (source, depth = 0, scopes = []) => {
+  if (!source || typeof source !== 'object' || Array.isArray(source) || depth > 3) return scopes
+  scopes.push(source)
+  Object.values(source).forEach((value) => {
+    const parsed = parseJsonValue(value)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      collectObjectScopes(parsed, depth + 1, scopes)
+    }
+  })
+  return scopes
+}
+
+const findAliasedValue = (scopes, aliases) => {
+  const normalizedAliases = new Set(aliases.map(normalizeKey))
+  for (const scope of scopes) {
+    const match = Object.entries(scope).find(([key]) => normalizedAliases.has(normalizeKey(key)))
+    if (match && match[1] !== undefined && match[1] !== null) return match[1]
+  }
+  return undefined
+}
+
+const facilitatorFields = {
+  title: ['title', 'reportTitle', 'report_title', 'feedbackTitle', 'feedback_title', '제목'],
+  meetingType: ['meetingType', 'meeting_type', 'type', '회의유형'],
+  overallReview: [
+    'overallReview',
+    'overall_review',
+    'overallFeedback',
+    'overall_feedback',
+    'review',
+    'summary',
+    '총평',
+    '종합의견'
+  ],
+  participationComment: [
+    'participationComment',
+    'participation_comment',
+    'participationReview',
+    'participation_review',
+    'participationSummary',
+    'participation_summary',
+    '참여종합의견'
+  ],
+  participationStats: [
+    'participationStats',
+    'participation_stats',
+    'participationMetrics',
+    'participation_metrics',
+    'participation',
+    '참여통계'
+  ],
+  qualityEvaluation: [
+    'qualityEvaluation',
+    'quality_evaluation',
+    'meetingQuality',
+    'meeting_quality',
+    'quality',
+    '회의품질평가'
+  ],
+  strengths: ['strengths', 'goodPoints', 'good_points', 'positives', 'wellDone', 'well_done', '잘된점'],
+  improvements: [
+    'improvements',
+    'improvementPoints',
+    'improvement_points',
+    'areasForImprovement',
+    'areas_for_improvement',
+    'weaknesses',
+    '개선할점'
+  ],
+  decisionProcessChecks: [
+    'decisionProcessChecks',
+    'decision_process_checks',
+    'decisionChecks',
+    'decision_checks',
+    'decisionProcess',
+    'decision_process',
+    '의사결정과정'
+  ],
+  unresolvedIssuesEvaluation: [
+    'unresolvedIssuesEvaluation',
+    'unresolved_issues_evaluation',
+    'unresolvedIssues',
+    'unresolved_issues',
+    'openIssuesEvaluation',
+    'open_issues_evaluation',
+    'openIssues',
+    'open_issues',
+    'pendingIssues',
+    'pending_issues',
+    '미해결이슈평가'
+  ],
+  nextMeetingSuggestions: [
+    'nextMeetingSuggestions',
+    'next_meeting_suggestions',
+    'nextMeeting',
+    'next_meeting',
+    'recommendations',
+    'suggestions',
+    'nextSteps',
+    'next_steps',
+    '다음회의제안'
+  ]
+}
+
+const facilitatorMetadataKeys = [
+  'meetingId',
+  'meeting_id',
+  'meetingRoomName',
+  'meeting_room_name',
+  'createdAt',
+  'created_at',
+  'updatedAt',
+  'updated_at',
+  'mdUrl',
+  'md_url',
+  'pdfUrl',
+  'pdf_url',
+  'data',
+  'result',
+  'report',
+  'feedback',
+  'analysis',
+  'details',
+  'sections'
+]
+
+const toSectionEntries = (sections) => {
+  const parsed = parseJsonValue(sections)
+  if (Array.isArray(parsed)) {
+    return parsed.map((section, index) => ({
+      key: section?.key || section?.id || `section-${index}`,
+      label: section?.label || section?.title || section?.name || `추가 분석 ${index + 1}`,
+      value: normalizeDynamicValue(
+        firstValue(section?.value, section?.items, section?.content, section?.data, section)
+      )
+    }))
+  }
+  if (parsed && typeof parsed === 'object') {
+    return Object.entries(parsed).map(([key, value]) => ({
+      key,
+      label: key,
+      value: normalizeDynamicValue(value)
+    }))
+  }
+  return []
+}
+
+export const normalizeFacilitatorReport = (response) => {
+  const parsedResponse = normalizeDynamicValue(response) || {}
+  const scopes = collectObjectScopes(parsedResponse)
+  const normalized = Object.fromEntries(
+    Object.entries(facilitatorFields).map(([field, aliases]) => [
+      field,
+      normalizeDynamicValue(findAliasedValue(scopes, aliases))
+    ])
+  )
+
+  const consumedKeys = new Set(
+    [...Object.values(facilitatorFields).flat(), ...facilitatorMetadataKeys].map(normalizeKey)
+  )
+  const explicitSections = toSectionEntries(findAliasedValue(scopes, ['sections', 'additionalSections']))
+  const rootExtras = Object.entries(parsedResponse)
+    .filter(([key, value]) => !consumedKeys.has(normalizeKey(key)) && value != null && value !== '')
+    .map(([key, value]) => ({ key, label: key, value: normalizeDynamicValue(value) }))
+
+  return {
+    ...normalized,
+    additionalFeedbackSections: [...explicitSections, ...rootExtras]
+  }
+}
+
 const normalizeItem = (item, index, aliases) => {
   const source = typeof item === 'string' ? { [aliases.primary]: item } : item || {}
   const normalized = { ...source, _clientId: `item-${index}` }
@@ -159,23 +353,27 @@ export const toReportDetailViewModel = (response, section, listRow = {}) => {
   }
 
   if (section === 'feedback') {
+    const facilitator = normalizeFacilitatorReport(response)
     return {
       ...listRow,
-      id: response?.meetingId ?? listRow.id,
+      id: firstValue(response?.meetingId, response?.meeting_id, listRow.id),
       kind: 'facilitator',
-      title: response?.title || listRow.title,
-      meetingType: response?.meetingType || listRow.meetingType || '',
-      overallReview: response?.overallReview || '',
-      participationComment: response?.participationComment || '',
-      participationStats: parseJsonValue(response?.participationStats),
-      qualityEvaluation: parseJsonValue(response?.qualityEvaluation),
-      strengths: parseJsonValue(response?.strengths),
-      improvements: parseJsonValue(response?.improvements),
-      decisionProcessChecks: parseJsonValue(response?.decisionProcessChecks),
-      unresolvedIssuesEvaluation: parseJsonValue(response?.unresolvedIssuesEvaluation),
-      nextMeetingSuggestions: parseJsonValue(response?.nextMeetingSuggestions),
-      createdAt: response?.createdAt,
-      updatedAt: formatReportDate(response?.createdAt || listRow.updatedAt)
+      title: facilitator.title || listRow.title,
+      meetingType: facilitator.meetingType || listRow.meetingType || '',
+      overallReview: facilitator.overallReview || '',
+      participationComment: facilitator.participationComment || '',
+      participationStats: facilitator.participationStats ?? [],
+      qualityEvaluation: facilitator.qualityEvaluation ?? [],
+      strengths: facilitator.strengths ?? [],
+      improvements: facilitator.improvements ?? [],
+      decisionProcessChecks: facilitator.decisionProcessChecks ?? [],
+      unresolvedIssuesEvaluation: facilitator.unresolvedIssuesEvaluation ?? [],
+      nextMeetingSuggestions: facilitator.nextMeetingSuggestions ?? [],
+      additionalFeedbackSections: facilitator.additionalFeedbackSections,
+      createdAt: firstValue(response?.createdAt, response?.created_at),
+      updatedAt: formatReportDate(
+        firstValue(response?.createdAt, response?.created_at, listRow.updatedAt)
+      )
     }
   }
 

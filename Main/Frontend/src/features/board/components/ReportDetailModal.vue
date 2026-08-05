@@ -241,27 +241,37 @@ const reportTypeLabel = computed(() =>
       ? 'AI 퍼실리테이터 회의 피드백'
       : 'AI MEETING SUMMARY'
 )
-const feedbackSections = computed(() => [
-  { key: 'participationStats', label: '참여 통계', value: props.report?.participationStats },
-  { key: 'qualityEvaluation', label: '회의 품질 평가', value: props.report?.qualityEvaluation },
-  { key: 'strengths', label: '잘된 점', value: props.report?.strengths },
-  { key: 'improvements', label: '개선할 점', value: props.report?.improvements },
-  {
-    key: 'decisionProcessChecks',
-    label: '의사결정 과정',
-    value: props.report?.decisionProcessChecks
-  },
-  {
-    key: 'unresolvedIssuesEvaluation',
-    label: '미해결 이슈 평가',
-    value: props.report?.unresolvedIssuesEvaluation
-  },
-  {
-    key: 'nextMeetingSuggestions',
-    label: '다음 회의 제안',
-    value: props.report?.nextMeetingSuggestions
-  }
-])
+const feedbackSections = computed(() => {
+  const standardSections = [
+    { key: 'participationStats', label: '참여 통계', value: props.report?.participationStats },
+    { key: 'qualityEvaluation', label: '회의 품질 평가', value: props.report?.qualityEvaluation },
+    { key: 'strengths', label: '잘된 점', value: props.report?.strengths },
+    { key: 'improvements', label: '개선할 점', value: props.report?.improvements },
+    {
+      key: 'decisionProcessChecks',
+      label: '의사결정 과정',
+      value: props.report?.decisionProcessChecks
+    },
+    {
+      key: 'unresolvedIssuesEvaluation',
+      label: '미해결 이슈 평가',
+      value: props.report?.unresolvedIssuesEvaluation
+    },
+    {
+      key: 'nextMeetingSuggestions',
+      label: '다음 회의 제안',
+      value: props.report?.nextMeetingSuggestions
+    }
+  ]
+  const additionalSections = (props.report?.additionalFeedbackSections || []).map(
+    (section, index) => ({
+      key: `additional-${section.key || index}`,
+      label: displayKey(section.label || section.key || `추가 분석 ${index + 1}`),
+      value: section.value
+    })
+  )
+  return [...standardSections, ...additionalSections]
+})
 
 const cloneItems = (items) => (items || []).map((item) => ({ ...item }))
 function resetDraft() {
