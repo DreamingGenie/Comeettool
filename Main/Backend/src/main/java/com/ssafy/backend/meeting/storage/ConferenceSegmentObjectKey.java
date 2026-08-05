@@ -31,13 +31,6 @@ public final class ConferenceSegmentObjectKey {
         return create(meetingId, participantId, segmentNumber, "json");
     }
 
-    public static String participantPrefix(Long meetingId, Long participantId) {
-        requirePositive(meetingId, "회의 ID");
-        requirePositive(participantId, "참여자 ID");
-        return StorageDirectory.CONFERENCES.prefix()
-                + "/" + meetingId + "/participants/" + participantId + "/";
-    }
-
     private static StorageObjectKey create(
             Long meetingId,
             Long participantId,
