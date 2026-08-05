@@ -121,8 +121,6 @@ export function useLiveKitMeeting(options = {}) {
     }
   }
 
-  // 전체 채팅은 LiveKit 데이터 채널로 주고받는다. 토큰에 CanPublishData 권한이 이미 있어
-  // 서버 작업이 필요 없고, TURN/TLS 443 릴레이 구간에서도 그대로 전달된다.
   const CHAT_TOPIC = 'chat'
   const chatEncoder = new TextEncoder()
   const chatDecoder = new TextDecoder()

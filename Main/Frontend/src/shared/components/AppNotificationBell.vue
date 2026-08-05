@@ -36,7 +36,6 @@
         <p>회의 초대나 팀 스페이스 초대가 도착하면 여기에 표시됩니다.</p>
       </div>
       <div v-else class="notification-list">
-        <!-- 진행 중인 회의가 먼저다. 시간에 민감한 알림이라 위에 둔다. -->
         <article
           v-for="invite in meetingInvites"
           :key="`meeting-${invite.meetingId}`"
@@ -112,7 +111,6 @@ function toggle() {
   open.value = !open.value
 }
 
-// 초대한 사람의 닉네임은 회의 목록 API가 host.userId만 주기 때문에 표시하지 않는다.
 function meetingDescription(invite) {
   const parts = []
   if (invite.spaceName) parts.push(invite.spaceName)
@@ -121,7 +119,6 @@ function meetingDescription(invite) {
 }
 
 function joinMeeting(meetingId) {
-  // 이동하면 패널이 남아 있을 이유가 없다.
   open.value = false
   emit('join', meetingId)
 }
@@ -320,7 +317,6 @@ onBeforeUnmount(() => {
   font-weight: 800;
 }
 
-/* 진행 중인 회의 알림은 스페이스 초대와 구분되게 강조한다. */
 .notification-list article.is-meeting {
   background: #fff7f8;
 }

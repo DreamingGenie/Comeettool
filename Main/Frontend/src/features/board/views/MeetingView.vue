@@ -68,6 +68,8 @@
             <div class="participant-badge" :class="{ 'is-muted': participant.muted }">
               <button
                 v-if="!participant.isScreenShare"
+                class="badge-device"
+                :class="{ 'is-off': participant.muted }"
                 type="button"
                 :aria-label="`${participant.displayName} 마이크 ${participant.muted ? '켜기' : '음소거'}`"
                 @click="toggleParticipantDevice(participant, 'microphone')"
@@ -79,6 +81,8 @@
               <i v-else class="screen-share-mark">↗</i>
               <button
                 v-if="!participant.isScreenShare"
+                class="badge-device"
+                :class="{ 'is-off': participant.cameraOff }"
                 type="button"
                 :aria-label="`${participant.displayName} 카메라 ${participant.cameraOff ? '켜기' : '끄기'}`"
                 @click="toggleParticipantDevice(participant, 'camera')"
@@ -519,7 +523,6 @@ function toChatMessageViewModel(payload, mine) {
   return {
     id: createChatMessageId(),
     sender: payload.sender || '참가자',
-    // 보낸 사람 기기의 시각이라 기기 간 시계 오차는 그대로 반영된다.
     time: (isValidTime ? sentAt : new Date()).toLocaleTimeString('ko-KR', {
       hour: '2-digit',
       minute: '2-digit'
@@ -821,7 +824,6 @@ async function toggleParticipantDevice(participant, device) {
   try {
     const enabled = !deviceState[device]
     await setDeviceEnabled(device, enabled)
-    // 하단 컨트롤 바와 상태를 어긋나지 않게 같이 갱신한다.
     const controlId = controlIdByDevice[device]
     if (enabled) activeControls.add(controlId)
     else activeControls.delete(controlId)
@@ -1322,18 +1324,23 @@ async function send() {
   object-fit: contain;
 }
 
-/* 타일 배지 안의 Material Symbols 글리프. 배지 버튼이 17.6px라 그에 맞춘다. */
 .participant-badge button .material-symbols-rounded {
   font-size: 15px;
   line-height: 1;
 }
 
-/* 내 카메라 자기 화면만 거울 모드. 원격 영상·화면공유에는 붙지 않는다. */
+.participant-badge.is-muted button {
+  color: inherit;
+}
+
+.participant-badge button.badge-device.is-off {
+  color: #ff6674;
+}
+
 .participant-media :deep(.livekit-video.is-mirrored) {
   transform: scaleX(-1);
 }
 
-/* 카메라 꺼짐 대체 화면. */
 .participant-avatar {
   position: absolute;
   inset: 0;
@@ -1366,9 +1373,6 @@ async function send() {
   font-size: clamp(18px, 3vw, 34px);
 }
 
-/* 마이크·카메라 상태 표시 공용.
-   꺼짐 표시는 Material Symbols의 mic_off / videocam_off 글리프가 담당하므로
-   여기서는 색으로만 보강한다(사선을 겹치면 이중 부정이 된다). */
 .device-mark {
   display: grid;
   place-items: center;
@@ -1831,7 +1835,6 @@ async function send() {
 
 .side-participant-list > article {
   display: grid;
-  /* 아바타 / 이름 / 마이크·카메라 상태 / 위임·강퇴 */
   grid-template-columns: 42px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
