@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -92,4 +93,13 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             @Param("meetingId") Long meetingId,
             @Param("query") String query
     );
+
+    /**
+     * AUTH-06: 개인 프로필 닉네임을 바꾸면 그 사용자가 속한 모든 스페이스의 멤버 닉네임도 같이 갱신한다
+     * (스페이스별 커스텀 닉네임 기능이 없어 Member.nickname은 항상 User.nickname의 스냅샷이어야 한다).
+     * 한 사용자가 여러 팀에 속해 있을 수 있어 건별 조회·save 대신 한 번의 UPDATE로 전부 반영한다.
+     */
+    @Modifying
+    @Query("UPDATE Member m SET m.nickname = :nickname WHERE m.userId = :userId")
+    void updateNicknameByUserId(@Param("userId") Long userId, @Param("nickname") String nickname);
 }
