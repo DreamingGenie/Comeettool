@@ -570,11 +570,29 @@ async function logout() {
   display: grid;
   place-items: center;
   padding: 0;
-  transform: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: #6274e9;
+  box-shadow: 0 10px 24px rgba(41, 57, 133, 0.28);
+  cursor: pointer;
+  z-index: 8;
+  transform: translateY(0) scale(1);
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
-.floating-add:hover {
-  transform: none;
+.floating-add:hover,
+.floating-add:focus-visible {
+  background: #5366de;
+  box-shadow: 0 15px 30px rgba(41, 57, 133, 0.38);
+  outline: none;
+  transform: translateY(-4px) scale(1.06);
+}
+
+.floating-add:active {
+  box-shadow: 0 7px 16px rgba(41, 57, 133, 0.28);
+  transform: translateY(-1px) scale(0.98);
 }
 
 .floating-add > span {
