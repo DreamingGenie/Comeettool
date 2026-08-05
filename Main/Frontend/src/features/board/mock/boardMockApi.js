@@ -137,6 +137,10 @@ export const boardMockApi = {
         Object.values(boardMockDatabase.meetingRooms)[0]
       )?.participants || []
     ),
+  kickMeetingParticipant: () => mockResponse(null),
+  getMeetingInviteCandidates: () => mockResponse([]),
+  inviteMeetingMember: (meetingId, userId) =>
+    mockResponse({ meetingId, userId }),
   getMessages: (meetingId) =>
     mockResponse(
       (
@@ -357,6 +361,14 @@ export const boardMockApi = {
     calendar?.events.push(event)
     return mockResponse(event)
   },
+  uploadVadRecording: (meetingId, data) =>
+    mockResponse({
+      meetingId,
+      participantId: 'me',
+      sequence: data.sequence,
+      startedAt: data.startedAt,
+      endedAt: data.endedAt
+    }),
   updateSchedule: (scheduleId, data) => {
     const event = Object.values(boardMockDatabase.calendars)
       .flatMap((calendar) => calendar.events || [])

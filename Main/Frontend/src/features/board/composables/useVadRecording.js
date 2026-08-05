@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import { Track } from 'livekit-client'
-import { boardApi } from '../api/boardApi'
 
 const MAX_UPLOAD_RETRIES = 5
 const SPEECH_THRESHOLD = 0.025
@@ -50,13 +49,18 @@ export function useVadRecording(options = {}) {
   let isSpeaking = false
   let silenceStartedAt = 0
   let mediaStreamTrack = null
+  let recorderStopPromise = Promise.resolve()
 
   async function uploadChunk(blob, startedAt, endedAt, attemptSequence) {
+    if (typeof options.uploadRecording !== 'function') {
+      throw new Error('VAD 업로드 함수가 설정되지 않았습니다.')
+    }
+
     let currentSequence = attemptSequence
 
     for (let attempt = 0; attempt < MAX_UPLOAD_RETRIES; attempt += 1) {
       try {
-        await boardApi.uploadVadRecording(meetingId, {
+        await options.uploadRecording(meetingId, {
           sequence: currentSequence,
           startedAt,
           endedAt,
@@ -117,24 +121,33 @@ export function useVadRecording(options = {}) {
   }
 
   function finishRecorder() {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') return
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return recorderStopPromise
 
     const startedAt = chunkStartedAt
     const recorder = mediaRecorder
 
-    recorder.onstop = () => {
-      mediaRecorder = null
-      const endedAt = Date.now()
-      if (endedAt - startedAt < MIN_SPEECH_MS) return
+    recorderStopPromise = new Promise(resolve => {
+      recorder.onstop = () => {
+        mediaRecorder = null
+        const endedAt = Date.now()
+        if (endedAt - startedAt < MIN_SPEECH_MS) {
+          resolve()
+          return
+        }
 
-      const blob = new Blob(recordedChunks, { type: recorder.mimeType })
-      if (!blob.size) return
+        const blob = new Blob(recordedChunks, { type: recorder.mimeType })
+        if (!blob.size) {
+          resolve()
+          return
+        }
 
-      const uploadSequence = sequence
-      enqueueUpload(() => uploadChunk(blob, startedAt, endedAt, uploadSequence))
-    }
+        const uploadSequence = sequence
+        resolve(enqueueUpload(() => uploadChunk(blob, startedAt, endedAt, uploadSequence)))
+      }
+    })
 
     recorder.stop()
+    return recorderStopPromise
   }
 
   function pollSpeech() {
@@ -209,8 +222,7 @@ export function useVadRecording(options = {}) {
       isSpeaking = false
       finishRecorder()
     } else if (mediaRecorder?.state === 'recording') {
-      mediaRecorder.stop()
-      mediaRecorder = null
+      finishRecorder()
     }
 
     sourceNode?.disconnect()
@@ -224,10 +236,11 @@ export function useVadRecording(options = {}) {
     }
 
     status.value = 'idle'
+    return recorderStopPromise
   }
 
   async function stopAndDrain() {
-    stopMonitoring()
+    await stopMonitoring()
     await uploadChain
   }
 

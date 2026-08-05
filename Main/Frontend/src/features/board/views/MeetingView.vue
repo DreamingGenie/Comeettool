@@ -501,6 +501,8 @@ const {
   stopMonitoring: stopVadRecording,
   stopAndDrain: drainVadUploads
 } = useVadRecording({
+  uploadRecording: (activeMeetingId, recording) =>
+    boardStore.uploadVadRecording(activeMeetingId, recording),
   onUploadSuccess: ({ sequence }) => {
     notify(`VAD 청크 #${sequence} 업로드 완료`)
   },
@@ -722,6 +724,26 @@ watch(
   { immediate: true }
 )
 
+function scheduleVadStart() {
+  window.clearTimeout(vadStartTimer)
+  if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) {
+    stopVadRecording()
+    return
+  }
+
+  vadStartTimer = window.setTimeout(() => {
+    if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) return
+    const started = startVadRecording(meetingId.value, liveKitRoom.value)
+    if (!started) console.warn('[VAD] microphone track is not ready yet')
+  }, 400)
+}
+
+watch(
+  () => [deviceState.microphone, liveKitRoom.value, meetingId.value],
+  scheduleVadStart,
+  { immediate: true }
+)
+
 watch(participantIdentities, identities => {
   boardState.meetingRoom.totalParticipants = Math.max(
     boardState.meetingRoom.participants.length,
@@ -748,28 +770,6 @@ watch(
       else activeControls.delete(control)
     }
   }
-)
-
-function scheduleVadStart() {
-  window.clearTimeout(vadStartTimer)
-  if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) {
-    stopVadRecording()
-    return
-  }
-
-  vadStartTimer = window.setTimeout(() => {
-    if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) return
-    const started = startVadRecording(meetingId.value, liveKitRoom.value)
-    if (!started) {
-      console.warn('[VAD] microphone track is not ready yet')
-    }
-  }, 400)
-}
-
-watch(
-  () => [deviceState.microphone, liveKitRoom.value, meetingId.value],
-  () => scheduleVadStart(),
-  { immediate: true }
 )
 
 watch(videoPageCount, pageCount => {
@@ -1165,6 +1165,7 @@ async function send() {
   margin-left: 8px;
   color: #7dd3a0;
   font-size: 11px;
+  font-weight: 700;
 }
 
 .connection-status.connected {
