@@ -69,4 +69,16 @@ public interface MeetingMinutesRepository extends JpaRepository<MeetingMinutes, 
     @Modifying
     @Query("UPDATE MeetingMinutes m SET m.isConfirmed = true, m.confirmedAt = :confirmedAt WHERE m.meetingId = :meetingId")
     void confirm(@Param("meetingId") Long meetingId, @Param("confirmedAt") OffsetDateTime confirmedAt);
+
+    /**
+     * REPORTS-08: mdUrl/pdfUrl은 Main Backend가 소유하는 캐시 컬럼이다.
+     * AudioTranscriptionRepository.updateMdUrl/updatePdfUrl(REPORTS-03)과 동일한 패턴.
+     */
+    @Modifying
+    @Query("UPDATE MeetingMinutes m SET m.mdUrl = :url WHERE m.meetingId = :meetingId")
+    void updateMdUrl(@Param("meetingId") Long meetingId, @Param("url") String url);
+
+    @Modifying
+    @Query("UPDATE MeetingMinutes m SET m.pdfUrl = :url WHERE m.meetingId = :meetingId")
+    void updatePdfUrl(@Param("meetingId") Long meetingId, @Param("url") String url);
 }

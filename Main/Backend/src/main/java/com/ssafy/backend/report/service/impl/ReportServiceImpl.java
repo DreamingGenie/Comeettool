@@ -306,6 +306,66 @@ public class ReportServiceImpl implements ReportService {
     }
 
     @Override
+    @Transactional
+    public ResponseExportDto exportMinutes(Long requesterId, Long meetingId, RequestExportDto request) {
+        MeetingRoom meetingRoom = meetingRoomRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 내보내기는 조회(REPORTS-01/02/04/05)와 동일하게 OWNER/MEMBER/GUEST 전부 허용 — REPORTS-03과 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(meetingRoom.getTeamId(), requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        MeetingMinutes minutes = meetingMinutesRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MINUTES_NOT_FOUND));
+
+        // 확정 전 회의록은 내보내기를 즉시 거부 — 아래 format 검증/렌더링보다 먼저 걸러야 한다.
+        if (!Boolean.TRUE.equals(minutes.getIsConfirmed())) {
+            throw new CustomException(ErrorCode.MINUTES_NOT_CONFIRMED);
+        }
+
+        String format = request.format();
+        if (!"md".equals(format) && !"pdf".equals(format)) {
+            throw new CustomException(ErrorCode.VALIDATION_FAILED);
+        }
+
+        boolean isMd = "md".equals(format);
+        String cachedUrl = isMd ? minutes.getMdUrl() : minutes.getPdfUrl();
+        if (cachedUrl != null) {
+            return new ResponseExportDto(meetingId, format, cachedUrl);
+        }
+
+        String markdown = transcriptMarkdownRenderer.renderMinutes(
+                minutes.getTitle(), minutes.getSummary(), minutes.getTopics(),
+                minutes.getDecisions(), minutes.getActionItems(), minutes.getOpenIssues());
+
+        byte[] content;
+        String contentType;
+        StorageObjectKey objectKey;
+        if (isMd) {
+            content = markdown.getBytes(StandardCharsets.UTF_8);
+            contentType = "text/markdown";
+            objectKey = AiResultKeys.of(meetingId, "minutes", "md");
+        } else {
+            content = markdownToPdfConverter.convert(markdown);
+            contentType = "application/pdf";
+            objectKey = AiResultKeys.of(meetingId, "minutes", "pdf");
+        }
+
+        StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
+        objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
+        String url = publicBaseUrl + "/files/" + objectKey.value();
+
+        if (isMd) {
+            meetingMinutesRepository.updateMdUrl(meetingId, url);
+        } else {
+            meetingMinutesRepository.updatePdfUrl(meetingId, url);
+        }
+
+        return new ResponseExportDto(meetingId, format, url);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PageResponse<FacilitatorReportSummaryDto> getFacilitatorReports(
             Long requesterId, Long spaceId, Pageable pageable) {

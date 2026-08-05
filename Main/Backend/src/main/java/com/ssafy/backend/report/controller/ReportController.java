@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.common.PageResponse;
@@ -71,7 +70,7 @@ public class ReportController {
             @AuthenticationPrincipal String userId,
             @PathVariable Long spaceId,
             @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
-                    Pageable pageable) {
+            Pageable pageable) {
         PageResponse<MinutesSummaryDto> response =
                 reportService.getMinutesList(Long.parseLong(userId), spaceId, pageable);
         return ResponseEntity.ok(ApiResponse.success("회의록 목록 조회 성공", response));
@@ -105,13 +104,23 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success("회의록이 확정되었습니다.", response));
     }
 
+    // REPORTS-08: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 확정된 회의록을 md/pdf로 내보낸다(캐시 우선).
+    @PostMapping("/api/v1/meetings/{meetingId}/reports/minutes/export")
+    public ResponseEntity<ApiResponse<ResponseExportDto>> exportMinutes(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestBody RequestExportDto request) {
+        ResponseExportDto response = reportService.exportMinutes(Long.parseLong(userId), meetingId, request);
+        return ResponseEntity.ok(ApiResponse.success("회의록 내보내기 성공", response));
+    }
+
     // REPORTS-09: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 퍼실리테이터 리포트 목록을 페이지 단위로 조회한다.
     @GetMapping("/api/v1/spaces/{spaceId}/reports/facilitator")
     public ResponseEntity<ApiResponse<PageResponse<FacilitatorReportSummaryDto>>> getFacilitatorReports(
             @AuthenticationPrincipal String userId,
             @PathVariable Long spaceId,
             @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
-                    Pageable pageable) {
+            Pageable pageable) {
         PageResponse<FacilitatorReportSummaryDto> response =
                 reportService.getFacilitatorReports(Long.parseLong(userId), spaceId, pageable);
         return ResponseEntity.ok(ApiResponse.success("퍼실리테이터 리포트 목록 조회 성공", response));

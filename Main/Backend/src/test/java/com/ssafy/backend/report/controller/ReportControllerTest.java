@@ -797,4 +797,103 @@ class ReportControllerTest {
                     .andExpect(jsonPath("$.code").value("FACILITATOR_REPORT_NOT_FOUND"));
         }
     }
+
+    @Nested
+    @DisplayName("REPORTS-08 POST /api/v1/meetings/{meetingId}/reports/minutes/export")
+    class ExportMinutes {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 내보내기면 200 SUCCESS, message='회의록 내보내기 성공', data 필드를 반환한다")
+        void exportMinutes_returns200() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            ResponseExportDto response = new ResponseExportDto(
+                    MEETING_ID, "md", "http://localhost:8080/files/ai-results/34/minutes.md");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willReturn(response);
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("회의록 내보내기 성공"))
+                    .andExpect(jsonPath("$.data.meetingId").value(34))
+                    .andExpect(jsonPath("$.data.format").value("md"))
+                    .andExpect(jsonPath("$.data.url").value("http://localhost:8080/files/ai-results/34/minutes.md"));
+
+            verify(reportService).exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class));
+        }
+
+        @Test
+        @DisplayName("확정 전 회의록이면 409 MINUTES_NOT_CONFIRMED를 반환한다")
+        void exportMinutes_returns409WhenNotConfirmed() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MINUTES_NOT_CONFIRMED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("MINUTES_NOT_CONFIRMED"));
+        }
+
+        @Test
+        @DisplayName("format이 md/pdf가 아니면 400 VALIDATION_FAILED를 반환한다")
+        void exportMinutes_returns400WhenFormatIsInvalid() throws Exception {
+            RequestExportDto request = new RequestExportDto("docx");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.VALIDATION_FAILED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void exportMinutes_returns404WhenMeetingNotFound() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void exportMinutes_returns403WhenNotMember() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 404 MINUTES_NOT_FOUND를 반환한다")
+        void exportMinutes_returns404WhenMinutesNotFound() throws Exception {
+            RequestExportDto request = new RequestExportDto("md");
+            given(reportService.exportMinutes(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MINUTES_NOT_FOUND));
+
+            mockMvc.perform(post("/api/v1/meetings/{meetingId}/reports/minutes/export", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
+        }
+    }
 }

@@ -1519,4 +1519,231 @@ class ReportServiceImplTest {
                     .isEqualTo(ErrorCode.FACILITATOR_REPORT_NOT_FOUND);
         }
     }
+
+    @Nested
+    @DisplayName("REPORTS-08 회의록 내보내기")
+    class ExportMinutes {
+
+        private static final String TOPICS_JSON = "[{\"topic\":\"REPORTS API 진행 상황 공유\"}]";
+        private static final String DECISIONS_JSON =
+                "[{\"decision\":\"REPORTS-01~04는 이번 스프린트 내 완료\",\"owner\":\"ssong\"}]";
+        private static final String ACTION_ITEMS_JSON =
+                "[{\"task\":\"REPORTS-05 이후 스펙 정리\",\"assignee\":\"ssong\",\"dueDate\":\"2026-08-06\"}]";
+        private static final String OPEN_ISSUES_JSON = "[{\"issue\":\"STT 파이프라인 세그먼트 병합 로직 미구현\"}]";
+        private static final String RENDERED_MARKDOWN =
+                "# 스프린트 리뷰 회의록\n\n## 요약\n\n- 요약\n\n";
+
+        private MeetingMinutes confirmedMinutes() {
+            return minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON,
+                    OPEN_ISSUES_JSON, true, OffsetDateTime.parse("2026-08-05T02:00:00Z"),
+                    OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+        }
+
+        private void stubRenderer(MeetingMinutes minutes) {
+            given(transcriptMarkdownRenderer.renderMinutes(
+                    minutes.getTitle(), minutes.getSummary(), minutes.getTopics(),
+                    minutes.getDecisions(), minutes.getActionItems(), minutes.getOpenIssues()))
+                    .willReturn(RENDERED_MARKDOWN);
+        }
+
+        @Test
+        @DisplayName("md 캐시가 없으면 렌더링·업로드 후 mdUrl을 갱신하고 새 URL을 반환한다")
+        void exportMinutes_rendersAndUploadsWhenMdCacheMissing() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            stubRenderer(minutes);
+
+            ResponseExportDto result =
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            String expectedUrl = BASE_URL + "/files/ai-results/34/minutes.md";
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.format()).isEqualTo("md");
+            assertThat(result.url()).isEqualTo(expectedUrl);
+
+            ArgumentCaptor<StorageUploadRequest> requestCaptor = ArgumentCaptor.forClass(StorageUploadRequest.class);
+            verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
+            assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/minutes.md");
+            assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
+            verify(meetingMinutesRepository).updateMdUrl(MEETING_ID, expectedUrl);
+            verify(markdownToPdfConverter, never()).convert(any());
+            verify(meetingMinutesRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("pdf 캐시가 없으면 렌더링·PDF 변환·업로드 후 pdfUrl을 갱신하고 새 URL을 반환한다")
+        void exportMinutes_rendersAndUploadsWhenPdfCacheMissing() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            stubRenderer(minutes);
+            byte[] pdfBytes = {1, 2, 3};
+            given(markdownToPdfConverter.convert(RENDERED_MARKDOWN)).willReturn(pdfBytes);
+
+            ResponseExportDto result =
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
+
+            String expectedUrl = BASE_URL + "/files/ai-results/34/minutes.pdf";
+            assertThat(result.format()).isEqualTo("pdf");
+            assertThat(result.url()).isEqualTo(expectedUrl);
+
+            ArgumentCaptor<StorageUploadRequest> requestCaptor = ArgumentCaptor.forClass(StorageUploadRequest.class);
+            verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
+            assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/minutes.pdf");
+            assertThat(requestCaptor.getValue().contentType()).isEqualTo("application/pdf");
+            assertThat(requestCaptor.getValue().contentLength()).isEqualTo(pdfBytes.length);
+            verify(meetingMinutesRepository).updatePdfUrl(MEETING_ID, expectedUrl);
+            verify(meetingMinutesRepository, never()).updateMdUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        void exportMinutes_returnsCachedMdUrlWithoutUploading() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            ReflectionTestUtils.setField(minutes, "mdUrl", "http://localhost:8080/files/cached.md");
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseExportDto result =
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.md");
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(markdownToPdfConverter);
+            verifyNoInteractions(objectStorageService);
+            verify(meetingMinutesRepository, never()).updateMdUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        void exportMinutes_returnsCachedPdfUrlWithoutUploading() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            ReflectionTestUtils.setField(minutes, "pdfUrl", "http://localhost:8080/files/cached.pdf");
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            ResponseExportDto result =
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
+
+            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.pdf");
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(markdownToPdfConverter);
+            verifyNoInteractions(objectStorageService);
+            verify(meetingMinutesRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("확정되지 않은 회의록은 MINUTES_NOT_CONFIRMED 예외가 발생하고 렌더링/업로드를 시도하지 않는다")
+        void exportMinutes_throwsWhenNotConfirmed() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON,
+                    OPEN_ISSUES_JSON, false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            assertThatThrownBy(() ->
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_NOT_CONFIRMED);
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(markdownToPdfConverter);
+            verifyNoInteractions(objectStorageService);
+            verify(meetingMinutesRepository, never()).updateMdUrl(any(), any());
+            verify(meetingMinutesRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("format이 md/pdf가 아니면 VALIDATION_FAILED 예외가 발생하고 렌더링을 시도하지 않는다")
+        void exportMinutes_throwsWhenFormatIsInvalid() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            assertThatThrownBy(() ->
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("docx")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verifyNoInteractions(transcriptMarkdownRenderer);
+            verifyNoInteractions(objectStorageService);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·회의록 조회를 시도하지 않는다")
+        void exportMinutes_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생한다")
+        void exportMinutes_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() ->
+                    reportService.exportMinutes(nonMemberId, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 확정된 회의록은 정상적으로 내보낼 수 있다")
+        void exportMinutes_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = confirmedMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            stubRenderer(minutes);
+
+            ResponseExportDto result =
+                    reportService.exportMinutes(guestUserId, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.format()).isEqualTo("md");
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 MINUTES_NOT_FOUND 예외가 발생한다")
+        void exportMinutes_throwsWhenMinutesNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_NOT_FOUND);
+        }
+    }
 }
