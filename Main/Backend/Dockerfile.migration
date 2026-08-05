@@ -1,4 +1,4 @@
-FROM flyway/flyway:12.11.0
+FROM docker.io/flyway/flyway:12.11.0
 
 USER root
 
