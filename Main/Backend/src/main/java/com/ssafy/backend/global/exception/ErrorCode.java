@@ -86,7 +86,14 @@ public enum ErrorCode {
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
 
     PROFILE_IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_TOO_LARGE", "프로필 사진은 5MB 이하만 업로드할 수 있습니다."),
-    PROFILE_IMAGE_INVALID_TYPE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_INVALID_TYPE", "jpg, jpeg, png 형식만 업로드할 수 있습니다.");
+    PROFILE_IMAGE_INVALID_TYPE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_INVALID_TYPE", "jpg, jpeg, png 형식만 업로드할 수 있습니다."),
+
+    VAD_SEQUENCE_INVALID(HttpStatus.BAD_REQUEST, "VAD_SEQUENCE_INVALID", "sequence는 1 이상의 정수여야 합니다."),
+    VAD_TIME_RANGE_INVALID(HttpStatus.BAD_REQUEST, "VAD_TIME_RANGE_INVALID", "발화 시작·종료 시각이 올바르지 않습니다."),
+    VAD_AUDIO_REQUIRED(HttpStatus.BAD_REQUEST, "VAD_AUDIO_REQUIRED", "오디오 파일이 필요합니다."),
+    VAD_AUDIO_TOO_LARGE(HttpStatus.BAD_REQUEST, "VAD_AUDIO_TOO_LARGE", "오디오 파일이 허용 크기를 초과했습니다."),
+    VAD_SEQUENCE_CONFLICT(HttpStatus.CONFLICT, "VAD_SEQUENCE_CONFLICT", "이미 사용된 sequence입니다."),
+    VAD_STORAGE_FAILED(HttpStatus.BAD_GATEWAY, "VAD_STORAGE_FAILED", "음성 저장에 실패했습니다.");
 
     private final HttpStatus status;
     private final String code;

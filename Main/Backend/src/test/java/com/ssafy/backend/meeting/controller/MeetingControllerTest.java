@@ -23,10 +23,12 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.mock.web.MockMultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
@@ -43,7 +45,10 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingInviteCandidateDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseVadRecordingDto;
+import com.ssafy.backend.meeting.dto.ResponseVadSequenceConflictDto;
 import com.ssafy.backend.meeting.service.MeetingService;
+import com.ssafy.backend.meeting.service.VadRecordingService;
 
 /**
  * 회의 컨트롤러 단위 테스트.
@@ -61,6 +66,9 @@ class MeetingControllerTest {
 
     @Mock
     private MeetingService meetingService;
+
+    @Mock
+    private VadRecordingService vadRecordingService;
 
     @InjectMocks
     private MeetingController meetingController;
@@ -711,5 +719,71 @@ class MeetingControllerTest {
                 ))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEETING_ALREADY_INVITED"));
+    }
+
+    @Test
+    @DisplayName("MEET-12 VAD 업로드 성공 시 200과 응답 데이터를 반환한다")
+    void addVadRecording_returns200OnSuccess() throws Exception {
+        ResponseVadRecordingDto response = new ResponseVadRecordingDto(
+                MEETING_ID,
+                12L,
+                1,
+                "conferences/100/participants/12/segment-000001.ogg",
+                "conferences/100/participants/12/segment-000001.json",
+                5800L,
+                OffsetDateTime.parse("2026-08-01T15:25:17.64601+09:00"),
+                "junho"
+        );
+        given(vadRecordingService.addVadRecording(
+                eq(1L), eq(MEETING_ID), eq(1), eq(1785551200000L), eq(1785551205800L), any()
+        )).willReturn(response);
+
+        MockMultipartFile audio = new MockMultipartFile(
+                "audio",
+                "segment-000001.ogg",
+                "audio/ogg",
+                new byte[]{1, 2, 3}
+        );
+
+        mockMvc.perform(multipart("/api/v1/meetings/{meetingId}/vad-recordings", MEETING_ID)
+                        .file(audio)
+                        .param("sequence", "1")
+                        .param("startedAt", "1785551200000")
+                        .param("endedAt", "1785551205800"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.meetingRoomId").value(100))
+                .andExpect(jsonPath("$.data.participantId").value(12))
+                .andExpect(jsonPath("$.data.sequence").value(1))
+                .andExpect(jsonPath("$.data.username").value("junho"))
+                .andExpect(jsonPath("$.data.audioObjectKey")
+                        .value("conferences/100/participants/12/segment-000001.ogg"));
+    }
+
+    @Test
+    @DisplayName("MEET-12 sequence 충돌 시 409와 expectedSequence를 반환한다")
+    void addVadRecording_returns409OnSequenceConflict() throws Exception {
+        given(vadRecordingService.addVadRecording(
+                eq(1L), eq(MEETING_ID), eq(1), eq(1785551200000L), eq(1785551205800L), any()
+        )).willThrow(new CustomException(
+                ErrorCode.VAD_SEQUENCE_CONFLICT,
+                new ResponseVadSequenceConflictDto(16)
+        ));
+
+        MockMultipartFile audio = new MockMultipartFile(
+                "audio",
+                "segment-000001.ogg",
+                "audio/ogg",
+                new byte[]{1, 2, 3}
+        );
+
+        mockMvc.perform(multipart("/api/v1/meetings/{meetingId}/vad-recordings", MEETING_ID)
+                        .file(audio)
+                        .param("sequence", "1")
+                        .param("startedAt", "1785551200000")
+                        .param("endedAt", "1785551205800"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VAD_SEQUENCE_CONFLICT"))
+                .andExpect(jsonPath("$.data.expectedSequence").value(16));
     }
 }

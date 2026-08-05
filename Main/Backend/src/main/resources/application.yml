@@ -52,6 +52,13 @@ ai:
     initial-retry-delay: ${AI_TRANSCRIPTION_INITIAL_RETRY_DELAY:${AI_TRANSCRIPTION_START_INITIAL_RETRY_DELAY:1s}}
     max-retry-delay: ${AI_TRANSCRIPTION_MAX_RETRY_DELAY:${AI_TRANSCRIPTION_START_MAX_RETRY_DELAY:5s}}
 
+# MEET-12 VAD 업로드 / MEET-14 in-flight 드레인
+meeting:
+  vad:
+    drain-timeout: ${MEETING_VAD_DRAIN_TIMEOUT:20s}
+    quiet-period: ${MEETING_VAD_QUIET_PERIOD:300ms}
+    max-audio-bytes: ${MEETING_VAD_MAX_AUDIO_BYTES:5242880}
+
 livekit:
   url: ${LIVEKIT_URL:ws://localhost:7880}
   api-key: ${LIVEKIT_API_KEY:devkey}
@@ -68,7 +75,7 @@ file:
   upload-dir: ${FILE_UPLOAD_DIR:/uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080}
 
-# S3 (PROFILE_IMG=S3일 때 사용 — 배포 시 환경변수로 주입)
+# S3 (공통 Object Storage — 배포 시 환경변수로 주입, AWS SSO/IAM Role 인증)
 aws:
   s3:
     bucket: ${AWS_S3_BUCKET:}

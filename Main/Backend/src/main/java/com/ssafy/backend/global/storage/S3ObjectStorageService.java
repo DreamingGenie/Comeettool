@@ -5,6 +5,8 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +20,9 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -71,6 +76,105 @@ public class S3ObjectStorageService implements ObjectStorageService {
         } catch (SdkException e) {
             throw storageFailure("업로드", objectKey, e);
         }
+    }
+
+    @Override
+    public boolean uploadIfAbsent(StorageUploadRequest request, InputStream content) {
+        Objects.requireNonNull(request, "스토리지 업로드 요청이 필요합니다.");
+        Objects.requireNonNull(content, "업로드할 스트림이 필요합니다.");
+
+        StorageObjectKey objectKey = request.objectKey();
+        PutObjectRequest.Builder builder = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(objectKey.value())
+                .contentType(request.contentType())
+                .ifNoneMatch("*");
+        if (request.cacheControl() != null) {
+            builder.cacheControl(request.cacheControl());
+        }
+
+        try {
+            s3Client.putObject(
+                    builder.build(),
+                    RequestBody.fromInputStream(content, request.contentLength())
+            );
+            return true;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 412) {
+                return false;
+            }
+            throw storageFailure("조건부 업로드", objectKey, e);
+        } catch (SdkException e) {
+            throw storageFailure("조건부 업로드", objectKey, e);
+        }
+    }
+
+    @Override
+    public boolean exists(StorageObjectKey objectKey) {
+        Objects.requireNonNull(objectKey, "스토리지 객체 Key가 필요합니다.");
+
+        try {
+            s3Client.headObject(
+                    HeadObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(objectKey.value())
+                            .build()
+            );
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return false;
+            }
+            throw storageFailure("존재 확인", objectKey, e);
+        } catch (SdkException e) {
+            throw storageFailure("존재 확인", objectKey, e);
+        }
+    }
+
+    @Override
+    public List<String> list(StorageDirectory directory, String... prefixSegments) {
+        Objects.requireNonNull(directory, "스토리지 디렉터리가 필요합니다.");
+        Objects.requireNonNull(prefixSegments, "스토리지 경로가 필요합니다.");
+
+        StringBuilder prefixBuilder = new StringBuilder(directory.prefix()).append('/');
+        for (String segment : prefixSegments) {
+            directory.validatePathSegment(segment);
+            prefixBuilder.append(segment).append('/');
+        }
+        String prefix = prefixBuilder.toString();
+
+        List<String> objectNames = new ArrayList<>();
+        String continuationToken = null;
+        try {
+            do {
+                ListObjectsV2Response response = s3Client.listObjectsV2(
+                        ListObjectsV2Request.builder()
+                                .bucket(bucket)
+                                .prefix(prefix)
+                                .continuationToken(continuationToken)
+                                .build()
+                );
+                response.contents().forEach(object -> objectNames.add(objectName(object.key())));
+                continuationToken = Boolean.TRUE.equals(response.isTruncated())
+                        ? response.nextContinuationToken()
+                        : null;
+            } while (continuationToken != null);
+        } catch (SdkException e) {
+            log.error(
+                    "S3 객체 목록 조회 실패: directory={}, cause={}",
+                    directory.prefix(),
+                    e.getClass().getSimpleName()
+            );
+            throw new CustomException(ErrorCode.INTERNAL_ERROR);
+        }
+        return objectNames;
+    }
+
+    private static String objectName(String key) {
+        int lastSlash = key.lastIndexOf('/');
+        return lastSlash < 0 ? key : key.substring(lastSlash + 1);
     }
 
     @Override

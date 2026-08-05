@@ -19,7 +19,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ErrorResponse> handleCustom(CustomException e) {
         ErrorCode errorCode = e.getErrorCode();
-        return ResponseEntity.status(errorCode.getStatus()).body(ErrorResponse.of(errorCode));
+        ErrorResponse body = e.getData() == null
+                ? ErrorResponse.of(errorCode)
+                : ErrorResponse.of(errorCode, e.getData());
+        return ResponseEntity.status(errorCode.getStatus()).body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
