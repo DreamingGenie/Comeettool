@@ -520,15 +520,20 @@ jq -e '.status == "ok" and .database == "postgresql"' \
 websocket_key="$(head -c 16 /dev/urandom | base64 | tr -d '\n')"
 [ -n "$websocket_key" ] \
   || fail_release "a WebSocket handshake key could not be generated."
-curl --silent --show-error --http1.1 \
-  --connect-timeout 10 --max-time 5 \
-  --dump-header "$release_work_dir/websocket-headers.txt" \
-  --output /dev/null \
-  --header 'Connection: Upgrade' \
-  --header 'Upgrade: websocket' \
-  --header 'Sec-WebSocket-Version: 13' \
-  --header "Sec-WebSocket-Key: ${websocket_key}" \
-  "$DEPLOY_YJS_WEBSOCKET_URL" 2>/dev/null || true
+websocket_http_code="$(
+  curl --silent --show-error --http1.1 \
+    --connect-timeout 10 --max-time 5 \
+    --dump-header "$release_work_dir/websocket-headers.txt" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --header 'Connection: Upgrade' \
+    --header 'Upgrade: websocket' \
+    --header 'Sec-WebSocket-Version: 13' \
+    --header "Sec-WebSocket-Key: ${websocket_key}" \
+    "$yjs_https_url" 2>/dev/null || true
+)"
+[ "$websocket_http_code" = "101" ] \
+  || fail_release "the Yjs WebSocket endpoint returned HTTP ${websocket_http_code:-000} instead of 101."
 grep -Eq '^HTTP/[0-9.]+ 101([[:space:]]|$)' "$release_work_dir/websocket-headers.txt" \
   || fail_release "the Yjs WebSocket endpoint did not upgrade to HTTP 101."
 
@@ -564,7 +569,7 @@ blocked_cors_code="$(
 unset \
   aws_account_id ecr_registry backend_image yjs_image migration_image \
   backend_task_definition yjs_task_definition migration_task_definition \
-  migration_task invalidation_id websocket_key
+  migration_task invalidation_id websocket_key websocket_http_code
 
 echo "Production smoke checks passed without printing deployment endpoints or identifiers."
 echo "Production release completed successfully."
