@@ -6,6 +6,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
 import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
+import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
@@ -62,6 +63,9 @@ class UserServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
+    private MemberRepository memberRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -79,8 +83,8 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, userProfileMapper, passwordEncoder, jwtProvider,
-                refreshTokenService, fileStorageService);
+        userService = new UserServiceImpl(userRepository, memberRepository, userProfileMapper, passwordEncoder,
+                jwtProvider, refreshTokenService, fileStorageService);
     }
 
     private User buildUser() {
@@ -222,6 +226,8 @@ class UserServiceImplTest {
             assertThat(result.jobRole()).isEqualTo("Frontend Developer");
             assertThat(result.userDescription()).isEqualTo("새소개");
             assertThat(result.userColor()).isEqualTo("#3B82F6");
+            // 닉네임이 바뀌었으니 이 사용자가 속한 모든 스페이스의 멤버 닉네임도 같이 동기화돼야 한다.
+            verify(memberRepository).updateNicknameByUserId(USER_ID, "새닉네임");
         }
     }
 
@@ -251,6 +257,8 @@ class UserServiceImplTest {
             assertThat(result.jobRole()).isEqualTo("기존직무");
             assertThat(result.userDescription()).isEqualTo("기존소개");
             assertThat(result.userColor()).isEqualTo("#000000");
+            // 닉네임이 바뀌었으니 이 사용자가 속한 모든 스페이스의 멤버 닉네임도 같이 동기화돼야 한다.
+            verify(memberRepository).updateNicknameByUserId(USER_ID, "새닉네임");
         }
 
         @Test
@@ -276,6 +284,23 @@ class UserServiceImplTest {
             assertThat(result.userDescription()).isEqualTo("기존소개");
             assertThat(result.userColor()).isEqualTo("#000000");
         }
+
+        @Test
+        @DisplayName("nickname이_요청에_없으면_스페이스_멤버_닉네임_동기화를_시도하지_않는다")
+        void nickname이_요청에_없으면_스페이스_멤버_닉네임_동기화를_시도하지_않는다() {
+            // given: phone만 바꾸고 nickname은 미포함
+            User user = buildFullyPopulatedUser();
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            RequestUpdateProfileDto request = new RequestUpdateProfileDto(
+                    null, "010-9999-9999", null, null, null, null, null, null
+            );
+
+            // when
+            userService.modifyMyProfile(USER_ID, request);
+
+            // then
+            verify(memberRepository, never()).updateNicknameByUserId(any(), any());
+        }
     }
 
     @Nested
@@ -296,6 +321,7 @@ class UserServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND);
+            verify(memberRepository, never()).updateNicknameByUserId(any(), any());
         }
 
         @Test
@@ -314,6 +340,8 @@ class UserServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.ALREADY_DELETED_USER);
+            // 탈퇴 검증에서 막혀야 하니 요청에 닉네임이 있어도 동기화가 시도되면 안 된다.
+            verify(memberRepository, never()).updateNicknameByUserId(any(), any());
         }
 
         @Test
