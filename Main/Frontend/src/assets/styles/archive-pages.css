@@ -1369,7 +1369,7 @@
   overflow: hidden;
 }
 .home-dashboard .calendar-grid {
-  grid-template-rows: 21.76px repeat(5, minmax(0, 1fr));
+  grid-template-rows: 21.76px repeat(var(--calendar-week-count, 5), minmax(0, 1fr));
   height: calc(100% - 45.44px);
 }
 .home-dashboard .calendar-grid .day {
