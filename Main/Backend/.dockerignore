@@ -1,0 +1,16 @@
+.git
+.gitattributes
+.gitignore
+.gradle/
+.idea/
+.vscode/
+build/
+out/
+bin/
+*.iml
+.env
+.env.*
+!.env.example
+**/keys/
+**/*.pem
+!certs/ap-northeast-2-bundle.pem

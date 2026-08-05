@@ -33,6 +33,9 @@ application-local.yml
 application-local.properties
 *.env
 .env
+# Private key stores
+*.p12
+*.pfx
 
 # ===== Node / Frontend =====
 node_modules/
@@ -45,6 +48,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# ===== Yjs / Backend =====
+data/states/
+data/versions/
+data/documents.json
 
 # ===== Python / AI =====
 __pycache__/
@@ -64,3 +72,11 @@ wandb/
 *.pem
 *.key
 secrets/
+!Main/Backend/certs/ap-northeast-2-bundle.pem
+!Main/Backend-Yjs/certs/ap-northeast-2-bundle.pem
+
+# ===== Claude Code (개인 하네스 설정) =====
+CLAUDE.md
+
+# ===== 동결 디렉토리 (더 이상 사용하지 않음) =====
+sub1/

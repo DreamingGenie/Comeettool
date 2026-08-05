@@ -1,0 +1,15 @@
+package com.ssafy.backend.meeting.dto;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+
+/**
+ * MEET-06 호스트 양도 요청.
+ * 새 호스트는 해당 회의에 등록된 Participant 식별자로 지정한다.
+ */
+public record RequestTransferHostDto(
+        @NotNull(message = "새 호스트 ID는 필수입니다.")
+        @Positive(message = "새 호스트 ID는 양수여야 합니다.")
+        Long nextHostParticipantId
+) {
+}

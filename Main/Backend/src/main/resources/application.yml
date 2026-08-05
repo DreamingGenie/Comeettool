@@ -1,0 +1,136 @@
+spring:
+  application:
+    name: backend
+  config:
+    import: optional:file:.env[.properties]
+  http:
+    clients:
+      imperative:
+        factory: simple
+  profiles:
+    active: local
+  servlet:
+    multipart:
+      max-file-size: 10MB    # 서비스 계층에서 5MB 제한을 강제 — Spring 레벨은 여유 있게 설정
+      max-request-size: 10MB
+
+# actuator: 헬스체크만 노출 (스캐폴딩 동작 확인용)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# JWT (RS256) — 키는 gitignore된 keys/ 에서 로드, 배포는 환경변수 경로 주입
+jwt:
+  private-key-base64: ${JWT_PRIVATE_KEY_BASE64:}
+  public-key-base64: ${JWT_PUBLIC_KEY_BASE64:}
+  # classpath 로드(실행 디렉터리 무관). prod는 외부 파일 주입: file:/secure/path
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt_private.pem}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt_public.pem}
+  issuer: ${JWT_ISSUER:a707-api}
+  api-audience: ${JWT_API_AUDIENCE:a707-api}
+  yjs-audience: ${JWT_YJS_AUDIENCE:a707-yjs}
+  access-expiration-seconds: 1800      # 30분
+  refresh-expiration-seconds: 1209600  # 14일
+  collaboration-expiration-seconds: 300 # 5분
+
+yjs:
+  internal-base-url: ${YJS_INTERNAL_BASE_URL:http://localhost:3000}
+  internal-token: ${YJS_INTERNAL_TOKEN:local-yjs-internal-token}
+
+ai:
+  internal-base-url: ${AI_INTERNAL_BASE_URL:http://localhost:8000}
+  internal-token: ${AI_INTERNAL_TOKEN:local-ai-internal-token}
+  connect-timeout: ${AI_CONNECT_TIMEOUT:3s}
+  read-timeout: ${AI_READ_TIMEOUT:5s}
+  transcription:
+    max-attempts: ${AI_TRANSCRIPTION_MAX_ATTEMPTS:${AI_TRANSCRIPTION_START_MAX_ATTEMPTS:3}}
+    initial-retry-delay: ${AI_TRANSCRIPTION_INITIAL_RETRY_DELAY:${AI_TRANSCRIPTION_START_INITIAL_RETRY_DELAY:1s}}
+    max-retry-delay: ${AI_TRANSCRIPTION_MAX_RETRY_DELAY:${AI_TRANSCRIPTION_START_MAX_RETRY_DELAY:5s}}
+
+livekit:
+  url: ${LIVEKIT_URL:ws://localhost:7880}
+  api-key: ${LIVEKIT_API_KEY:devkey}
+  api-secret: ${LIVEKIT_API_SECRET:secret}
+  token-ttl: ${LIVEKIT_TOKEN_TTL:1h}
+
+# 파일 스토리지 — PROFILE_IMG=FILE(기본) 또는 S3로 구현체 전환
+storage:
+  provider: ${STORAGE_PROVIDER:${PROFILE_IMG:FILE}}
+
+profile-img: ${PROFILE_IMG:FILE}
+
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:/uploads}
+  base-url: ${FILE_BASE_URL:http://localhost:8080}
+
+# S3 (PROFILE_IMG=S3일 때 사용 — 배포 시 환경변수로 주입)
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    region: ${AWS_S3_REGION:ap-northeast-2}
+
+app:
+  cors:
+    # 로컬/LAN 개발 기본값. 배포 환경에서는 실제 프론트 Origin만 환경변수로 지정한다.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
+
+---
+# ===== local (개인 로컬 개발) =====
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/commonpjt}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate   # 스키마는 database-schema.md DDL로 생성, JPA는 검증만 (Flyway 미사용)
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  # 로컬에서 Redis 미실행 시 /actuator/health 가 DOWN 되지 않도록 헬스체크 제외 (F1 확인용)
+management:
+  health:
+    redis:
+      enabled: false
+
+---
+# ===== prod (배포, 공용 서버 DB) — 값은 환경변수/CI에서 주입 =====
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: "jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}"
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      data-source-properties:
+        sslmode: verify-full
+        sslrootcert: ${DB_SSL_ROOT_CERT:/app/certs/rds-ca-bundle.pem}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true

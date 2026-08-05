@@ -1,0 +1,102 @@
+package com.ssafy.backend.space.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.OffsetDateTime;
+
+/**
+ * teams 테이블 매핑 엔티티 (스페이스).
+ * 스페이스 생성(SPACE-01) 시 이름·설명·설정과 소유자(team_owner_id)를 채운다.
+ */
+@Entity
+@Table(name = "teams")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Team {
+
+    // DB가 IDENTITY로 채번(database-schema.md 참조) — 엔티티는 값을 지정하지 않는다.
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "team_id")
+    private Long id;
+
+    @Column(name = "team_name", nullable = false)
+    private String name;
+
+    @Column(name = "team_description")
+    private String description;
+
+    @Column(name = "team_owner_id", nullable = false)
+    private Long ownerId;
+
+    @Column(name = "team_profile_image")
+    private String profileImageUrl;
+
+    // NOT NULL — 사용자가 설정에서 지정할 수 있어 insert에 포함한다. 미지정 시 생성자에서 기본색으로 채운다.
+    @Column(name = "team_color", nullable = false)
+    private String color;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted;
+
+    @Column(name = "team_invite_link")
+    private String inviteLink;
+
+    private static final String DEFAULT_COLOR = "#000000";
+
+    @Builder
+    private Team(String name, String description, Long ownerId, String profileImageUrl, String color) {
+        this.name = name;
+        this.description = description;
+        this.ownerId = ownerId;
+        this.profileImageUrl = profileImageUrl;
+        // 설정 미지정 시 스키마 기본색(#000000)을 적용한다.
+        this.color = (color != null && !color.isBlank()) ? color : DEFAULT_COLOR;
+        this.isDeleted = false;
+    }
+
+    // SPACE-11: 스페이스 soft delete. is_deleted=true + 삭제 시각 기록(정책 SP-2).
+    public void softDelete(OffsetDateTime deletedAt) {
+        this.isDeleted = true;
+        this.deletedAt = deletedAt;
+    }
+
+    // SPACE-101: 소유권 위임 — team_owner_id를 새 소유자로 갱신.
+    public void changeOwner(Long newOwnerId) {
+        this.ownerId = newOwnerId;
+    }
+
+    // SPACE-08: 스페이스 정보 부분 수정 — null이 아닌 필드만 갱신한다(전달되지 않은 필드는 유지).
+    // name·color는 NOT NULL이라 공백 여부는 서비스에서 사전 검증한다.
+    public void updateInfo(String name, String description, String color, String profileImageUrl) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (color != null) {
+            this.color = color;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
+    }
+}

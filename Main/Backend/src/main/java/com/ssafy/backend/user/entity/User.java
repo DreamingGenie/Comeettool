@@ -1,0 +1,139 @@
+package com.ssafy.backend.user.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.OffsetDateTime;
+
+/**
+ * users 테이블 매핑 엔티티.
+ * 회원가입(AUTH-01)은 email·password만 채우고 나머지 프로필 항목은 null로 둔다 — 온보딩 단계에서 채워진다.
+ */
+@Entity
+@Table(name = "users")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class User {
+
+    // DB가 IDENTITY로 채번(database-schema.md 참조) — 엔티티는 값을 지정하지 않는다.
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
+    private Long id;
+
+    @Column(name = "password_hash", nullable = false)
+    private String password;
+
+    private String nickname;
+
+    @Column(name = "user_profile_image")
+    private String profileImageUrl;
+
+    @Column(nullable = false)
+    private String email;
+
+    private String phone;
+
+    @Column(name = "job_family")
+    private String jobFamily;
+
+    @Column(name = "job_role")
+    private String jobRole;
+
+    @Column(name = "user_description")
+    private String description;
+
+    private String sex;
+
+    private Integer age;
+
+    @Column(name = "user_color", insertable = false)
+    private String displayColor;
+
+    // SPACE-04: 사용자별 스페이스 표시 순서(spaceId CSV, 예 "5,2,9"). null이면 커스텀 순서 없음 → 최신순.
+    @Column(name = "space_order")
+    private String spaceOrder;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted;
+
+    // 가입 시점엔 email·password·nickname(이메일 로컬파트 기본값)만 필요 — 나머지 필드는 온보딩(AUTH-06 등)에서 채운다.
+    @Builder
+    private User(String email, String password, String nickname) {
+        this.email = email;
+        this.password = password;
+        this.nickname = nickname;
+        this.isDeleted = false;
+    }
+
+    // 별도 컬럼 없이 sex·age 존재 여부로 판단 (온보딩 3단계에서 두 값을 함께 입력받는 화면 기준).
+    public boolean isOnboarded() {
+        return sex != null && age != null;
+    }
+
+    // AUTH-06 PATCH 부분 수정 — 인자가 null이면 해당 필드는 건드리지 않는다(요청에 안 보낸 필드로 간주).
+    public void updateProfile(String nickname, String phone, String sex, Integer age,
+                               String jobFamily, String jobRole, String description, String displayColor) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (phone != null) {
+            this.phone = phone;
+        }
+        if (sex != null) {
+            this.sex = sex;
+        }
+        if (age != null) {
+            this.age = age;
+        }
+        if (jobFamily != null) {
+            this.jobFamily = jobFamily;
+        }
+        if (jobRole != null) {
+            this.jobRole = jobRole;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (displayColor != null) {
+            this.displayColor = displayColor;
+        }
+    }
+
+    // AUTH-07 비밀번호 변경 — 영속 엔티티 필드 변경 → 더티 체킹으로 자동 UPDATE, save() 불필요.
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    // SPACE-04 스페이스 정렬 저장 — spaceId CSV(빈 값이면 null로 정규화해 최신순 기본으로 되돌린다).
+    public void updateSpaceOrder(String spaceOrder) {
+        this.spaceOrder = (spaceOrder == null || spaceOrder.isBlank()) ? null : spaceOrder;
+    }
+
+    // AUTH-11 프로필 사진 변경 — 더티 체킹으로 자동 UPDATE.
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    // AUTH-08 회원 탈퇴 — soft delete. 실제 row는 삭제하지 않는다.
+    public void withdraw() {
+        this.isDeleted = true;
+        this.deletedAt = OffsetDateTime.now();
+    }
+}
