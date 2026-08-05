@@ -1,15 +1,395 @@
+# Place this file at the GitLab repository root. Application sources are under Main/.
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
 stages:
+  - preflight
+  - test
+  - build
+  - security
   - oidc-verify
+  - package
+  - release
+
+default:
+  tags:
+    - a707-docker
+  interruptible: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
 
 variables:
   AWS_DEFAULT_REGION: "ap-northeast-2"
   AWS_REGION: "ap-northeast-2"
   AWS_STS_REGIONAL_ENDPOINTS: "regional"
 
+.backend-validation-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+
+backend:verify:
+  extends: .backend-validation-rules
+  stage: test
+  image:
+    name: eclipse-temurin:21-jdk-jammy
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: "comeettool_ci"
+    POSTGRES_USER: "postgres"
+    POSTGRES_HOST_AUTH_METHOD: "trust"
+    CI_DB_HOST: "postgres"
+    CI_DB_PORT: "5432"
+    CI_DB_NAME: "comeettool_ci"
+    CI_DB_USER: "postgres"
+    CI_MIGRATION_DIR: "$CI_PROJECT_DIR/Main/Backend/src/main/resources/db/migration"
+    DB_URL: "jdbc:postgresql://postgres:5432/comeettool_ci"
+    DB_USERNAME: "postgres"
+    DB_PASSWORD: "ci-only"
+    SPRING_PROFILES_ACTIVE: "local"
+    STORAGE_PROVIDER: "FILE"
+    PROFILE_IMG: "FILE"
+    FILE_UPLOAD_DIR: "$CI_PROJECT_DIR/.ci-uploads"
+    CORS_ALLOWED_ORIGIN_PATTERNS: "http://localhost:[*]"
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-ci"
+  cache:
+    key:
+      files:
+        - Main/Backend/gradle/wrapper/gradle-wrapper.properties
+        - Main/Backend/build.gradle
+    paths:
+      - .gradle-ci/caches/
+      - .gradle-ci/wrapper/
+    policy: pull-push
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update
+    - apt-get install --yes --no-install-recommends openssl postgresql-client
+    - rm -rf /var/lib/apt/lists/*
+    - sh .gitlab/ci/scripts/apply-migrations.sh
+    - mkdir -p Main/Backend/src/test/resources/keys
+    - openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out Main/Backend/src/test/resources/keys/jwt_private.pem 2>/dev/null
+    - openssl pkey -in Main/Backend/src/test/resources/keys/jwt_private.pem -pubout -out Main/Backend/src/test/resources/keys/jwt_public.pem 2>/dev/null
+  script:
+    - cd Main/Backend
+    - chmod +x gradlew
+    - ./gradlew --no-daemon clean test bootJar
+  after_script:
+    - rm -rf Main/Backend/src/test/resources/keys .ci-uploads
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit:
+        - Main/Backend/build/test-results/test/*.xml
+    paths:
+      - Main/Backend/build/reports/tests/test/
+      - Main/Backend/build/libs/*.jar
+
+migration:verify:
+  extends: .backend-validation-rules
+  stage: test
+  image:
+    name: flyway/flyway:12.11.0
+    entrypoint: [""]
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: "comeettool_ci"
+    POSTGRES_USER: "postgres"
+    POSTGRES_HOST_AUTH_METHOD: "trust"
+    FLYWAY_URL: "jdbc:postgresql://postgres:5432/comeettool_ci"
+    FLYWAY_USER: "postgres"
+    FLYWAY_PASSWORD: "ci-only"
+    FLYWAY_LOCATIONS: "filesystem:$CI_PROJECT_DIR/Main/Backend/src/main/resources/db/migration"
+    FLYWAY_DEFAULT_SCHEMA: "public"
+    FLYWAY_SCHEMAS: "public"
+    FLYWAY_CREATE_SCHEMAS: "false"
+    FLYWAY_CLEAN_DISABLED: "true"
+    FLYWAY_BASELINE_ON_MIGRATE: "false"
+    FLYWAY_VALIDATE_ON_MIGRATE: "true"
+    FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+    FLYWAY_OUT_OF_ORDER: "false"
+    FLYWAY_CONNECT_RETRIES: "60"
+    FLYWAY_PLACEHOLDERS_BACKENDRUNTIMEROLE: "postgres"
+    FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE: "postgres"
+  script:
+    - flyway info
+    - flyway migrate
+    - flyway validate
+    - flyway migrate
+    - flyway info
+
+.frontend-validation-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Frontend/**/*
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Frontend/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+
+frontend:verify:
+  extends: .frontend-validation-rules
+  stage: build
+  image:
+    name: node:22-alpine
+  variables:
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm-cache/frontend"
+    VITE_USE_MOCK_API: "false"
+    VITE_USE_MOCK_AUTH_API: "false"
+    VITE_USE_MOCK_USER_API: "false"
+    VITE_USE_MOCK_BOARD_API: "false"
+    VITE_USE_MOCK_SPACE_API: "false"
+    VITE_USE_MOCK_DOCUMENT_API: "false"
+    VITE_USE_MOCK_MEETING_API: "false"
+    VITE_USE_MOCK_SCHEDULE_API: "false"
+    VITE_USE_MOCK_NOTIFICATION_API: "false"
+    VITE_USE_MOCK_PASSWORD_RESET_API: "false"
+    VITE_USE_MOCK_USER_WITHDRAW_API: "false"
+    VITE_USE_MOCK_USER_SEARCH_API: "false"
+    VITE_API_BASE_URL: "https://api.invalid"
+    VITE_YJS_WEBSOCKET_URL: "wss://doc.invalid/collaboration"
+  cache:
+    key:
+      files:
+        - Main/Frontend/package-lock.json
+    paths:
+      - .npm-cache/frontend/
+    policy: pull-push
+  before_script:
+    - cd Main/Frontend
+    - npm ci --prefer-offline --no-audit
+  script:
+    - npm run format:check
+    - npm run build -- --outDir dist
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - Main/Frontend/dist/
+
+.yjs-validation-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Backend/src/main/resources/db/migration/**/*
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Backend/src/main/resources/db/migration/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+
+yjs:verify:
+  extends: .yjs-validation-rules
+  stage: test
+  image:
+    name: node:22-alpine
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: "comeettool_ci"
+    POSTGRES_USER: "postgres"
+    POSTGRES_HOST_AUTH_METHOD: "trust"
+    CI_DB_HOST: "postgres"
+    CI_DB_PORT: "5432"
+    CI_DB_NAME: "comeettool_ci"
+    CI_DB_USER: "postgres"
+    CI_MIGRATION_DIR: "$CI_PROJECT_DIR/Main/Backend/src/main/resources/db/migration"
+    TEST_DATABASE_URL: "postgresql://postgres@postgres:5432/comeettool_ci"
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm-cache/yjs"
+  cache:
+    key:
+      files:
+        - Main/Backend-Yjs/package-lock.json
+    paths:
+      - .npm-cache/yjs/
+    policy: pull-push
+  before_script:
+    - apk add --no-cache coreutils postgresql-client
+    - sh .gitlab/ci/scripts/apply-migrations.sh
+    - touch Main/Backend-Yjs/.env
+    - cd Main/Backend-Yjs
+    - npm ci --prefer-offline --no-audit
+  script:
+    - node --check CrdtServer.js
+    - node --check collaboration-auth.js
+    - npm run test:auth
+    - npm run test:e2e
+  after_script:
+    - rm -f Main/Backend-Yjs/.env
+  timeout: 15 minutes
+
+.ai-validation-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/AI/**/*
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/AI/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/AI/**/*
+    - when: never
+
+ai:verify:
+  extends: .ai-validation-rules
+  stage: test
+  image:
+    name: python:3.11-slim
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  cache:
+    key:
+      files:
+        - Main/AI/requirements.txt
+    paths:
+      - .pip-cache/
+    policy: pull-push
+  before_script:
+    - python -m venv .ci-ai-venv
+    - . .ci-ai-venv/bin/activate
+    - python -m pip install --requirement Main/AI/requirements.txt
+  script:
+    - python -m pip check
+    - python -m compileall -q Main/AI
+    - mkdir -p "$CI_PROJECT_DIR/.ci-security/ai"
+    - python -m pip freeze > "$CI_PROJECT_DIR/.ci-security/ai/requirements.txt"
+  after_script:
+    - rm -rf .ci-ai-venv
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - .ci-security/ai/requirements.txt
+  timeout: 30 minutes
+
+.security-pipeline-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+repository:secret-scan:
+  extends: .security-pipeline-rules
+  stage: preflight
+  image:
+    name: ghcr.io/gitleaks/gitleaks:v8.28.0
+    entrypoint: [""]
+  script:
+    - mkdir -p reports/security
+    - >-
+      gitleaks dir
+      --redact
+      --no-banner
+      --exit-code 1
+      --report-format json
+      --report-path reports/security/gitleaks.json
+      "$CI_PROJECT_DIR"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - reports/security/gitleaks.json
+
+dependencies:critical-scan:
+  extends: .security-pipeline-rules
+  stage: security
+  image:
+    name: aquasec/trivy:0.69.3
+    entrypoint: [""]
+  variables:
+    TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivy-cache"
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_DISABLE_TELEMETRY: "true"
+  cache:
+    key: "trivy-db"
+    paths:
+      - .trivy-cache/
+    policy: pull-push
+  script:
+    - mkdir -p reports/security
+    - >-
+      trivy fs
+      --scanners vuln
+      --include-dev-deps
+      --format json
+      --output reports/security/trivy-vulnerabilities.json
+      "$CI_PROJECT_DIR"
+    - >-
+      trivy fs
+      --scanners vuln
+      --include-dev-deps
+      --severity CRITICAL
+      --exit-code 1
+      "$CI_PROJECT_DIR"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - reports/security/trivy-vulnerabilities.json
+
 oidc:verify-aws:
   stage: oidc-verify
-  tags:
-    - a707-docker
   image:
     name: amazon/aws-cli:2.27.49
     entrypoint: [""]
@@ -20,39 +400,115 @@ oidc:verify-aws:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: never
   script:
-    - |
-      set -eu
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+    - echo "GitLab OIDC to AWS STS authentication succeeded."
 
-      if [ -z "${AWS_OIDC_ROLE_ARN:-}" ]; then
-        echo "AWS_OIDC_ROLE_ARN is not configured."
-        exit 1
-      fi
+production:package-images:
+  stage: package
+  image:
+    name: quay.io/buildah/stable:v1.42.2
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  variables:
+    STORAGE_DRIVER: "vfs"
+    BUILDAH_FORMAT: "docker"
+    BUILDAH_ISOLATION: "chroot"
+    AWS_OIDC_DURATION_SECONDS: "3600"
+  interruptible: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+      when: manual
+      allow_failure: false
+    - when: never
+  before_script:
+    - dnf install --assumeyes --quiet awscli2 jq >/dev/null
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+  script:
+    - sh .gitlab/ci/scripts/package-container-images.sh
+  timeout: 60 minutes
 
-      if [ -z "${GITLAB_OIDC_TOKEN:-}" ]; then
-        echo "GitLab OIDC ID token was not issued."
-        exit 1
-      fi
+production:package-frontend:
+  stage: package
+  image:
+    name: node:22-alpine
+  variables:
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm-cache/frontend-production"
+    VITE_USE_MOCK_API: "false"
+    VITE_USE_MOCK_AUTH_API: "false"
+    VITE_USE_MOCK_USER_API: "false"
+    VITE_USE_MOCK_BOARD_API: "false"
+    VITE_USE_MOCK_SPACE_API: "false"
+    VITE_USE_MOCK_DOCUMENT_API: "false"
+    VITE_USE_MOCK_MEETING_API: "false"
+    VITE_USE_MOCK_SCHEDULE_API: "false"
+    VITE_USE_MOCK_NOTIFICATION_API: "false"
+    VITE_USE_MOCK_PASSWORD_RESET_API: "false"
+    VITE_USE_MOCK_USER_WITHDRAW_API: "false"
+    VITE_USE_MOCK_USER_SEARCH_API: "false"
+    VITE_API_BASE_URL: "$DEPLOY_API_BASE_URL"
+    VITE_YJS_WEBSOCKET_URL: "$DEPLOY_YJS_WEBSOCKET_URL"
+  interruptible: false
+  needs:
+    - job: production:package-images
+      artifacts: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+  before_script:
+    - sh .gitlab/ci/scripts/validate-production-inputs.sh frontend
+    - cd Main/Frontend
+    - npm ci --prefer-offline --no-audit
+  script:
+    - npm run build -- --outDir dist
+  artifacts:
+    name: "production-frontend-${CI_COMMIT_SHORT_SHA}"
+    expire_in: 1 day
+    paths:
+      - Main/Frontend/dist/
 
-      aws_sts_output="$(
-        aws sts assume-role-with-web-identity \
-          --role-arn "${AWS_OIDC_ROLE_ARN}" \
-          --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
-          --web-identity-token "${GITLAB_OIDC_TOKEN}" \
-          --duration-seconds 900 \
-          --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
-          --output text
-      )"
-
-      set -- ${aws_sts_output}
-      if [ "$#" -ne 3 ]; then
-        echo "AWS STS did not return the expected temporary credentials."
-        exit 1
-      fi
-
-      export AWS_ACCESS_KEY_ID="$1"
-      export AWS_SECRET_ACCESS_KEY="$2"
-      export AWS_SESSION_TOKEN="$3"
-      unset aws_sts_output GITLAB_OIDC_TOKEN
-
-      aws sts get-caller-identity >/dev/null
-      echo "GitLab OIDC to AWS STS authentication succeeded."
+production:release:
+  stage: release
+  image:
+    name: amazon/aws-cli:2.27.49
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  variables:
+    AWS_OIDC_DURATION_SECONDS: "3600"
+  resource_group: production
+  interruptible: false
+  needs:
+    - job: production:package-images
+      artifacts: false
+    - job: production:package-frontend
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - Main/Backend/**/*
+        - Main/Backend-Yjs/**/*
+        - Main/Frontend/**/*
+    - when: never
+  before_script:
+    - yum install --assumeyes --quiet jq >/dev/null
+    - . .gitlab/ci/scripts/aws-oidc-login.sh
+  script:
+    - sh .gitlab/ci/scripts/production-release.sh
+  timeout: 60 minutes

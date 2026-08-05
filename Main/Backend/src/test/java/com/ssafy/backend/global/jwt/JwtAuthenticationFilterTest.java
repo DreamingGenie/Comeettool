@@ -1,5 +1,6 @@
 package com.ssafy.backend.global.jwt;
 
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.document.authorization.DocumentPermissionReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,9 @@ class JwtAuthenticationFilterTest {
 
     @MockitoBean
     private DocumentPermissionReader documentPermissionReader;
+
+    @MockitoBean
+    private RefreshTokenService refreshTokenService;
 
     private MockMvc mockMvc;
 

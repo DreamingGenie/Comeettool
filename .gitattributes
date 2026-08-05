@@ -1,0 +1,2 @@
+.gitlab-ci.yml text eol=lf
+.gitlab/ci/scripts/**/*.sh text eol=lf
