@@ -265,7 +265,10 @@ register_task_revision() {
           inferenceAccelerators: $source.taskDefinition.inferenceAccelerators,
           ephemeralStorage: $source.taskDefinition.ephemeralStorage,
           runtimePlatform: $source.taskDefinition.runtimePlatform,
-          tags: ($source.tags // [])
+          tags: (
+            ($source.tags // [])
+            | if length == 0 then null else . end
+          )
         }
       | with_entries(select(.value != null))
     ' "$register_source_file" >"$register_input_file" 2>/dev/null \
