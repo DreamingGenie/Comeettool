@@ -45,6 +45,18 @@
               :ref="element => mountParticipantMedia(participant.mediaKey, element)"
               class="participant-media"
             ></div>
+            <div
+              v-if="participant.cameraOff && !participant.isScreenShare"
+              class="participant-avatar"
+            >
+              <img
+                v-if="avatarImageUrl(participant)"
+                :src="avatarImageUrl(participant)"
+                :alt="`${participant.displayName} 프로필 이미지`"
+                @error="markAvatarImageFailed(participant.profileImageUrl)"
+              />
+              <i v-else>{{ (participant.avatarText || '?').slice(0, 1) }}</i>
+            </div>
             <button
               class="meeting-pin"
               :class="{ 'is-pinned': pinnedParticipantId === participant.id }"
@@ -58,11 +70,23 @@
                 v-if="!participant.isScreenShare"
                 type="button"
                 :aria-label="`${participant.displayName} 마이크 ${participant.muted ? '켜기' : '음소거'}`"
-                @click="toggleParticipantMic(participant)"
+                @click="toggleParticipantDevice(participant, 'microphone')"
               >
-                {{ participant.muted ? '🔇' : '🎙' }}
+                <i class="material-symbols-rounded" aria-hidden="true">
+                  {{ participant.muted ? 'mic_off' : 'mic' }}
+                </i>
               </button>
               <i v-else class="screen-share-mark">↗</i>
+              <button
+                v-if="!participant.isScreenShare"
+                type="button"
+                :aria-label="`${participant.displayName} 카메라 ${participant.cameraOff ? '켜기' : '끄기'}`"
+                @click="toggleParticipantDevice(participant, 'camera')"
+              >
+                <i class="material-symbols-rounded" aria-hidden="true">
+                  {{ participant.cameraOff ? 'videocam_off' : 'videocam' }}
+                </i>
+              </button>
               <span>{{ participant.displayName }}</span>
             </div>
           </article>
@@ -206,6 +230,33 @@
             <article v-for="participant in liveParticipants" :key="participant.id" :class="{ 'is-host': participant.isHost }">
               <i>{{ participant.avatarText.slice(0, 1) }}</i>
               <span><b>{{ participant.displayName }}</b><small>{{ participant.isHost ? '호스트' : participant.status }}</small></span>
+              <span
+                class="member-device-state"
+                :aria-label="`마이크 ${participant.muted ? '꺼짐' : '켜짐'}, 카메라 ${participant.cameraOff ? '꺼짐' : '켜짐'}`"
+              >
+                <button
+                  class="device-mark"
+                  :class="{ 'is-off': participant.muted }"
+                  type="button"
+                  :title="`마이크 ${participant.muted ? '꺼짐' : '켜짐'}`"
+                  @click="toggleParticipantDevice(participant, 'microphone')"
+                >
+                  <i class="material-symbols-rounded" aria-hidden="true">
+                    {{ participant.muted ? 'mic_off' : 'mic' }}
+                  </i>
+                </button>
+                <button
+                  class="device-mark"
+                  :class="{ 'is-off': participant.cameraOff }"
+                  type="button"
+                  :title="`카메라 ${participant.cameraOff ? '꺼짐' : '켜짐'}`"
+                  @click="toggleParticipantDevice(participant, 'camera')"
+                >
+                  <i class="material-symbols-rounded" aria-hidden="true">
+                    {{ participant.cameraOff ? 'videocam_off' : 'videocam' }}
+                  </i>
+                </button>
+              </span>
               <div v-if="isHost && !participant.isHost && participant.participantId" class="side-participant-actions">
                 <button type="button" @click="pendingHostTransfer = participant">위임</button>
                 <button type="button" class="danger" @click="kickMeetingParticipant(participant)">강퇴</button>
@@ -412,6 +463,8 @@ const {
   participantIdentities,
   screenShareIdentities,
   activeSpeakerIdentities,
+  micMutedIdentities,
+  cameraOffIdentities,
   deviceState,
   availableDevices,
   selectedDeviceIds,
@@ -420,6 +473,7 @@ const {
   selectDevice,
   applySelectedDevices,
   mountParticipantMedia,
+  sendChatMessage,
   setDeviceEnabled,
   requestServerExit,
   disconnectAfterServerExit
@@ -430,6 +484,10 @@ const {
     boardStore.clearMeetingRoom()
     const teamId = boardState.activeMeeting.teamId || boardState.currentTeamId
     router.replace(teamId ? `/teams/${teamId}/schedule` : '/home')
+  },
+  onChatMessage: payload => {
+    boardStore.appendChatMessage(toChatMessageViewModel(payload, false))
+    scrollChatToBottom()
   }
 })
 const {
@@ -447,10 +505,40 @@ const {
   }
 })
 let vadStartTimer = 0
+
+function createChatMessageId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ||
+    `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )
+}
+
+function toChatMessageViewModel(payload, mine) {
+  const sentAt = payload.sentAt ? new Date(payload.sentAt) : new Date()
+  const isValidTime = !Number.isNaN(sentAt.getTime())
+  return {
+    id: createChatMessageId(),
+    sender: payload.sender || '참가자',
+    // 보낸 사람 기기의 시각이라 기기 간 시계 오차는 그대로 반영된다.
+    time: (isValidTime ? sentAt : new Date()).toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    }),
+    body: payload.body,
+    mine
+  }
+}
+
+async function scrollChatToBottom() {
+  await nextTick()
+  if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
+}
 const liveParticipants = computed(() => {
   const participants = boardState.meetingRoom.participants
   if (!participantIdentities.value.length) {
-    return participants.filter(participant => participant.isInMeeting)
+    return participants
+      .filter(participant => participant.isInMeeting)
+      .map(participant => ({ ...participant, muted: true, cameraOff: true }))
   }
 
   const byIdentity = new Map(
@@ -466,13 +554,29 @@ const liveParticipants = computed(() => {
       avatarText: identity === liveKitRoom.value?.localParticipant?.identity
         ? (userState.profile?.nickname || '나').slice(0, 2)
         : '?',
-      muted: false,
       isHost: false,
-      status: '회의 참여 중'
+      status: '회의 참여 중',
+      role: '참여자',
+      participantRole: ''
     }
-    return { ...participant, mediaKey: identity }
+    return {
+      ...participant,
+      muted: micMutedIdentities.value.includes(identity),
+      cameraOff: cameraOffIdentities.value.includes(identity),
+      mediaKey: identity
+    }
   })
 })
+const failedAvatarImageUrls = reactive(new Set())
+const avatarImageUrl = participant => {
+  const url = participant.profileImageUrl
+  if (!url || failedAvatarImageUrls.has(url)) return ''
+  return url
+}
+const markAvatarImageFailed = url => {
+  if (url) failedAvatarImageUrls.add(url)
+}
+
 const participantsPerPage = 4
 const currentVideoPage = ref(0)
 const liveParticipantCount = computed(() => liveParticipants.value.length)
@@ -705,19 +809,25 @@ function togglePin(participant) {
   notify(willPin ? `${participant.displayName} 화면을 고정했습니다.` : '화면 고정을 해제했습니다.')
 }
 
-async function toggleParticipantMic(participant) {
+const deviceLabels = { microphone: '마이크', camera: '카메라' }
+const controlIdByDevice = { microphone: 'mic', camera: 'camera' }
+
+async function toggleParticipantDevice(participant, device) {
+  const label = deviceLabels[device] || '장치'
   if (participant.livekitIdentity !== liveKitRoom.value?.localParticipant?.identity) {
-    notify('다른 참가자의 마이크는 프론트에서 직접 제어할 수 없습니다.')
+    notify(`다른 참가자의 ${label}는 프론트에서 직접 제어할 수 없습니다.`)
     return
   }
   try {
-    const enabled = !deviceState.microphone
-    await setDeviceEnabled('microphone', enabled)
-    if (enabled) activeControls.add('mic')
-    else activeControls.delete('mic')
-    notify(enabled ? '마이크를 켰습니다.' : '마이크를 음소거했습니다.')
+    const enabled = !deviceState[device]
+    await setDeviceEnabled(device, enabled)
+    // 하단 컨트롤 바와 상태를 어긋나지 않게 같이 갱신한다.
+    const controlId = controlIdByDevice[device]
+    if (enabled) activeControls.add(controlId)
+    else activeControls.delete(controlId)
+    notify(`${label}를 ${enabled ? '켰습니다.' : '껐습니다.'}`)
   } catch (error) {
-    notify(error?.message || '마이크 상태를 변경하지 못했습니다.')
+    notify(error?.message || `${label} 상태를 변경하지 못했습니다.`)
   }
 }
 
@@ -937,22 +1047,18 @@ async function send() {
   const body = draft.value.trim()
   if (!body) return
   try {
-    const payload = {
-      sender: userState.profile?.nickname || '나',
-      body
-    }
     if (activeTab.value === 'direct' && activeContact.value) {
       await boardStore.sendDirectMessage(
         meetingId.value,
         activeContact.value.id,
-        payload
+        { sender: userState.profile?.nickname || '나', body }
       )
     } else {
-      await boardStore.sendMessage(meetingId.value, payload)
+      const sent = await sendChatMessage(body)
+      boardStore.appendChatMessage(toChatMessageViewModel(sent, true))
     }
     draft.value = ''
-    await nextTick()
-    if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
+    await scrollChatToBottom()
   } catch (error) {
     notify(error?.message || '메시지를 보내지 못했습니다.')
   }
@@ -1216,13 +1322,85 @@ async function send() {
   object-fit: contain;
 }
 
+/* 타일 배지 안의 Material Symbols 글리프. 배지 버튼이 17.6px라 그에 맞춘다. */
+.participant-badge button .material-symbols-rounded {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* 내 카메라 자기 화면만 거울 모드. 원격 영상·화면공유에는 붙지 않는다. */
+.participant-media :deep(.livekit-video.is-mirrored) {
+  transform: scaleX(-1);
+}
+
+/* 카메라 꺼짐 대체 화면. */
+.participant-avatar {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+
+.participant-avatar img,
+.participant-avatar i {
+  width: 33%;
+  min-width: 48px;
+  max-width: 96px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.participant-avatar img {
+  object-fit: cover;
+}
+
+.participant-avatar i {
+  display: grid;
+  place-items: center;
+  background: #1b2436;
+  color: rgba(255, 255, 255, 0.92);
+  font-style: normal;
+  font-weight: 600;
+  font-size: clamp(18px, 3vw, 34px);
+}
+
+/* 마이크·카메라 상태 표시 공용.
+   꺼짐 표시는 Material Symbols의 mic_off / videocam_off 글리프가 담당하므로
+   여기서는 색으로만 보강한다(사선을 겹치면 이중 부정이 된다). */
+.device-mark {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d9dade;
+  cursor: pointer;
+}
+
+.device-mark .material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.device-mark.is-off {
+  color: #e39a9a;
+}
+
+.member-device-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .participant-media :deep(.livekit-audio) {
   display: none;
 }
 
 .meeting-pin,
 .participant-badge {
-  z-index: 1;
+  z-index: 3;
 }
 
 .screen-share-mark {
@@ -1653,7 +1831,8 @@ async function send() {
 
 .side-participant-list > article {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  /* 아바타 / 이름 / 마이크·카메라 상태 / 위임·강퇴 */
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   padding: 10px;

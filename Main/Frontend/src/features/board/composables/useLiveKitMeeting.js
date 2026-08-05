@@ -31,6 +31,8 @@ export function useLiveKitMeeting(options = {}) {
   const participantIdentities = ref([])
   const screenShareIdentities = ref([])
   const activeSpeakerIdentities = ref([])
+  const micMutedIdentities = ref([])
+  const cameraOffIdentities = ref([])
   const deviceState = reactive({
     microphone: false,
     camera: false,
@@ -119,16 +121,46 @@ export function useLiveKitMeeting(options = {}) {
     }
   }
 
+  // 전체 채팅은 LiveKit 데이터 채널로 주고받는다. 토큰에 CanPublishData 권한이 이미 있어
+  // 서버 작업이 필요 없고, TURN/TLS 443 릴레이 구간에서도 그대로 전달된다.
+  const CHAT_TOPIC = 'chat'
+  const chatEncoder = new TextEncoder()
+  const chatDecoder = new TextDecoder()
+
+  const isSourceOff = (participant, source) => {
+    const publication = participant?.getTrackPublication(source)
+    return !publication || publication.isMuted
+  }
+
+  const collectOffIdentities = source => {
+    const currentRoom = room.value
+    if (!currentRoom) return []
+    return [
+      currentRoom.localParticipant,
+      ...currentRoom.remoteParticipants.values()
+    ]
+      .filter(participant => participant && isSourceOff(participant, source))
+      .map(participant => participant.identity)
+      .filter(Boolean)
+  }
+
+  const syncTrackStates = () => {
+    micMutedIdentities.value = collectOffIdentities(Track.Source.Microphone)
+    cameraOffIdentities.value = collectOffIdentities(Track.Source.Camera)
+  }
+
   const syncParticipants = () => {
     const currentRoom = room.value
     if (!currentRoom) {
       participantIdentities.value = []
+      syncTrackStates()
       return
     }
     participantIdentities.value = [
       currentRoom.localParticipant?.identity,
       ...currentRoom.remoteParticipants.keys()
     ].filter(Boolean)
+    syncTrackStates()
   }
 
   const appendMedia = mediaKey => {
@@ -180,6 +212,9 @@ export function useLiveKitMeeting(options = {}) {
     const isLocal = participant === room.value?.localParticipant
     if (!isAudio) {
       element.classList.add('livekit-video')
+      if (isLocal && source === Track.Source.Camera) {
+        element.classList.add('is-mirrored')
+      }
     } else {
       element.classList.add('livekit-audio')
       if (!isLocal) document.body.appendChild(element)
@@ -256,13 +291,35 @@ export function useLiveKitMeeting(options = {}) {
         attachTrack(track, publication, participant)
       })
       .on(RoomEvent.TrackUnsubscribed, track => detachTrack(track))
+      .on(RoomEvent.TrackMuted, syncTrackStates)
+      .on(RoomEvent.TrackUnmuted, syncTrackStates)
+      .on(RoomEvent.TrackPublished, syncTrackStates)
+      .on(RoomEvent.TrackUnpublished, syncTrackStates)
       .on(RoomEvent.LocalTrackPublished, (publication, participant) => {
         syncLocalDeviceState(publication, true)
         attachTrack(publication.track, publication, participant)
+        syncTrackStates()
       })
       .on(RoomEvent.LocalTrackUnpublished, publication => {
         syncLocalDeviceState(publication, false)
         detachTrack(publication.track)
+        syncTrackStates()
+      })
+      .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+        if (topic !== CHAT_TOPIC) return
+        let decoded
+        try {
+          decoded = JSON.parse(chatDecoder.decode(payload))
+        } catch {
+          return
+        }
+        if (typeof decoded?.body !== 'string' || !decoded.body) return
+        options.onChatMessage?.({
+          body: decoded.body,
+          sentAt: decoded.sentAt,
+          sender: participant?.name || participant?.identity || '참가자',
+          senderIdentity: participant?.identity || ''
+        })
       })
       .on(RoomEvent.ActiveSpeakersChanged, speakers => {
         activeSpeakerIdentities.value = speakers.map(speaker => speaker.identity)
@@ -274,6 +331,8 @@ export function useLiveKitMeeting(options = {}) {
         deviceState.screen = false
         syncParticipants()
         clearMedia()
+        micMutedIdentities.value = []
+        cameraOffIdentities.value = []
         options.onStatusChange?.('disconnected')
         if (!disposed) {
           options.onDisconnected?.({
@@ -326,6 +385,23 @@ export function useLiveKitMeeting(options = {}) {
     return enabled
   }
 
+  const sendChatMessage = async body => {
+    const localParticipant = room.value?.localParticipant
+    if (!localParticipant) throw new Error('회의 연결이 완료되지 않았습니다.')
+
+    const sentAt = new Date().toISOString()
+    await localParticipant.publishData(
+      chatEncoder.encode(JSON.stringify({ v: 1, body, sentAt })),
+      { reliable: true, topic: CHAT_TOPIC }
+    )
+    return {
+      body,
+      sentAt,
+      sender: localParticipant.name || '나',
+      senderIdentity: localParticipant.identity || ''
+    }
+  }
+
   const requestServerExit = action => {
     requestedExit = action
   }
@@ -351,6 +427,8 @@ export function useLiveKitMeeting(options = {}) {
     participantIdentities,
     screenShareIdentities,
     activeSpeakerIdentities,
+    micMutedIdentities,
+    cameraOffIdentities,
     deviceState,
     availableDevices,
     selectedDeviceIds,
@@ -359,6 +437,7 @@ export function useLiveKitMeeting(options = {}) {
     selectDevice,
     applySelectedDevices,
     mountParticipantMedia,
+    sendChatMessage,
     setDeviceEnabled,
     requestServerExit,
     disconnectAfterServerExit

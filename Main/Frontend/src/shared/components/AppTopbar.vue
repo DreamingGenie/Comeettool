@@ -6,6 +6,7 @@
       <AppNotificationBell
         v-if="notification"
         :invitations="notification.state.invitations"
+        :meeting-invites="notification.state.meetingInvites"
         :loading="notification.state.loading"
         :accepting-id="notification.state.acceptingId"
         :rejecting-id="notification.state.rejectingId"
@@ -13,6 +14,7 @@
         @refresh="loadNotifications"
         @accept="acceptInvitation"
         @reject="rejectInvitation"
+        @join="joinMeeting"
       />
       <button class="user-pill" type="button" @click="$router.push('/profile')">
         <img
@@ -75,6 +77,14 @@ async function acceptInvitation(invitationId) {
 async function rejectInvitation(invitationId) {
   try {
     await notification?.reject(invitationId)
+  } catch {
+    // 오류 상태는 알림 패널에서 표시한다.
+  }
+}
+
+async function joinMeeting(meetingId) {
+  try {
+    await notification?.join(meetingId)
   } catch {
     // 오류 상태는 알림 패널에서 표시한다.
   }

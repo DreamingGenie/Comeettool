@@ -170,12 +170,9 @@ export const boardApi = {
       }),
       data
     ),
-  getMessages: (code) => request(`/api/rooms/${code}/messages`),
-  sendMessage: (code, body) =>
-    request(`/api/rooms/${code}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
+  // 전체 채팅(getMessages/sendMessage)은 제거했다. 존재하지 않는 /api/rooms/... 경로를
+  // 가리켜 실 API 모드에서 조용히 404가 났다. 지금은 LiveKit 데이터 채널로 주고받고,
+  // 서버 저장은 chats 테이블·CHAT-02 엔드포인트가 생긴 뒤 여기에 다시 추가한다.
   sendDirectMessage: (code, userId, body) =>
     request(`/api/rooms/${code}/direct/${userId}/messages`, {
       method: 'POST',

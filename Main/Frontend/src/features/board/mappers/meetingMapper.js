@@ -102,8 +102,7 @@ export const toMeetingParticipantViewModel = participant => {
     participantRole: participant?.participantRole || '',
     status: isInMeeting ? '회의 참여 중' : '연결 안 됨',
     isHost,
-    isInMeeting,
-    muted: false
+    isInMeeting
   }
 }
 

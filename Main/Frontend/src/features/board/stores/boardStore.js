@@ -447,8 +447,7 @@ export const boardStore = {
     await withLoading(() => dataSource.board.deleteTeamRole(teamId, teamRoleId))
     await Promise.all([boardStore.loadTeamRoles(teamId), boardStore.loadMembers(teamId)])
   },
-  async sendMessage(meetingId, data) {
-    const message = await dataSource.board.sendMessage(meetingId, data)
+  appendChatMessage(message) {
     state.meetingRoom.chatMessages.push(message)
     return message
   },
