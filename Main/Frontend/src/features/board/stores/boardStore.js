@@ -319,6 +319,9 @@ export const boardStore = {
     state.activeMeeting = meeting
     return meeting
   },
+  async uploadVadRecording(meetingId, recording) {
+    return dataSource.board.uploadVadRecording(meetingId, recording)
+  },
   async leaveMeeting(meetingId = state.currentMeetingId) {
     const result = await withLoading(() => dataSource.board.leaveMeeting(meetingId))
     state.meetingRoom.connectionStatus = 'leaving'
