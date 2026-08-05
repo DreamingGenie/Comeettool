@@ -1,8 +1,9 @@
 """
 회의록 히스토리 -> PostgreSQL(pgvector) 저장 -> 다음 회의록 작성 시 관련 과거 회의 참고
 
-실제 회의 "내용"을 참고한다. 파이프라인이 회의록(meeting_report.md)을 만들 때마다 그 결과를
-meeting_history 테이블에 쌓고, 다음 회의를 처리할 때 이번 회의 전사와 임베딩
+실제 회의 "내용"을 참고한다. 파이프라인이 회의록(MeetingMinutes)을 만들 때마다 그 내용을
+plain text로 직렬화해(history_text.py) meeting_history 테이블에 쌓고, 다음 회의를
+처리할 때 이번 회의 전사와 임베딩
 유사도가 높은 과거 회의록 top-k를 LLM에 맥락으로 제공해 "지난 회의에서 논의된
 A를 오늘 이어서 논의함" 같은 연속성 있는 서술이 가능하게 한다. 단, 이번 회의
 전사에 실제로 언급되지 않은 과거 회의 내용을 새로 지어내는 것은 여전히
@@ -60,7 +61,7 @@ def ensure_schema(conn) -> None:
         cur.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                id TEXT PRIMARY KEY,
+                id BIGINT PRIMARY KEY,
                 document TEXT NOT NULL,
                 embedding vector({EMBEDDING_DIM}) NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -77,25 +78,25 @@ def ensure_schema(conn) -> None:
 
 
 def _strip_transcript_log(document: str) -> str:
-    """meeting_report.md 끝에 붙는 원문 발화 로그(<details> 블록, template.md.j2 참고)를 잘라낸다.
+    """레거시 meeting_report.md 끝에 붙는 원문 발화 로그(<details> 블록)를 잘라낸다.
 
-    회의록 "내용"(요약/논의/결정/액션아이템)만 히스토리에 남긴다. 원문 로그까지
-    포함하면 (1) 임베딩 유사도 신호가 발화 원문에 희석되고, (2) 회의가 길면
-    문서가 수십~수백 KB로 커져 LLM 요청 시 게이트웨이 크기 제한에 걸린다(실측:
-    관련 회의 3건 합쳐 65KB 안팎에서 GMS 게이트웨이가 400 에러 반환).
+    backfill_from_output()이 과거에 파일로 남아 있던 렌더링된 MD를 읽어올 때만
+    쓰는 정리 단계다. save_meeting()은 더 이상 MD를 받지 않으므로(history_text.py
+    참고) 이 stripping을 하지 않는다.
     """
     return document.split("\n<details>")[0].rstrip()
 
 
-def save_meeting(meeting_id: int | str, document: str, created_at=None) -> None:
-    """방금 만든 회의록을 히스토리에 저장한다.
+def save_meeting(meeting_id: int, document: str, created_at=None) -> None:
+    """방금 만든 회의록 내용을 히스토리에 저장한다.
 
-    원문 발화 로그는 잘라내고 회의록 내용만 저장한다(_strip_transcript_log 참고).
-    같은 meeting_id로 다시 호출하면 내용을 덮어쓴다(같은 회의 재실행 시 최신
-    결과로 갱신). created_at을 지정하지 않으면 저장 시각(now())을 쓴다
-    (backfill_from_output()에서 과거 기록 순서를 보존할 때만 지정해서 쓴다).
+    document는 이미 정리된 회의록 내용 텍스트여야 한다(history_text.py의
+    build_minutes_history_text 참고). 같은 meeting_id로 다시 호출하면 내용을
+    덮어쓴다(같은 회의 재실행 시 최신 결과로 갱신). created_at을 지정하지
+    않으면 저장 시각(now())을 쓴다(backfill_from_output()에서 과거 기록 순서를
+    보존할 때만 지정해서 쓴다).
     """
-    content = _strip_transcript_log(document)
+    content = document
     embedding = _embed(content)
     conn = get_connection()
     try:
@@ -121,7 +122,7 @@ DEFAULT_TOP_K = 3
 
 
 def get_relevant_meetings(
-    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: int | str | None = None
+    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: int | None = None
 ) -> list[tuple[str, str]]:
     """query_text와 임베딩 유사도가 높은 과거 회의록을 top_k개 검색한다.
 
@@ -173,8 +174,8 @@ def backfill_from_output() -> int:
 
     md_paths = sorted(OUTPUT_DIR.glob("*/meeting_report.md"))
     for path in md_paths:
-        meeting_id = path.parent.name
-        document = path.read_text(encoding="utf-8")
+        meeting_id = int(path.parent.name)  # id가 BIGINT라 폴더명이 숫자여야 함
+        document = _strip_transcript_log(path.read_text(encoding="utf-8"))
         created_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
         save_meeting(meeting_id, document, created_at=created_at)
         print(f"[rag] 저장: {meeting_id} (created_at={created_at.isoformat()})")

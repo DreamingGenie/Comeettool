@@ -11,7 +11,7 @@ schema.py(MeetingMinutes)/schema_facilitator.py(FacilitatorReport)의 필드 구
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table, Text, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,6 +60,8 @@ class AudioTranscriptionRecord(Base):
     )
     transcript: Mapped[list] = mapped_column(JSONB, default=list)
     # transcript 원소: {"speaker": str, "start": float, "end": float, "text": str}
+    md_url: Mapped[str | None] = mapped_column(String, default=None)
+    pdf_url: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -77,6 +79,10 @@ class MeetingMinutesRecord(Base):
     decisions: Mapped[list] = mapped_column(JSONB, default=list)
     action_items: Mapped[list] = mapped_column(JSONB, default=list)
     open_issues: Mapped[list] = mapped_column(JSONB, default=list)
+    is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    md_url: Mapped[str | None] = mapped_column(String, default=None)
+    pdf_url: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -99,5 +105,7 @@ class FacilitatorReportRecord(Base):
     decision_process_checks: Mapped[list] = mapped_column(JSONB, default=list)
     unresolved_issues_evaluation: Mapped[list] = mapped_column(JSONB, default=list)
     next_meeting_suggestions: Mapped[list] = mapped_column(JSONB, default=list)
+    md_url: Mapped[str | None] = mapped_column(String, default=None)
+    pdf_url: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

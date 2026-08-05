@@ -10,15 +10,15 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.db.models import FacilitatorReportRecord, MeetingMinutesRecord
+from app.db.models import AudioTranscriptionRecord, FacilitatorReportRecord, MeetingMinutesRecord
 from app.pipeline.common.transcribe import transcribe_meeting
 from app.pipeline.facilitator.extract import extract_facilitator_report
+from app.pipeline.facilitator.history_text import build_facilitator_history_text
 from app.pipeline.facilitator.participation import compute_participation_stats
 from app.pipeline.facilitator.rag import get_relevant_facilitator_reports, save_facilitator_report
-from app.pipeline.facilitator.render import render_facilitator_markdown
 from app.pipeline.minutes.extract import extract_meeting_minutes
+from app.pipeline.minutes.history_text import build_minutes_history_text
 from app.pipeline.minutes.rag import get_relevant_meetings, save_meeting
-from app.pipeline.minutes.render import render_markdown
 from app.schemas.meeting import SegmentMeta
 from app.services.s3_client import download_meeting_recordings
 
@@ -115,14 +115,21 @@ def run_full_pipeline(meeting_id: int, db: Session) -> None:
         if not transcript:
             raise RuntimeError(f"{meeting_id}: 전사 결과가 비어 있습니다.")
 
+        # --- STT 결과 원본 저장 (audio_transcriptions) ---
+        db.merge(
+            AudioTranscriptionRecord(
+                meeting_id=meeting_id,
+                transcript=[seg.model_dump() for seg in transcript],
+            )
+        )
+
         # --- MVP: 회의록 ---
         query_text = "\n".join(seg.text for seg in transcript)
         relevant_meetings = get_relevant_meetings(query_text, exclude_id=meeting_id)
         minutes = extract_meeting_minutes(
             transcript, previous_meetings=[doc for _, doc in relevant_meetings]
         )
-        minutes_md = render_markdown(minutes, transcript)
-        save_meeting(meeting_id, minutes_md)
+        save_meeting(meeting_id, build_minutes_history_text(minutes))
 
         db.merge(
             MeetingMinutesRecord(
@@ -144,8 +151,9 @@ def run_full_pipeline(meeting_id: int, db: Session) -> None:
             participation_stats,
             previous_reports=[doc for _, doc in relevant_reports],
         )
-        report_md = render_facilitator_markdown(report, participation_stats, transcript)
-        save_facilitator_report(meeting_id, report_md)
+        save_facilitator_report(
+            meeting_id, build_facilitator_history_text(report, participation_stats)
+        )
 
         db.merge(
             FacilitatorReportRecord(

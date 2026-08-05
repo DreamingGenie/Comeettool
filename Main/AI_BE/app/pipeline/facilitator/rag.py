@@ -3,8 +3,8 @@ Facilitator 보고서 히스토리 -> PostgreSQL(pgvector) 저장 -> 다음 Faci
 관련 과거 보고서 참고
 
 rag.py의 meeting_history와 동일한 패턴을, 회의록이 아니라 Facilitator 보고서
-(facilitator_report.md, Sub_Facilitator_report_template.md 참고) 코퍼스에 대해
-그대로 적용한다. 파이프라인이 Facilitator 보고서를 만들 때마다 그 결과를
+(FacilitatorReport) 코퍼스에 대해 그대로 적용한다. 파이프라인이 Facilitator
+보고서를 만들 때마다 그 내용을 plain text로 직렬화해(history_text.py)
 facilitator_report_history 테이블에 쌓고, 다음 회의를 처리할 때 이번 회의 전사와
 임베딩 유사도가 높은 과거 보고서 top-k를 LLM에 맥락으로 제공한다. 단, 이번 회의
 전사에 실제로 언급되지 않은 과거 보고서 내용을 새로 지어내는 것은 여전히
@@ -58,7 +58,7 @@ def ensure_schema(conn) -> None:
         cur.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                id TEXT PRIMARY KEY,
+                id BIGINT PRIMARY KEY,
                 document TEXT NOT NULL,
                 embedding vector({EMBEDDING_DIM}) NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -74,26 +74,15 @@ def ensure_schema(conn) -> None:
     conn.commit()
 
 
-def _strip_transcript_log(document: str) -> str:
-    """facilitator_report.md 끝에 붙는 원문 발화 로그(<details> 블록,
-    Sub_Facilitator_report_template.md 참고)를 잘라낸다.
+def save_facilitator_report(meeting_id: int, document: str, created_at=None) -> None:
+    """방금 만든 Facilitator 보고서 내용을 히스토리에 저장한다.
 
-    보고서 "내용"(총평/참여 균형/진행 품질 평가 등)만 히스토리에 남긴다. 원문 로그까지
-    포함하면 (1) 임베딩 유사도 신호가 발화 원문에 희석되고, (2) 회의가 길면
-    문서가 수십~수백 KB로 커져 LLM 요청 시 게이트웨이 크기 제한에 걸린다(rag.py 참고:
-    실측 관련 문서 3건 합쳐 65KB 안팎에서 GMS 게이트웨이가 400 에러 반환).
+    document는 이미 정리된 보고서 내용 텍스트여야 한다(history_text.py의
+    build_facilitator_history_text 참고). 같은 meeting_id로 다시 호출하면 내용을
+    덮어쓴다(같은 회의 재실행 시 최신 결과로 갱신). created_at을 지정하지
+    않으면 저장 시각(now())을 쓴다.
     """
-    return document.split("\n<details>")[0].rstrip()
-
-
-def save_facilitator_report(meeting_id: int | str, document: str, created_at=None) -> None:
-    """방금 만든 Facilitator 보고서를 히스토리에 저장한다.
-
-    원문 발화 로그는 잘라내고 보고서 내용만 저장한다(_strip_transcript_log 참고).
-    같은 meeting_id로 다시 호출하면 내용을 덮어쓴다(같은 회의 재실행 시 최신
-    결과로 갱신). created_at을 지정하지 않으면 저장 시각(now())을 쓴다.
-    """
-    content = _strip_transcript_log(document)
+    content = document
     embedding = _embed(content)
     conn = get_connection()
     try:
@@ -119,7 +108,7 @@ DEFAULT_TOP_K = 3
 
 
 def get_relevant_facilitator_reports(
-    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: int | str | None = None
+    query_text: str, top_k: int = DEFAULT_TOP_K, exclude_id: int | None = None
 ) -> list[tuple[str, str]]:
     """query_text와 임베딩 유사도가 높은 과거 Facilitator 보고서를 top_k개 검색한다.
 
