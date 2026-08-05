@@ -92,6 +92,9 @@ public enum ErrorCode {
     // REPORTS-06: 확정(isConfirmed=true)된 회의록은 필드 값과 무관하게 수정을 즉시 거부한다.
     MINUTES_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "MINUTES_ALREADY_CONFIRMED", "이미 확정된 회의록은 수정할 수 없습니다."),
 
+    // REPORTS-10: 회의는 존재하지만 퍼실리테이터 리포트가 아직 생성되지 않은 상태. 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
+    FACILITATOR_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "FACILITATOR_REPORT_NOT_FOUND", "퍼실리테이터 리포트를 찾을 수 없습니다."),
+
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
 

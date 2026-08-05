@@ -26,6 +26,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.report.dto.FacilitatorReportDetailDto;
 import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
@@ -705,6 +706,95 @@ class ReportControllerTest {
             mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/facilitator", SPACE_ID))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-10 GET /api/v1/meetings/{meetingId}/reports/facilitator")
+    class GetFacilitatorReport {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 조회면 200 SUCCESS, message='퍼실리테이터 리포트 조회 성공', "
+                + "7개 JSONB 필드가 이중 직렬화 없이 배열/객체로 반환된다")
+        void getFacilitatorReport_returns200() throws Exception {
+            String participationStatsJson = "[{\"speaker\":\"ssong123\",\"talkTimeRatio\":0.3}]";
+            String qualityEvaluationJson = "{\"score\":4,\"criteria\":[]}";
+            String strengthsJson = "[{\"point\":\"안건별 시간 배분이 적절했음\"}]";
+            String improvementsJson = "[{\"point\":\"소극적인 참가자 발언 유도 필요\"}]";
+            String decisionProcessChecksJson = "[{\"check\":\"결정사항에 대한 합의 절차 확인됨\"}]";
+            String unresolvedIssuesEvaluationJson = "[{\"issue\":\"S3 설정 이슈는 다음 회의로 이월\"}]";
+            String nextMeetingSuggestionsJson = "[{\"suggestion\":\"다음 회의는 30분 내로 단축 권장\"}]";
+            FacilitatorReportDetailDto response = new FacilitatorReportDetailDto(
+                    MEETING_ID, "8월 4주차 회의 퍼실리테이션 리포트", null,
+                    "전반적으로 안건 진행이 원활했습니다.", "일부 참가자의 발언 비중이 낮았습니다.",
+                    participationStatsJson, qualityEvaluationJson, strengthsJson, improvementsJson,
+                    decisionProcessChecksJson, unresolvedIssuesEvaluationJson, nextMeetingSuggestionsJson,
+                    OffsetDateTime.parse("2026-08-04T05:15:00Z"));
+            given(reportService.getFacilitatorReport(1L, MEETING_ID)).willReturn(response);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/facilitator", MEETING_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("퍼실리테이터 리포트 조회 성공"))
+                    .andExpect(jsonPath("$.data.meetingId").value(MEETING_ID))
+                    .andExpect(jsonPath("$.data.title").value("8월 4주차 회의 퍼실리테이션 리포트"))
+                    .andExpect(jsonPath("$.data.meetingType").doesNotExist())
+                    .andExpect(jsonPath("$.data.overallReview").value("전반적으로 안건 진행이 원활했습니다."))
+                    .andExpect(jsonPath("$.data.participationComment").value("일부 참가자의 발언 비중이 낮았습니다."))
+                    // 7개 JSONB 필드가 문자열로 다시 이스케이프되지 않고 실제 JSON 배열/객체로 파싱되는지 확인(이중 직렬화 방지 검증).
+                    .andExpect(jsonPath("$.data.participationStats").isArray())
+                    .andExpect(jsonPath("$.data.participationStats[0].speaker").value("ssong123"))
+                    .andExpect(jsonPath("$.data.participationStats[0].talkTimeRatio").value(0.3))
+                    .andExpect(jsonPath("$.data.qualityEvaluation").isMap())
+                    .andExpect(jsonPath("$.data.qualityEvaluation.score").value(4))
+                    .andExpect(jsonPath("$.data.strengths").isArray())
+                    .andExpect(jsonPath("$.data.strengths[0].point").value("안건별 시간 배분이 적절했음"))
+                    .andExpect(jsonPath("$.data.improvements").isArray())
+                    .andExpect(jsonPath("$.data.improvements[0].point").value("소극적인 참가자 발언 유도 필요"))
+                    .andExpect(jsonPath("$.data.decisionProcessChecks").isArray())
+                    .andExpect(jsonPath("$.data.decisionProcessChecks[0].check").value("결정사항에 대한 합의 절차 확인됨"))
+                    .andExpect(jsonPath("$.data.unresolvedIssuesEvaluation").isArray())
+                    .andExpect(jsonPath("$.data.unresolvedIssuesEvaluation[0].issue").value("S3 설정 이슈는 다음 회의로 이월"))
+                    .andExpect(jsonPath("$.data.nextMeetingSuggestions").isArray())
+                    .andExpect(jsonPath("$.data.nextMeetingSuggestions[0].suggestion").value("다음 회의는 30분 내로 단축 권장"))
+                    .andExpect(jsonPath("$.data.createdAt").value("2026-08-04T05:15:00Z"));
+
+            verify(reportService).getFacilitatorReport(1L, MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void getFacilitatorReport_returns404WhenMeetingNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND))
+                    .when(reportService).getFacilitatorReport(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/facilitator", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void getFacilitatorReport_returns403WhenNotMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED))
+                    .when(reportService).getFacilitatorReport(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/facilitator", MEETING_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 리포트가 없으면 404 FACILITATOR_REPORT_NOT_FOUND를 반환한다(MEETING_NOT_FOUND와 구분)")
+        void getFacilitatorReport_returns404WhenReportNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.FACILITATOR_REPORT_NOT_FOUND))
+                    .when(reportService).getFacilitatorReport(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/facilitator", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("FACILITATOR_REPORT_NOT_FOUND"));
         }
     }
 }

@@ -23,6 +23,7 @@ import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.FacilitatorReportDetailDto;
 import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
@@ -33,6 +34,7 @@ import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.entity.AudioTranscription;
+import com.ssafy.backend.report.entity.FacilitatorReport;
 import com.ssafy.backend.report.entity.MeetingMinutes;
 import com.ssafy.backend.report.export.AiResultKeys;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
@@ -320,5 +322,36 @@ public class ReportServiceImpl implements ReportService {
         Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<FacilitatorReportSummaryDto> page = facilitatorReportRepository.findAllByTeamId(spaceId, pageOnly);
         return PageResponse.from(page);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public FacilitatorReportDetailDto getFacilitatorReport(Long requesterId, Long meetingId) {
+        // 종료(soft delete)된 회의도 리포트 조회 대상이라 활성 여부는 걸지 않는다 — REPORTS-02/05와 동일한 이유.
+        MeetingRoom meetingRoom = meetingRoomRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 조회는 OWNER 제한 없이 스페이스 멤버 전체(OWNER/MEMBER/GUEST)에게 허용 — REPORTS-02/05와 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(meetingRoom.getTeamId(), requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        FacilitatorReport report = facilitatorReportRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.FACILITATOR_REPORT_NOT_FOUND));
+
+        return new FacilitatorReportDetailDto(
+                report.getMeetingId(),
+                report.getTitle(),
+                report.getMeetingType(),
+                report.getOverallReview(),
+                report.getParticipationComment(),
+                report.getParticipationStats(),
+                report.getQualityEvaluation(),
+                report.getStrengths(),
+                report.getImprovements(),
+                report.getDecisionProcessChecks(),
+                report.getUnresolvedIssuesEvaluation(),
+                report.getNextMeetingSuggestions(),
+                report.getCreatedAt());
     }
 }

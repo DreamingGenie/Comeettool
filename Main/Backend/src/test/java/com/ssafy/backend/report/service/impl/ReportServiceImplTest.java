@@ -34,6 +34,7 @@ import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.FacilitatorReportDetailDto;
 import com.ssafy.backend.report.dto.FacilitatorReportSummaryDto;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
@@ -44,6 +45,7 @@ import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.entity.AudioTranscription;
+import com.ssafy.backend.report.entity.FacilitatorReport;
 import com.ssafy.backend.report.entity.MeetingMinutes;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
 import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
@@ -171,6 +173,36 @@ class ReportServiceImplTest {
             ReflectionTestUtils.setField(entity, "openIssues", openIssues);
             ReflectionTestUtils.setField(entity, "isConfirmed", isConfirmed);
             ReflectionTestUtils.setField(entity, "confirmedAt", confirmedAt);
+            ReflectionTestUtils.setField(entity, "createdAt", createdAt);
+            return entity;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // FacilitatorReport도 MeetingMinutes/AudioTranscription과 동일하게 순수 조회 전용(@Immutable, 빌더 없음)
+    // 엔티티라 protected 기본 생성자를 리플렉션으로 열어 ReflectionTestUtils로 필드를 채운다.
+    private FacilitatorReport facilitatorReportOf(
+            Long meetingId, String title, String meetingType, String overallReview, String participationComment,
+            String participationStats, String qualityEvaluation, String strengths, String improvements,
+            String decisionProcessChecks, String unresolvedIssuesEvaluation, String nextMeetingSuggestions,
+            OffsetDateTime createdAt) {
+        try {
+            Constructor<FacilitatorReport> constructor = FacilitatorReport.class.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            FacilitatorReport entity = constructor.newInstance();
+            ReflectionTestUtils.setField(entity, "meetingId", meetingId);
+            ReflectionTestUtils.setField(entity, "title", title);
+            ReflectionTestUtils.setField(entity, "meetingType", meetingType);
+            ReflectionTestUtils.setField(entity, "overallReview", overallReview);
+            ReflectionTestUtils.setField(entity, "participationComment", participationComment);
+            ReflectionTestUtils.setField(entity, "participationStats", participationStats);
+            ReflectionTestUtils.setField(entity, "qualityEvaluation", qualityEvaluation);
+            ReflectionTestUtils.setField(entity, "strengths", strengths);
+            ReflectionTestUtils.setField(entity, "improvements", improvements);
+            ReflectionTestUtils.setField(entity, "decisionProcessChecks", decisionProcessChecks);
+            ReflectionTestUtils.setField(entity, "unresolvedIssuesEvaluation", unresolvedIssuesEvaluation);
+            ReflectionTestUtils.setField(entity, "nextMeetingSuggestions", nextMeetingSuggestions);
             ReflectionTestUtils.setField(entity, "createdAt", createdAt);
             return entity;
         } catch (ReflectiveOperationException e) {
@@ -1355,6 +1387,136 @@ class ReportServiceImplTest {
             verify(facilitatorReportRepository).findAllByTeamId(eq(SPACE_ID), captor.capture());
             assertThat(captor.getValue().getPageNumber()).isEqualTo(1);
             assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-10 퍼실리테이터 리포트 상세 조회")
+    class GetFacilitatorReport {
+
+        private static final String PARTICIPATION_STATS_JSON =
+                "[{\"speaker\":\"ssong123\",\"talkTimeRatio\":0.3}]";
+        private static final String QUALITY_EVALUATION_JSON = "{\"score\":4,\"criteria\":[]}";
+        private static final String STRENGTHS_JSON = "[{\"point\":\"안건별 시간 배분이 적절했음\"}]";
+        private static final String IMPROVEMENTS_JSON = "[{\"point\":\"소극적인 참가자 발언 유도 필요\"}]";
+        private static final String DECISION_PROCESS_CHECKS_JSON =
+                "[{\"check\":\"결정사항에 대한 합의 절차 확인됨\"}]";
+        private static final String UNRESOLVED_ISSUES_EVALUATION_JSON =
+                "[{\"issue\":\"S3 설정 이슈는 다음 회의로 이월\"}]";
+        private static final String NEXT_MEETING_SUGGESTIONS_JSON =
+                "[{\"suggestion\":\"다음 회의는 30분 내로 단축 권장\"}]";
+
+        @Test
+        @DisplayName("정상 조회 시 7개 JSONB 필드가 JSON 원문 그대로 응답 DTO에 매핑된다")
+        void getFacilitatorReport_returnsMappedDetail() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            OffsetDateTime createdAt = OffsetDateTime.parse("2026-08-04T05:15:00Z");
+            FacilitatorReport report = facilitatorReportOf(
+                    MEETING_ID, "8월 4주차 회의 퍼실리테이션 리포트", "SPRINT_REVIEW",
+                    "전반적으로 안건 진행이 원활했습니다.", "일부 참가자의 발언 비중이 낮았습니다.",
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON, STRENGTHS_JSON, IMPROVEMENTS_JSON,
+                    DECISION_PROCESS_CHECKS_JSON, UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON,
+                    createdAt);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            FacilitatorReportDetailDto result = reportService.getFacilitatorReport(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.title()).isEqualTo("8월 4주차 회의 퍼실리테이션 리포트");
+            assertThat(result.meetingType()).isEqualTo("SPRINT_REVIEW");
+            assertThat(result.overallReview()).isEqualTo("전반적으로 안건 진행이 원활했습니다.");
+            assertThat(result.participationComment()).isEqualTo("일부 참가자의 발언 비중이 낮았습니다.");
+            assertThat(result.participationStats()).isEqualTo(PARTICIPATION_STATS_JSON);
+            assertThat(result.qualityEvaluation()).isEqualTo(QUALITY_EVALUATION_JSON);
+            assertThat(result.strengths()).isEqualTo(STRENGTHS_JSON);
+            assertThat(result.improvements()).isEqualTo(IMPROVEMENTS_JSON);
+            assertThat(result.decisionProcessChecks()).isEqualTo(DECISION_PROCESS_CHECKS_JSON);
+            assertThat(result.unresolvedIssuesEvaluation()).isEqualTo(UNRESOLVED_ISSUES_EVALUATION_JSON);
+            assertThat(result.nextMeetingSuggestions()).isEqualTo(NEXT_MEETING_SUGGESTIONS_JSON);
+            assertThat(result.createdAt()).isEqualTo(createdAt);
+        }
+
+        @Test
+        @DisplayName("meetingType이 null이면 그대로 null로 매핑된다")
+        void getFacilitatorReport_mapsNullMeetingType() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = facilitatorReportOf(
+                    MEETING_ID, "8월 4주차 회의 퍼실리테이션 리포트", null,
+                    "전반적으로 안건 진행이 원활했습니다.", "일부 참가자의 발언 비중이 낮았습니다.",
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON, STRENGTHS_JSON, IMPROVEMENTS_JSON,
+                    DECISION_PROCESS_CHECKS_JSON, UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON,
+                    OffsetDateTime.parse("2026-08-04T05:15:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            FacilitatorReportDetailDto result = reportService.getFacilitatorReport(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingType()).isNull();
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·리포트 조회를 시도하지 않는다")
+        void getFacilitatorReport_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getFacilitatorReport(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 리포트 조회를 시도하지 않는다")
+        void getFacilitatorReport_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() -> reportService.getFacilitatorReport(nonMemberId, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 정상 조회된다(오너 제한 없음)")
+        void getFacilitatorReport_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = facilitatorReportOf(
+                    MEETING_ID, "8월 4주차 회의 퍼실리테이션 리포트", "SPRINT_REVIEW",
+                    "전반적으로 안건 진행이 원활했습니다.", "일부 참가자의 발언 비중이 낮았습니다.",
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON, STRENGTHS_JSON, IMPROVEMENTS_JSON,
+                    DECISION_PROCESS_CHECKS_JSON, UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON,
+                    OffsetDateTime.parse("2026-08-04T05:15:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            FacilitatorReportDetailDto result = reportService.getFacilitatorReport(guestUserId, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 리포트가 없으면(아직 생성 안 됨) FACILITATOR_REPORT_NOT_FOUND 예외가 발생한다")
+        void getFacilitatorReport_throwsWhenReportNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getFacilitatorReport(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.FACILITATOR_REPORT_NOT_FOUND);
         }
     }
 }
