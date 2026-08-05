@@ -6,7 +6,7 @@
       class="document-preview-backdrop"
       role="presentation"
       tabindex="-1"
-      @click.self="$emit('close')"
+      @pointerdown.self="$emit('close')"
       @keydown.esc="$emit('close')"
     >
       <section
@@ -35,8 +35,8 @@
 
         <div class="document-preview-heading">
           <div>
-            <span>{{ row[4] }}</span>
-            <h2 :id="titleId">{{ row[0] }}</h2>
+            <span v-if="displayStatus">{{ displayStatus }}</span>
+            <h2 :id="titleId">{{ displayTitle }}</h2>
             <p>{{ preview.summary }}</p>
           </div>
           <div class="document-preview-status">
@@ -48,15 +48,15 @@
         <dl class="document-preview-meta">
           <div>
             <dt>관련 회의</dt>
-            <dd>{{ row[1] }}</dd>
+            <dd>{{ displayMeetingName }}</dd>
           </div>
-          <div>
+          <div v-if="!isReportRow">
             <dt>{{ section === 'documents' ? '참여자' : '회의 정보' }}</dt>
             <dd>{{ row[2] }}</dd>
           </div>
           <div>
             <dt>최근 업데이트</dt>
-            <dd>{{ row[3] }}</dd>
+            <dd>{{ displayUpdatedAt }}</dd>
           </div>
         </dl>
 
@@ -74,7 +74,7 @@
         </div>
 
         <footer>
-          <div class="document-preview-tags">
+          <div v-if="preview.tags?.length" class="document-preview-tags">
             <span v-for="tag in preview.tags" :key="tag"># {{ tag }}</span>
           </div>
           <button class="outline-btn" type="button" @click="$emit('close')">
@@ -93,7 +93,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
-  row: { type: Array, default: null },
+  row: { type: [Array, Object], default: null },
   section: { type: String, default: 'documents' },
   info: { type: Object, required: true }
 })
@@ -102,7 +102,12 @@ defineEmits(['close', 'open-original'])
 
 const backdrop = ref(null)
 const titleId = `document-preview-${Math.random().toString(36).slice(2, 9)}`
-const preview = computed(() => props.row?.[5] || {
+const isReportRow = computed(() => props.row && !Array.isArray(props.row))
+const displayTitle = computed(() => isReportRow.value ? props.row.title : props.row?.[0])
+const displayStatus = computed(() => isReportRow.value ? props.row.statusLabel : props.row?.[4])
+const displayMeetingName = computed(() => isReportRow.value ? props.row.meetingName || '-' : props.row?.[1])
+const displayUpdatedAt = computed(() => isReportRow.value ? props.row.updatedAt : props.row?.[3])
+const preview = computed(() => (isReportRow.value ? props.row.preview : props.row?.[5]) || {
   summary: '선택한 항목의 상세 내용을 확인할 수 있는 임시 미리보기입니다.',
   sections: [
     {
