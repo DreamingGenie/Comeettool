@@ -26,6 +26,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
+import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
@@ -221,8 +222,8 @@ class ReportControllerTest {
         @DisplayName("정상 내보내기면 200 SUCCESS, message='전사 내보내기 성공', data 필드를 반환한다")
         void exportTranscript_returns200() throws Exception {
             RequestExportDto request = new RequestExportDto("md");
-            ResponseExportDto response =
-                    new ResponseExportDto(MEETING_ID, "md", "https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+            ResponseExportDto response = new ResponseExportDto(
+                    MEETING_ID, "md", "https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
             given(reportService.exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class)))
                     .willReturn(response);
 
@@ -234,7 +235,8 @@ class ReportControllerTest {
                     .andExpect(jsonPath("$.message").value("전사 내보내기 성공"))
                     .andExpect(jsonPath("$.data.meetingId").value(34))
                     .andExpect(jsonPath("$.data.format").value("md"))
-                    .andExpect(jsonPath("$.data.url").value("https://bucket.s3.region.amazonaws.com/transcripts/34.md"));
+                    .andExpect(jsonPath("$.data.url")
+                            .value("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md"));
 
             verify(reportService).exportTranscript(eq(1L), eq(MEETING_ID), any(RequestExportDto.class));
         }
@@ -377,6 +379,88 @@ class ReportControllerTest {
             mockMvc.perform(get("/api/v1/spaces/{spaceId}/reports/minutes", SPACE_ID))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-05 GET /api/v1/meetings/{meetingId}/reports/minutes")
+    class GetMinutes {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 조회면 200 SUCCESS, message='회의록 조회 성공', "
+                + "topics/decisions/actionItems/openIssues가 이중 직렬화 없이 배열/객체로 반환된다")
+        void getMinutes_returns200() throws Exception {
+            String topicsJson = "[{\"topic\":\"REPORTS API 진행 상황 공유\"}]";
+            String decisionsJson = "[{\"decision\":\"REPORTS-01~04는 이번 스프린트 내 완료\",\"owner\":\"ssong\"}]";
+            String actionItemsJson =
+                    "[{\"task\":\"REPORTS-05 이후 스펙 정리\",\"assignee\":\"ssong\",\"dueDate\":\"2026-08-06\"}]";
+            String openIssuesJson = "[{\"issue\":\"STT 파이프라인 세그먼트 병합 로직 미구현\"}]";
+            MinutesDetailDto response = new MinutesDetailDto(
+                    MEETING_ID, "스프린트 리뷰 회의록",
+                    "이번 스프린트 완료 항목을 리뷰하고 다음 스프린트 우선순위를 논의했습니다.",
+                    topicsJson, decisionsJson, actionItemsJson, openIssuesJson,
+                    false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(reportService.getMinutes(1L, MEETING_ID)).willReturn(response);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("회의록 조회 성공"))
+                    .andExpect(jsonPath("$.data.meetingId").value(MEETING_ID))
+                    .andExpect(jsonPath("$.data.title").value("스프린트 리뷰 회의록"))
+                    .andExpect(jsonPath("$.data.summary").value("이번 스프린트 완료 항목을 리뷰하고 다음 스프린트 우선순위를 논의했습니다."))
+                    // 4개 JSONB 필드가 문자열로 다시 이스케이프되지 않고 실제 JSON 배열/객체로 파싱되는지 확인(이중 직렬화 방지 검증).
+                    .andExpect(jsonPath("$.data.topics").isArray())
+                    .andExpect(jsonPath("$.data.topics[0].topic").value("REPORTS API 진행 상황 공유"))
+                    .andExpect(jsonPath("$.data.decisions").isArray())
+                    .andExpect(jsonPath("$.data.decisions[0].decision").value("REPORTS-01~04는 이번 스프린트 내 완료"))
+                    .andExpect(jsonPath("$.data.decisions[0].owner").value("ssong"))
+                    .andExpect(jsonPath("$.data.actionItems").isArray())
+                    .andExpect(jsonPath("$.data.actionItems[0].task").value("REPORTS-05 이후 스펙 정리"))
+                    .andExpect(jsonPath("$.data.actionItems[0].assignee").value("ssong"))
+                    .andExpect(jsonPath("$.data.actionItems[0].dueDate").value("2026-08-06"))
+                    .andExpect(jsonPath("$.data.openIssues").isArray())
+                    .andExpect(jsonPath("$.data.openIssues[0].issue").value("STT 파이프라인 세그먼트 병합 로직 미구현"))
+                    .andExpect(jsonPath("$.data.isConfirmed").value(false))
+                    .andExpect(jsonPath("$.data.confirmedAt").doesNotExist())
+                    .andExpect(jsonPath("$.data.createdAt").value("2026-08-04T05:10:00Z"));
+
+            verify(reportService).getMinutes(1L, MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void getMinutes_returns404WhenMeetingNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND))
+                    .when(reportService).getMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 403 SPACE_ACCESS_DENIED를 반환한다")
+        void getMinutes_returns403WhenNotMember() throws Exception {
+            doThrow(new CustomException(ErrorCode.SPACE_ACCESS_DENIED))
+                    .when(reportService).getMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_ACCESS_DENIED"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 404 MINUTES_NOT_FOUND를 반환한다(MEETING_NOT_FOUND와 구분)")
+        void getMinutes_returns404WhenMinutesNotFound() throws Exception {
+            doThrow(new CustomException(ErrorCode.MINUTES_NOT_FOUND))
+                    .when(reportService).getMinutes(1L, MEETING_ID);
+
+            mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
         }
     }
 }

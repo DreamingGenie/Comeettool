@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.response.ApiResponse;
+import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
@@ -69,5 +70,14 @@ public class ReportController {
         PageResponse<MinutesSummaryDto> response =
                 reportService.getMinutesList(Long.parseLong(userId), spaceId, pageable);
         return ResponseEntity.ok(ApiResponse.success("회의록 목록 조회 성공", response));
+    }
+
+    // REPORTS-05: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 특정 회의의 회의록 상세를 조회한다.
+    @GetMapping("/api/v1/meetings/{meetingId}/reports/minutes")
+    public ResponseEntity<ApiResponse<MinutesDetailDto>> getMinutes(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId) {
+        MinutesDetailDto response = reportService.getMinutes(Long.parseLong(userId), meetingId);
+        return ResponseEntity.ok(ApiResponse.success("회의록 조회 성공", response));
     }
 }

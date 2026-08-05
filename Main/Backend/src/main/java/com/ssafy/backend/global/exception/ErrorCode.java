@@ -85,6 +85,9 @@ public enum ErrorCode {
     // REPORTS-02: 회의는 존재하지만 전사가 아직 없는 상태(처리 중이거나 실패). 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
     TRANSCRIPT_NOT_FOUND(HttpStatus.NOT_FOUND, "TRANSCRIPT_NOT_FOUND", "회의 전사를 찾을 수 없습니다."),
 
+    // REPORTS-05: 회의는 존재하지만 회의록이 아직 생성되지 않은 상태. 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
+    MINUTES_NOT_FOUND(HttpStatus.NOT_FOUND, "MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
+
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
 

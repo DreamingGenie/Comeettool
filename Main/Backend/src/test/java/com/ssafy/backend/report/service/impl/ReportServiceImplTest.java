@@ -26,6 +26,7 @@ import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
@@ -117,14 +118,23 @@ class ReportServiceImplTest {
 
     // MeetingMinutes도 AudioTranscription과 동일하게 순수 조회 전용(@Immutable, 빌더 없음) 엔티티라
     // protected 기본 생성자를 리플렉션으로 열어 ReflectionTestUtils로 필드를 채운다.
-    private MeetingMinutes minutesOf(Long meetingId, String title, Boolean isConfirmed, OffsetDateTime createdAt) {
+    private MeetingMinutes minutesOf(
+            Long meetingId, String title, String summary, String topics, String decisions,
+            String actionItems, String openIssues, Boolean isConfirmed, OffsetDateTime confirmedAt,
+            OffsetDateTime createdAt) {
         try {
             Constructor<MeetingMinutes> constructor = MeetingMinutes.class.getDeclaredConstructor();
             constructor.setAccessible(true);
             MeetingMinutes entity = constructor.newInstance();
             ReflectionTestUtils.setField(entity, "meetingId", meetingId);
             ReflectionTestUtils.setField(entity, "title", title);
+            ReflectionTestUtils.setField(entity, "summary", summary);
+            ReflectionTestUtils.setField(entity, "topics", topics);
+            ReflectionTestUtils.setField(entity, "decisions", decisions);
+            ReflectionTestUtils.setField(entity, "actionItems", actionItems);
+            ReflectionTestUtils.setField(entity, "openIssues", openIssues);
             ReflectionTestUtils.setField(entity, "isConfirmed", isConfirmed);
+            ReflectionTestUtils.setField(entity, "confirmedAt", confirmedAt);
             ReflectionTestUtils.setField(entity, "createdAt", createdAt);
             return entity;
         } catch (ReflectiveOperationException e) {
@@ -348,18 +358,19 @@ class ReportServiceImplTest {
             given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
             given(audioTranscriptionRepository.findById(MEETING_ID)).willReturn(Optional.of(transcription));
             given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
-            given(fileStorageService.upload(any(byte[].class), eq("text/markdown"), eq("transcripts")))
-                    .willReturn("https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+            given(fileStorageService.upload(any(byte[].class), eq("text/markdown"), eq("ai-results/34/transcript.md")))
+                    .willReturn("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
 
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
             assertThat(result.meetingId()).isEqualTo(MEETING_ID);
             assertThat(result.format()).isEqualTo("md");
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/transcripts/34.md");
-            verify(fileStorageService).upload(any(byte[].class), eq("text/markdown"), eq("transcripts"));
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
+            verify(fileStorageService)
+                    .upload(any(byte[].class), eq("text/markdown"), eq("ai-results/34/transcript.md"));
             verify(audioTranscriptionRepository)
-                    .updateMdUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/transcripts/34.md");
+                    .updateMdUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.md");
             verify(markdownToPdfConverter, never()).convert(any());
             verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
         }
@@ -375,17 +386,17 @@ class ReportServiceImplTest {
             given(transcriptMarkdownRenderer.render(MEETING_ID, TRANSCRIPT_JSON)).willReturn(RENDERED_MARKDOWN);
             byte[] pdfBytes = {1, 2, 3};
             given(markdownToPdfConverter.convert(RENDERED_MARKDOWN)).willReturn(pdfBytes);
-            given(fileStorageService.upload(pdfBytes, "application/pdf", "transcripts"))
-                    .willReturn("https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
+            given(fileStorageService.upload(pdfBytes, "application/pdf", "ai-results/34/transcript.pdf"))
+                    .willReturn("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
 
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
             assertThat(result.format()).isEqualTo("pdf");
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
-            verify(fileStorageService).upload(pdfBytes, "application/pdf", "transcripts");
+            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
+            verify(fileStorageService).upload(pdfBytes, "application/pdf", "ai-results/34/transcript.pdf");
             verify(audioTranscriptionRepository)
-                    .updatePdfUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/transcripts/34.pdf");
+                    .updatePdfUrl(MEETING_ID, "https://bucket.s3.region.amazonaws.com/ai-results/34/transcript.pdf");
             verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
         }
 
@@ -629,6 +640,138 @@ class ReportServiceImplTest {
             verify(meetingMinutesRepository).findAllByTeamId(eq(SPACE_ID), captor.capture());
             assertThat(captor.getValue().getPageNumber()).isEqualTo(1);
             assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-05 회의록 상세 조회")
+    class GetMinutes {
+
+        private static final String TOPICS_JSON = "[{\"topic\":\"REPORTS API 진행 상황 공유\"}]";
+        private static final String DECISIONS_JSON =
+                "[{\"decision\":\"REPORTS-01~04는 이번 스프린트 내 완료\",\"owner\":\"ssong\"}]";
+        private static final String ACTION_ITEMS_JSON =
+                "[{\"task\":\"REPORTS-05 이후 스펙 정리\",\"assignee\":\"ssong\",\"dueDate\":\"2026-08-06\"}]";
+        private static final String OPEN_ISSUES_JSON = "[{\"issue\":\"STT 파이프라인 세그먼트 병합 로직 미구현\"}]";
+
+        @Test
+        @DisplayName("정상 조회 시 topics/decisions/actionItems/openIssues가 JSON 원문 그대로 응답 DTO에 매핑된다")
+        void getMinutes_returnsMappedDetail() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            OffsetDateTime createdAt = OffsetDateTime.parse("2026-08-04T05:10:00Z");
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "이번 스프린트 완료 항목을 리뷰하고 다음 스프린트 우선순위를 논의했습니다.",
+                    TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON, OPEN_ISSUES_JSON, false, null, createdAt);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            MinutesDetailDto result = reportService.getMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.title()).isEqualTo("스프린트 리뷰 회의록");
+            assertThat(result.summary()).isEqualTo("이번 스프린트 완료 항목을 리뷰하고 다음 스프린트 우선순위를 논의했습니다.");
+            assertThat(result.topics()).isEqualTo(TOPICS_JSON);
+            assertThat(result.decisions()).isEqualTo(DECISIONS_JSON);
+            assertThat(result.actionItems()).isEqualTo(ACTION_ITEMS_JSON);
+            assertThat(result.openIssues()).isEqualTo(OPEN_ISSUES_JSON);
+            assertThat(result.isConfirmed()).isFalse();
+            assertThat(result.confirmedAt()).isNull();
+            assertThat(result.createdAt()).isEqualTo(createdAt);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·회의록 조회를 시도하지 않는다")
+        void getMinutes_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getMinutes(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생하고 회의록 조회를 시도하지 않는다")
+        void getMinutes_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() -> reportService.getMinutes(nonMemberId, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("GUEST 등 OWNER가 아닌 멤버도 정상 조회된다(오너 제한 없음)")
+        void getMinutes_allowsNonOwnerMemberRequester() {
+            Long guestUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON,
+                    OPEN_ISSUES_JSON, false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, guestUserId)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            MinutesDetailDto result = reportService.getMinutes(guestUserId, MEETING_ID);
+
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면(아직 생성 안 됨) MINUTES_NOT_FOUND 예외가 발생한다")
+        void getMinutes_throwsWhenMinutesNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reportService.getMinutes(OWNER_ID, MEETING_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("확정된(isConfirmed=true) 회의록은 confirmedAt이 정상적으로 매핑된다")
+        void getMinutes_mapsConfirmedAtWhenConfirmed() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            OffsetDateTime confirmedAt = OffsetDateTime.parse("2026-08-05T02:00:00Z");
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON,
+                    OPEN_ISSUES_JSON, true, confirmedAt, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            MinutesDetailDto result = reportService.getMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.isConfirmed()).isTrue();
+            assertThat(result.confirmedAt()).isEqualTo(confirmedAt);
+        }
+
+        @Test
+        @DisplayName("미확정(isConfirmed=false) 회의록은 confirmedAt이 null로 매핑된다")
+        void getMinutes_mapsNullConfirmedAtWhenUnconfirmed() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "요약", TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON,
+                    OPEN_ISSUES_JSON, false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+
+            MinutesDetailDto result = reportService.getMinutes(OWNER_ID, MEETING_ID);
+
+            assertThat(result.isConfirmed()).isFalse();
+            assertThat(result.confirmedAt()).isNull();
         }
     }
 }

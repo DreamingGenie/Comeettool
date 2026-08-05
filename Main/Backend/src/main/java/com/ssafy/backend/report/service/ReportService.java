@@ -3,6 +3,7 @@ package com.ssafy.backend.report.service;
 import org.springframework.data.domain.Pageable;
 
 import com.ssafy.backend.global.common.PageResponse;
+import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
@@ -22,4 +23,7 @@ public interface ReportService {
 
     // REPORTS-04: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 회의록 목록을 페이지 단위로 조회한다.
     PageResponse<MinutesSummaryDto> getMinutesList(Long requesterId, Long spaceId, Pageable pageable);
+
+    // REPORTS-05: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 특정 회의의 회의록 상세를 조회한다.
+    MinutesDetailDto getMinutes(Long requesterId, Long meetingId);
 }

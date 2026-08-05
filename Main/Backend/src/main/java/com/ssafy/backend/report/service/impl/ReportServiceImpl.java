@@ -15,12 +15,15 @@ import com.ssafy.backend.global.storage.FileStorageService;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
 import com.ssafy.backend.member.repository.MemberRepository;
+import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
 import com.ssafy.backend.report.entity.AudioTranscription;
+import com.ssafy.backend.report.entity.MeetingMinutes;
+import com.ssafy.backend.report.export.AiResultKeys;
 import com.ssafy.backend.report.export.MarkdownToPdfConverter;
 import com.ssafy.backend.report.export.TranscriptMarkdownRenderer;
 import com.ssafy.backend.report.repository.AudioTranscriptionRepository;
@@ -33,8 +36,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ReportServiceImpl implements ReportService {
-
-    private static final String TRANSCRIPT_UPLOAD_DIRECTORY = "transcripts";
 
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
@@ -112,11 +113,13 @@ public class ReportServiceImpl implements ReportService {
         String url;
         if (isMd) {
             byte[] content = markdown.getBytes(StandardCharsets.UTF_8);
-            url = fileStorageService.upload(content, "text/markdown", TRANSCRIPT_UPLOAD_DIRECTORY);
+            String key = AiResultKeys.of(meetingId, "transcript", "md");
+            url = fileStorageService.upload(content, "text/markdown", key);
             audioTranscriptionRepository.updateMdUrl(meetingId, url);
         } else {
             byte[] content = markdownToPdfConverter.convert(markdown);
-            url = fileStorageService.upload(content, "application/pdf", TRANSCRIPT_UPLOAD_DIRECTORY);
+            String key = AiResultKeys.of(meetingId, "transcript", "pdf");
+            url = fileStorageService.upload(content, "application/pdf", key);
             audioTranscriptionRepository.updatePdfUrl(meetingId, url);
         }
 
@@ -139,5 +142,33 @@ public class ReportServiceImpl implements ReportService {
         Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<MinutesSummaryDto> page = meetingMinutesRepository.findAllByTeamId(spaceId, pageOnly);
         return PageResponse.from(page);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MinutesDetailDto getMinutes(Long requesterId, Long meetingId) {
+        // 종료(soft delete)된 회의도 회의록 조회 대상이라 활성 여부는 걸지 않는다 — REPORTS-02와 동일한 이유.
+        MeetingRoom meetingRoom = meetingRoomRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 조회는 OWNER 제한 없이 스페이스 멤버 전체(OWNER/MEMBER/GUEST)에게 허용 — REPORTS-02와 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(meetingRoom.getTeamId(), requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        MeetingMinutes minutes = meetingMinutesRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MINUTES_NOT_FOUND));
+
+        return new MinutesDetailDto(
+                minutes.getMeetingId(),
+                minutes.getTitle(),
+                minutes.getSummary(),
+                minutes.getTopics(),
+                minutes.getDecisions(),
+                minutes.getActionItems(),
+                minutes.getOpenIssues(),
+                minutes.getIsConfirmed(),
+                minutes.getConfirmedAt(),
+                minutes.getCreatedAt());
     }
 }
