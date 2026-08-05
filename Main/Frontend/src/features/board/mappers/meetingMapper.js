@@ -102,12 +102,30 @@ export const toMeetingParticipantViewModel = participant => {
     participantRole: participant?.participantRole || '',
     status: isInMeeting ? '회의 참여 중' : '연결 안 됨',
     isHost,
-    isInMeeting,
-    muted: false
+    isInMeeting
   }
 }
 
 export const toMeetingParticipantsViewModel = participants =>
   (Array.isArray(participants) ? participants : []).map(
     toMeetingParticipantViewModel
+  )
+
+export const toMeetingInviteCandidateViewModel = candidate => {
+  const name = candidate?.nickname || candidate?.email || `사용자 ${candidate?.userId ?? ''}`
+
+  return {
+    id: String(candidate?.memberId ?? candidate?.userId ?? ''),
+    memberId: candidate?.memberId ?? null,
+    userId: candidate?.userId ?? null,
+    name,
+    email: candidate?.email || '',
+    avatarText: initials(name),
+    profileImageUrl: candidate?.profileImage || ''
+  }
+}
+
+export const toMeetingInviteCandidatesViewModel = candidates =>
+  (Array.isArray(candidates) ? candidates : []).map(
+    toMeetingInviteCandidateViewModel
   )

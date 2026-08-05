@@ -47,6 +47,7 @@
     v-if="showMeeting"
     :workspaces="boardState.workspaces"
     :team-id="teamId"
+    team-locked
     @close="showMeeting = false"
   />
   <ScheduleModal

@@ -23,19 +23,37 @@
         <button type="button" :disabled="loading" @click="$emit('refresh')">새로고침</button>
       </header>
 
-      <div v-if="loading && !invitations.length" class="notification-state">
+      <div v-if="loading && !hasAnyNotification" class="notification-state">
         초대 알림을 불러오는 중입니다.
       </div>
-      <div v-else-if="error && !invitations.length" class="notification-state error">
+      <div v-else-if="error && !hasAnyNotification" class="notification-state error">
         <p>{{ error }}</p>
         <button type="button" @click="$emit('refresh')">다시 시도</button>
       </div>
-      <div v-else-if="!invitations.length" class="notification-state">
+      <div v-else-if="!hasAnyNotification" class="notification-state">
         <span class="notification-empty-icon">✓</span>
         <b>새로운 초대가 없습니다.</b>
-        <p>팀 스페이스 초대가 도착하면 여기에 표시됩니다.</p>
+        <p>회의 초대나 팀 스페이스 초대가 도착하면 여기에 표시됩니다.</p>
       </div>
       <div v-else class="notification-list">
+        <article
+          v-for="invite in meetingInvites"
+          :key="`meeting-${invite.meetingId}`"
+          class="is-meeting"
+        >
+          <i class="meeting-mark" aria-hidden="true">🔴</i>
+          <div>
+            <b>{{ invite.title }}</b>
+            <p>{{ meetingDescription(invite) }}</p>
+            <time>{{ formatDate(invite.createdAt) }}</time>
+          </div>
+          <span class="notification-actions">
+            <button type="button" @click="joinMeeting(invite.meetingId)">
+              바로 참가하기
+            </button>
+          </span>
+        </article>
+
         <article v-for="invitation in invitations" :key="invitation.invitationId">
           <i>{{ invitation.spaceName?.trim().slice(0, 1) || '팀' }}</i>
           <div>
@@ -72,21 +90,37 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = defineProps({
   invitations: { type: Array, default: () => [] },
+  meetingInvites: { type: Array, default: () => [] },
   loading: Boolean,
   acceptingId: { type: String, default: '' },
   rejectingId: { type: String, default: '' },
   error: { type: String, default: '' }
 })
 
-defineEmits(['refresh', 'accept', 'reject'])
+const emit = defineEmits(['refresh', 'accept', 'reject', 'join'])
 
 const root = ref(null)
 const open = ref(false)
-const count = computed(() => props.invitations.length)
+const count = computed(() => props.invitations.length + props.meetingInvites.length)
 const countLabel = computed(() => (count.value > 99 ? '99+' : String(count.value)))
+const hasAnyNotification = computed(
+  () => Boolean(props.invitations.length || props.meetingInvites.length)
+)
 
 function toggle() {
   open.value = !open.value
+}
+
+function meetingDescription(invite) {
+  const parts = []
+  if (invite.spaceName) parts.push(invite.spaceName)
+  parts.push(`참여자 ${invite.participantCount}명`)
+  return `${parts.join(' · ')} · 진행 중인 회의입니다.`
+}
+
+function joinMeeting(meetingId) {
+  open.value = false
+  emit('join', meetingId)
 }
 
 function isProcessing(invitationId) {
@@ -281,6 +315,20 @@ onBeforeUnmount(() => {
   color: #566fea;
   font-style: normal;
   font-weight: 800;
+}
+
+.notification-list article.is-meeting {
+  background: #fff7f8;
+}
+
+.notification-list article.is-meeting > i.meeting-mark {
+  background: #ffe9ec;
+  font-size: 13px;
+}
+
+.notification-list article.is-meeting .notification-actions button {
+  background: #e5405a;
+  white-space: nowrap;
 }
 
 .notification-list article b {

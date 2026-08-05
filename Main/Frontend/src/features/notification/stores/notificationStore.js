@@ -3,6 +3,7 @@ import { dataSource } from '../../../shared/api/dataSource'
 
 const state = reactive({
   invitations: [],
+  meetingInvites: [],
   loading: false,
   acceptingId: '',
   rejectingId: '',
@@ -25,6 +26,50 @@ export const notificationStore = {
     } finally {
       state.loading = false
     }
+  },
+  async loadMeetingInvites({ spaces = [], excludeMeetingId = '' } = {}) {
+    const spaceList = Array.isArray(spaces) ? spaces.filter(space => space?.id) : []
+    if (!spaceList.length) {
+      state.meetingInvites = []
+      return state.meetingInvites
+    }
+
+    const results = await Promise.all(
+      spaceList.map(async space => {
+        try {
+          const meetings = await dataSource.board.getMeetings(space.id)
+          return (Array.isArray(meetings) ? meetings : []).map(meeting => ({
+            ...meeting,
+            spaceName: space.name || ''
+          }))
+        } catch {
+          return []
+        }
+      })
+    )
+
+    state.meetingInvites = results
+      .flat()
+      .filter(meeting => {
+        if (!meeting?.id) return false
+        if (excludeMeetingId && String(meeting.id) === String(excludeMeetingId)) return false
+        return !meeting.isInMeeting
+      })
+      .map(meeting => ({
+        meetingId: String(meeting.id),
+        teamId: String(meeting.teamId || ''),
+        spaceName: meeting.spaceName,
+        title: meeting.roomTitle || meeting.title || '회의',
+        participantCount: Number(meeting.participantCount ?? 0),
+        createdAt: meeting.createdAt || null
+      }))
+
+    return state.meetingInvites
+  },
+  dismissMeetingInvite(meetingId) {
+    state.meetingInvites = state.meetingInvites.filter(
+      invite => String(invite.meetingId) !== String(meetingId)
+    )
   },
   async acceptInvitation(invitationId) {
     state.acceptingId = invitationId
@@ -58,6 +103,7 @@ export const notificationStore = {
   },
   reset() {
     state.invitations = []
+    state.meetingInvites = []
     state.loading = false
     state.acceptingId = ''
     state.rejectingId = ''

@@ -10,6 +10,7 @@ import {
 } from '../mappers/spaceMapper'
 import {
   toMeetingConnectionViewModel,
+  toMeetingInviteCandidatesViewModel,
   toMeetingListViewModel,
   toMeetingParticipantsViewModel,
   toMeetingViewModel
@@ -67,6 +68,26 @@ export const boardApi = {
       body: JSON.stringify({
         nextHostParticipantId: Number(nextHostParticipantId)
       })
+    }),
+  kickMeetingParticipant: (meetingId, participantId) =>
+    request(`/api/v1/meetings/${meetingId}/participants/${participantId}`, {
+      method: 'DELETE'
+    }),
+  getMeetingInviteCandidates: async (meetingId, keyword = '') => {
+    const params = new URLSearchParams()
+    const searchKeyword = String(keyword || '').trim()
+    if (searchKeyword) params.set('keyword', searchKeyword)
+    const query = params.toString()
+
+    return toMeetingInviteCandidatesViewModel(
+      await request(
+        `/api/v1/meetings/${meetingId}/invite-candidates${query ? `?${query}` : ''}`
+      )
+    )
+  },
+  inviteMeetingMember: (meetingId, userId) =>
+    request(`/api/v1/meetings/${meetingId}/invitations/users/${userId}`, {
+      method: 'POST'
     }),
   getTeamRoles: (spaceId) => request(`/api/v1/spaces/${spaceId}/members/team-roles`),
   updateTeam: async (teamId, data) =>
@@ -149,12 +170,6 @@ export const boardApi = {
       }),
       data
     ),
-  getMessages: (code) => request(`/api/rooms/${code}/messages`),
-  sendMessage: (code, body) =>
-    request(`/api/rooms/${code}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
   sendDirectMessage: (code, userId, body) =>
     request(`/api/rooms/${code}/direct/${userId}/messages`, {
       method: 'POST',
