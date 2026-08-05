@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -94,8 +95,12 @@ class ReportServiceImplTest {
     @Mock
     private FacilitatorReportRepository facilitatorReportRepository;
 
-    @Mock
-    private TranscriptMarkdownRenderer transcriptMarkdownRenderer;
+    // @Mock이 아니라 실제 인스턴스를 감싼 @Spy — REPORTS-11 방어적 렌더링 회귀 테스트는 스텁 없이
+    // 실제 renderFacilitatorReport 구현을 그대로 태워서 "예외 없이 렌더링되는지"를 검증해야 한다.
+    // 다른 테스트들은 전부 명시적으로 given(...)을 stub해서 호출하므로 이 변경의 영향을 받지 않는다.
+    @Spy
+    private TranscriptMarkdownRenderer transcriptMarkdownRenderer =
+            new TranscriptMarkdownRenderer(new com.fasterxml.jackson.databind.ObjectMapper());
 
     @Mock
     private MarkdownToPdfConverter markdownToPdfConverter;
@@ -1744,6 +1749,195 @@ class ReportServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.MINUTES_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-11 퍼실리테이터 리포트 내보내기")
+    class ExportFacilitatorReport {
+
+        private static final String PARTICIPATION_STATS_JSON =
+                "[{\"speaker\":\"ssong123\",\"talkTimeRatio\":0.3}]";
+        private static final String QUALITY_EVALUATION_JSON = "{\"score\":4,\"criteria\":[]}";
+        private static final String STRENGTHS_JSON = "[{\"point\":\"안건별 시간 배분이 적절했음\"}]";
+        private static final String IMPROVEMENTS_JSON = "[{\"point\":\"소극적인 참가자 발언 유도 필요\"}]";
+        private static final String DECISION_PROCESS_CHECKS_JSON =
+                "[{\"check\":\"결정사항에 대한 합의 절차 확인됨\"}]";
+        private static final String UNRESOLVED_ISSUES_EVALUATION_JSON =
+                "[{\"issue\":\"S3 설정 이슈는 다음 회의로 이월\"}]";
+        private static final String NEXT_MEETING_SUGGESTIONS_JSON =
+                "[{\"suggestion\":\"다음 회의는 30분 내로 단축 권장\"}]";
+        private static final String RENDERED_MARKDOWN = "# 8월 4주차 회의 퍼실리테이션 리포트\n\n";
+
+        private FacilitatorReport reportOf(
+                String participationStats, String qualityEvaluation, String strengths, String improvements,
+                String decisionProcessChecks, String unresolvedIssuesEvaluation, String nextMeetingSuggestions) {
+            return facilitatorReportOf(
+                    MEETING_ID, "8월 4주차 회의 퍼실리테이션 리포트", "SPRINT_REVIEW",
+                    "전반적으로 안건 진행이 원활했습니다.", "일부 참가자의 발언 비중이 낮았습니다.",
+                    participationStats, qualityEvaluation, strengths, improvements,
+                    decisionProcessChecks, unresolvedIssuesEvaluation, nextMeetingSuggestions,
+                    OffsetDateTime.parse("2026-08-04T05:15:00Z"));
+        }
+
+        private FacilitatorReport standardReport() {
+            return reportOf(
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON, STRENGTHS_JSON, IMPROVEMENTS_JSON,
+                    DECISION_PROCESS_CHECKS_JSON, UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON);
+        }
+
+        @Test
+        @DisplayName("md 캐시가 없으면 가정한 스키마 형태를 렌더링·업로드 후 mdUrl을 갱신하고 새 URL을 반환한다")
+        void exportFacilitatorReport_rendersAndUploadsWhenMdCacheMissing() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = standardReport();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+            given(transcriptMarkdownRenderer.renderFacilitatorReport(
+                    report.getTitle(), report.getMeetingType(), report.getOverallReview(),
+                    report.getParticipationComment(), report.getParticipationStats(),
+                    report.getQualityEvaluation(), report.getStrengths(), report.getImprovements(),
+                    report.getDecisionProcessChecks(), report.getUnresolvedIssuesEvaluation(),
+                    report.getNextMeetingSuggestions()))
+                    .willReturn(RENDERED_MARKDOWN);
+
+            ResponseExportDto result =
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            String expectedUrl = BASE_URL + "/files/ai-results/34/facilitator.md";
+            assertThat(result.meetingId()).isEqualTo(MEETING_ID);
+            assertThat(result.format()).isEqualTo("md");
+            assertThat(result.url()).isEqualTo(expectedUrl);
+
+            ArgumentCaptor<StorageUploadRequest> requestCaptor = ArgumentCaptor.forClass(StorageUploadRequest.class);
+            verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
+            assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/facilitator.md");
+            assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
+            verify(facilitatorReportRepository).updateMdUrl(MEETING_ID, expectedUrl);
+            verify(markdownToPdfConverter, never()).convert(any());
+            verify(facilitatorReportRepository, never()).updatePdfUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("strengths가 객체 배열이 아니라 문자열 배열로 와도(가정과 다른 모양) 예외 없이 렌더링된다")
+        void exportFacilitatorReport_rendersWhenStrengthsAreStringArray() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = reportOf(
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON,
+                    "[\"안건별 시간 배분이 적절했음\", \"논의가 산으로 갈 뻔했지만 잘 정리함\"]", // strengths: 문자열 배열
+                    IMPROVEMENTS_JSON, DECISION_PROCESS_CHECKS_JSON,
+                    UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+            // transcriptMarkdownRenderer는 @Spy라 별도 stub 없이 실제 renderFacilitatorReport가 호출된다.
+
+            ResponseExportDto result =
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.url()).isNotBlank();
+            verify(facilitatorReportRepository).updateMdUrl(eq(MEETING_ID), any());
+        }
+
+        @Test
+        @DisplayName("improvements가 알려지지 않은 키 조합으로 와도 예외 없이 렌더링된다")
+        void exportFacilitatorReport_rendersWhenImprovementsHaveUnknownKeys() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = reportOf(
+                    PARTICIPATION_STATS_JSON, QUALITY_EVALUATION_JSON, STRENGTHS_JSON,
+                    "[{\"foo\":\"bar\",\"baz\":123}]", // improvements: 알려지지 않은 키 조합
+                    DECISION_PROCESS_CHECKS_JSON, UNRESOLVED_ISSUES_EVALUATION_JSON, NEXT_MEETING_SUGGESTIONS_JSON);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            ResponseExportDto result =
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.url()).isNotBlank();
+            verify(facilitatorReportRepository).updateMdUrl(eq(MEETING_ID), any());
+        }
+
+        @Test
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        void exportFacilitatorReport_returnsCachedMdUrlWithoutUploading() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = standardReport();
+            ReflectionTestUtils.setField(report, "mdUrl", "http://localhost:8080/files/cached.md");
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            ResponseExportDto result =
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
+
+            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.md");
+            verify(objectStorageService, never()).upload(any(), any());
+            verify(markdownToPdfConverter, never()).convert(any());
+            verify(facilitatorReportRepository, never()).updateMdUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("format이 md/pdf가 아니면 VALIDATION_FAILED 예외가 발생하고 업로드를 시도하지 않는다")
+        void exportFacilitatorReport_throwsWhenFormatIsInvalid() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            FacilitatorReport report = standardReport();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.of(report));
+
+            assertThatThrownBy(() ->
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("docx")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verify(objectStorageService, never()).upload(any(), any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·리포트 조회를 시도하지 않는다")
+        void exportFacilitatorReport_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 회의가 속한 스페이스의 멤버가 아니면 SPACE_ACCESS_DENIED 예외가 발생한다")
+        void exportFacilitatorReport_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(false);
+
+            assertThatThrownBy(() ->
+                    reportService.exportFacilitatorReport(nonMemberId, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_ACCESS_DENIED);
+            verifyNoInteractions(facilitatorReportRepository);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 리포트가 없으면 FACILITATOR_REPORT_NOT_FOUND 예외가 발생한다")
+        void exportFacilitatorReport_throwsWhenReportNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.existsByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(true);
+            given(facilitatorReportRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.FACILITATOR_REPORT_NOT_FOUND);
         }
     }
 }

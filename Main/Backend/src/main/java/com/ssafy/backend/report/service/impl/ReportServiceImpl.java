@@ -414,4 +414,62 @@ public class ReportServiceImpl implements ReportService {
                 report.getNextMeetingSuggestions(),
                 report.getCreatedAt());
     }
+
+    @Override
+    @Transactional
+    public ResponseExportDto exportFacilitatorReport(Long requesterId, Long meetingId, RequestExportDto request) {
+        MeetingRoom meetingRoom = meetingRoomRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+        // 내보내기는 조회(REPORTS-09/10)와 동일하게 OWNER/MEMBER/GUEST 전부 허용 — REPORTS-03/08과 동일한 인가 검사.
+        if (!memberRepository.existsByTeamIdAndUserId(meetingRoom.getTeamId(), requesterId)) {
+            throw new CustomException(ErrorCode.SPACE_ACCESS_DENIED);
+        }
+
+        FacilitatorReport report = facilitatorReportRepository.findById(meetingId)
+                .orElseThrow(() -> new CustomException(ErrorCode.FACILITATOR_REPORT_NOT_FOUND));
+
+        // 퍼실리테이터 리포트는 회의록과 달리 확정 개념이 없다 — 존재하면 바로 내보내기 가능.
+        String format = request.format();
+        if (!"md".equals(format) && !"pdf".equals(format)) {
+            throw new CustomException(ErrorCode.VALIDATION_FAILED);
+        }
+
+        boolean isMd = "md".equals(format);
+        String cachedUrl = isMd ? report.getMdUrl() : report.getPdfUrl();
+        if (cachedUrl != null) {
+            return new ResponseExportDto(meetingId, format, cachedUrl);
+        }
+
+        String markdown = transcriptMarkdownRenderer.renderFacilitatorReport(
+                report.getTitle(), report.getMeetingType(), report.getOverallReview(),
+                report.getParticipationComment(), report.getParticipationStats(), report.getQualityEvaluation(),
+                report.getStrengths(), report.getImprovements(), report.getDecisionProcessChecks(),
+                report.getUnresolvedIssuesEvaluation(), report.getNextMeetingSuggestions());
+
+        byte[] content;
+        String contentType;
+        StorageObjectKey objectKey;
+        if (isMd) {
+            content = markdown.getBytes(StandardCharsets.UTF_8);
+            contentType = "text/markdown";
+            objectKey = AiResultKeys.of(meetingId, "facilitator", "md");
+        } else {
+            content = markdownToPdfConverter.convert(markdown);
+            contentType = "application/pdf";
+            objectKey = AiResultKeys.of(meetingId, "facilitator", "pdf");
+        }
+
+        StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
+        objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
+        String url = publicBaseUrl + "/files/" + objectKey.value();
+
+        if (isMd) {
+            facilitatorReportRepository.updateMdUrl(meetingId, url);
+        } else {
+            facilitatorReportRepository.updatePdfUrl(meetingId, url);
+        }
+
+        return new ResponseExportDto(meetingId, format, url);
+    }
 }

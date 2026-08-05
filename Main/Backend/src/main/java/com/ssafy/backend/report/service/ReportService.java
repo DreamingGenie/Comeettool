@@ -45,4 +45,7 @@ public interface ReportService {
 
     // REPORTS-10: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 특정 회의의 퍼실리테이터 리포트 상세를 조회한다.
     FacilitatorReportDetailDto getFacilitatorReport(Long requesterId, Long meetingId);
+
+    // REPORTS-11: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 퍼실리테이터 리포트를 md/pdf로 내보낸다(캐시 우선).
+    ResponseExportDto exportFacilitatorReport(Long requesterId, Long meetingId, RequestExportDto request);
 }

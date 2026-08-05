@@ -134,4 +134,15 @@ public class ReportController {
         FacilitatorReportDetailDto response = reportService.getFacilitatorReport(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("퍼실리테이터 리포트 조회 성공", response));
     }
+
+    // REPORTS-11: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 퍼실리테이터 리포트를 md/pdf로 내보낸다(캐시 우선).
+    @PostMapping("/api/v1/meetings/{meetingId}/reports/facilitator/export")
+    public ResponseEntity<ApiResponse<ResponseExportDto>> exportFacilitatorReport(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestBody RequestExportDto request) {
+        ResponseExportDto response =
+                reportService.exportFacilitatorReport(Long.parseLong(userId), meetingId, request);
+        return ResponseEntity.ok(ApiResponse.success("퍼실리테이터 리포트 내보내기 성공", response));
+    }
 }

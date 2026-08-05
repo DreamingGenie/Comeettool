@@ -3,6 +3,7 @@ package com.ssafy.backend.report.repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,4 +27,17 @@ public interface FacilitatorReportRepository extends JpaRepository<FacilitatorRe
             order by fr.createdAt desc
             """)
     Page<FacilitatorReportSummaryDto> findAllByTeamId(@Param("teamId") Long teamId, Pageable pageable);
+
+    /**
+     * REPORTS-11: mdUrl/pdfUrl은 Main Backend가 소유하는 캐시 컬럼이다.
+     * AudioTranscriptionRepository.updateMdUrl/updatePdfUrl(REPORTS-03)·MeetingMinutesRepository의
+     * 것(REPORTS-08)과 동일한 패턴.
+     */
+    @Modifying
+    @Query("UPDATE FacilitatorReport f SET f.mdUrl = :url WHERE f.meetingId = :meetingId")
+    void updateMdUrl(@Param("meetingId") Long meetingId, @Param("url") String url);
+
+    @Modifying
+    @Query("UPDATE FacilitatorReport f SET f.pdfUrl = :url WHERE f.meetingId = :meetingId")
+    void updatePdfUrl(@Param("meetingId") Long meetingId, @Param("url") String url);
 }
