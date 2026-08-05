@@ -6,6 +6,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,7 @@ import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -79,5 +81,15 @@ public class ReportController {
             @PathVariable Long meetingId) {
         MinutesDetailDto response = reportService.getMinutes(Long.parseLong(userId), meetingId);
         return ResponseEntity.ok(ApiResponse.success("회의록 조회 성공", response));
+    }
+
+    // REPORTS-06: 스페이스 OWNER/MEMBER(GUEST 제외)가 특정 회의의 회의록을 부분 수정한다(확정 전만 가능).
+    @PatchMapping("/api/v1/meetings/{meetingId}/reports/minutes")
+    public ResponseEntity<ApiResponse<MinutesDetailDto>> updateMinutes(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestBody RequestUpdateMinutesDto request) {
+        MinutesDetailDto response = reportService.updateMinutes(Long.parseLong(userId), meetingId, request);
+        return ResponseEntity.ok(ApiResponse.success("회의록 수정 성공", response));
     }
 }

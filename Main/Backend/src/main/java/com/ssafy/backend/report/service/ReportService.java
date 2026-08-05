@@ -6,6 +6,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -26,4 +27,7 @@ public interface ReportService {
 
     // REPORTS-05: 스페이스 멤버(OWNER/MEMBER/GUEST 전부)가 특정 회의의 회의록 상세를 조회한다.
     MinutesDetailDto getMinutes(Long requesterId, Long meetingId);
+
+    // REPORTS-06: 스페이스 OWNER/MEMBER(GUEST 제외)가 특정 회의의 회의록을 부분 수정한다. 확정된 회의록은 수정할 수 없다.
+    MinutesDetailDto updateMinutes(Long requesterId, Long meetingId, RequestUpdateMinutesDto request);
 }

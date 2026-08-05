@@ -29,6 +29,7 @@ import com.ssafy.backend.global.exception.GlobalExceptionHandler;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -42,6 +43,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -461,6 +463,108 @@ class ReportControllerTest {
             mockMvc.perform(get("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-06 PATCH /api/v1/meetings/{meetingId}/reports/minutes")
+    class UpdateMinutes {
+
+        private static final Long MEETING_ID = 34L;
+
+        @Test
+        @DisplayName("정상 수정이면 200 SUCCESS, message='회의록 수정 성공', data 필드를 반환한다")
+        void updateMinutes_returns200() throws Exception {
+            MinutesDetailDto response = new MinutesDetailDto(
+                    MEETING_ID, "새 제목", "기존 요약",
+                    "[{\"topic\":\"REPORTS API 진행 상황 공유\"}]",
+                    "[{\"decision\":\"REPORTS-01~04는 이번 스프린트 내 완료\",\"owner\":\"ssong\"}]",
+                    "[{\"task\":\"REPORTS-05 이후 스펙 정리\",\"assignee\":\"ssong\",\"dueDate\":\"2026-08-06\"}]",
+                    "[{\"issue\":\"STT 파이프라인 세그먼트 병합 로직 미구현\"}]",
+                    false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willReturn(response);
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"새 제목\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.message").value("회의록 수정 성공"))
+                    .andExpect(jsonPath("$.data.meetingId").value(MEETING_ID))
+                    .andExpect(jsonPath("$.data.title").value("새 제목"))
+                    .andExpect(jsonPath("$.data.summary").value("기존 요약"))
+                    // topics가 문자열로 다시 이스케이프되지 않고 실제 JSON 배열로 파싱되는지 확인(GET 응답과 동일한 직렬화 보장).
+                    .andExpect(jsonPath("$.data.topics").isArray())
+                    .andExpect(jsonPath("$.data.topics[0].topic").value("REPORTS API 진행 상황 공유"))
+                    .andExpect(jsonPath("$.data.isConfirmed").value(false));
+
+            verify(reportService).updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class));
+        }
+
+        @Test
+        @DisplayName("title에 빈 문자열을 전달하면 400 VALIDATION_FAILED를 반환한다")
+        void updateMinutes_returns400WhenTitleIsBlank() throws Exception {
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willThrow(new CustomException(ErrorCode.VALIDATION_FAILED));
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+
+        @Test
+        @DisplayName("GUEST 등 수정 권한이 없는 요청자면 403 MINUTES_EDIT_DENIED를 반환한다")
+        void updateMinutes_returns403WhenEditDenied() throws Exception {
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MINUTES_EDIT_DENIED));
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"새 제목\"}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("MINUTES_EDIT_DENIED"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 404 MEETING_NOT_FOUND를 반환한다")
+        void updateMinutes_returns404WhenMeetingNotFound() throws Exception {
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MEETING_NOT_FOUND));
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"새 제목\"}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MEETING_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 404 MINUTES_NOT_FOUND를 반환한다")
+        void updateMinutes_returns404WhenMinutesNotFound() throws Exception {
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MINUTES_NOT_FOUND));
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"새 제목\"}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("MINUTES_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("이미 확정된 회의록이면 409 MINUTES_ALREADY_CONFIRMED를 반환한다")
+        void updateMinutes_returns409WhenAlreadyConfirmed() throws Exception {
+            given(reportService.updateMinutes(eq(1L), eq(MEETING_ID), any(RequestUpdateMinutesDto.class)))
+                    .willThrow(new CustomException(ErrorCode.MINUTES_ALREADY_CONFIRMED));
+
+            mockMvc.perform(patch("/api/v1/meetings/{meetingId}/reports/minutes", MEETING_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"새 제목\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("MINUTES_ALREADY_CONFIRMED"));
         }
     }
 }

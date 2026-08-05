@@ -87,6 +87,10 @@ public enum ErrorCode {
 
     // REPORTS-05: 회의는 존재하지만 회의록이 아직 생성되지 않은 상태. 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
     MINUTES_NOT_FOUND(HttpStatus.NOT_FOUND, "MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
+    // REPORTS-06: 회의록 수정은 OWNER/MEMBER만 허용 — GUEST이거나 스페이스 멤버가 아니면 이 코드로 응답.
+    MINUTES_EDIT_DENIED(HttpStatus.FORBIDDEN, "MINUTES_EDIT_DENIED", "회의록을 수정할 권한이 없습니다."),
+    // REPORTS-06: 확정(isConfirmed=true)된 회의록은 필드 값과 무관하게 수정을 즉시 거부한다.
+    MINUTES_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "MINUTES_ALREADY_CONFIRMED", "이미 확정된 회의록은 수정할 수 없습니다."),
 
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),

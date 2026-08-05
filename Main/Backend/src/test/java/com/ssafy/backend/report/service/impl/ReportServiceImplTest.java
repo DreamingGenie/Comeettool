@@ -21,6 +21,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
@@ -28,10 +31,13 @@ import com.ssafy.backend.global.storage.ObjectStorageService;
 import com.ssafy.backend.global.storage.StorageUploadRequest;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
+import com.ssafy.backend.member.entity.Member;
+import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.report.dto.MinutesDetailDto;
 import com.ssafy.backend.report.dto.MinutesSummaryDto;
 import com.ssafy.backend.report.dto.RequestExportDto;
+import com.ssafy.backend.report.dto.RequestUpdateMinutesDto;
 import com.ssafy.backend.report.dto.ResponseExportDto;
 import com.ssafy.backend.report.dto.TranscriptDetailDto;
 import com.ssafy.backend.report.dto.TranscriptSummaryDto;
@@ -785,6 +791,276 @@ class ReportServiceImplTest {
 
             assertThat(result.isConfirmed()).isFalse();
             assertThat(result.confirmedAt()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("REPORTS-06 회의록 부분 수정")
+    class UpdateMinutes {
+
+        private static final String TOPICS_JSON = "[{\"topic\":\"REPORTS API 진행 상황 공유\"}]";
+        private static final String DECISIONS_JSON =
+                "[{\"decision\":\"REPORTS-01~04는 이번 스프린트 내 완료\",\"owner\":\"ssong\"}]";
+        private static final String ACTION_ITEMS_JSON =
+                "[{\"task\":\"REPORTS-05 이후 스펙 정리\",\"assignee\":\"ssong\",\"dueDate\":\"2026-08-06\"}]";
+        private static final String OPEN_ISSUES_JSON = "[{\"issue\":\"STT 파이프라인 세그먼트 병합 로직 미구현\"}]";
+        private static final String NEW_TOPICS_JSON = "[{\"topic\":\"새 안건\"}]";
+
+        private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+        private static JsonNode json(String raw) {
+            return OBJECT_MAPPER.readTree(raw);
+        }
+
+        private MeetingMinutes existingMinutes() {
+            return minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "기존 요약",
+                    TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON, OPEN_ISSUES_JSON,
+                    false, null, OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+        }
+
+        private Member ownerMember() {
+            return Member.owner(OWNER_ID, SPACE_ID, "닉네임");
+        }
+
+        private Member memberRoleMember(Long userId) {
+            return Member.invited(userId, SPACE_ID, "닉네임");
+        }
+
+        private Member guestMember(Long userId) {
+            Member guest = Member.invited(userId, SPACE_ID, "닉네임");
+            ReflectionTestUtils.setField(guest, "authority", MemberAuthority.GUEST);
+            return guest;
+        }
+
+        @Test
+        @DisplayName("title만 수정하면 title만 갱신되고 나머지 필드는 기존 값을 유지한다")
+        void updateMinutes_updatesOnlyTitle() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            MinutesDetailDto result = reportService.updateMinutes(OWNER_ID, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("새 제목");
+            assertThat(result.summary()).isEqualTo("기존 요약");
+            assertThat(result.topics()).isEqualTo(TOPICS_JSON);
+            assertThat(result.decisions()).isEqualTo(DECISIONS_JSON);
+            assertThat(result.actionItems()).isEqualTo(ACTION_ITEMS_JSON);
+            assertThat(result.openIssues()).isEqualTo(OPEN_ISSUES_JSON);
+            verify(meetingMinutesRepository).updateTitle(MEETING_ID, "새 제목");
+            verify(meetingMinutesRepository, never()).updateSummary(any(), any());
+            verify(meetingMinutesRepository, never()).updateTopics(any(), any());
+            verify(meetingMinutesRepository, never()).updateDecisions(any(), any());
+            verify(meetingMinutesRepository, never()).updateActionItems(any(), any());
+            verify(meetingMinutesRepository, never()).updateOpenIssues(any(), any());
+        }
+
+        @Test
+        @DisplayName("topics만 수정하면 기존 배열이 새 배열로 완전히 교체된다")
+        void updateMinutes_updatesOnlyTopics() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request =
+                    new RequestUpdateMinutesDto(null, null, json(NEW_TOPICS_JSON), null, null, null);
+
+            MinutesDetailDto result = reportService.updateMinutes(OWNER_ID, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("스프린트 리뷰 회의록");
+            assertThat(result.topics()).isEqualTo(NEW_TOPICS_JSON);
+            assertThat(result.decisions()).isEqualTo(DECISIONS_JSON);
+            verify(meetingMinutesRepository).updateTopics(MEETING_ID, NEW_TOPICS_JSON);
+            verify(meetingMinutesRepository, never()).updateTitle(any(), any());
+            verify(meetingMinutesRepository, never()).updateDecisions(any(), any());
+        }
+
+        @Test
+        @DisplayName("여러 필드를 동시에 보내면 그 필드들만 모두 갱신된다(빈 배열도 유효한 값으로 반영)")
+        void updateMinutes_updatesMultipleFields() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto(
+                    "새 제목", "새 요약", json(NEW_TOPICS_JSON), null, null, json("[]"));
+
+            MinutesDetailDto result = reportService.updateMinutes(OWNER_ID, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("새 제목");
+            assertThat(result.summary()).isEqualTo("새 요약");
+            assertThat(result.topics()).isEqualTo(NEW_TOPICS_JSON);
+            assertThat(result.decisions()).isEqualTo(DECISIONS_JSON);
+            assertThat(result.actionItems()).isEqualTo(ACTION_ITEMS_JSON);
+            assertThat(result.openIssues()).isEqualTo("[]");
+            verify(meetingMinutesRepository).updateTitle(MEETING_ID, "새 제목");
+            verify(meetingMinutesRepository).updateSummary(MEETING_ID, "새 요약");
+            verify(meetingMinutesRepository).updateTopics(MEETING_ID, NEW_TOPICS_JSON);
+            verify(meetingMinutesRepository).updateOpenIssues(MEETING_ID, "[]");
+            verify(meetingMinutesRepository, never()).updateDecisions(any(), any());
+            verify(meetingMinutesRepository, never()).updateActionItems(any(), any());
+        }
+
+        @Test
+        @DisplayName("아무 필드도 보내지 않으면 DB 쓰기 없이 현재 값 그대로 반환한다")
+        void updateMinutes_noFieldsSkipsWrite() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto(null, null, null, null, null, null);
+
+            MinutesDetailDto result = reportService.updateMinutes(OWNER_ID, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("스프린트 리뷰 회의록");
+            assertThat(result.summary()).isEqualTo("기존 요약");
+            assertThat(result.topics()).isEqualTo(TOPICS_JSON);
+            verify(meetingMinutesRepository, never()).updateTitle(any(), any());
+            verify(meetingMinutesRepository, never()).updateSummary(any(), any());
+            verify(meetingMinutesRepository, never()).updateTopics(any(), any());
+            verify(meetingMinutesRepository, never()).updateDecisions(any(), any());
+            verify(meetingMinutesRepository, never()).updateActionItems(any(), any());
+            verify(meetingMinutesRepository, never()).updateOpenIssues(any(), any());
+        }
+
+        @Test
+        @DisplayName("title에 빈 문자열을 전달하면 VALIDATION_FAILED 예외가 발생하고 아무 필드도 갱신되지 않는다")
+        void updateMinutes_throwsWhenTitleIsBlank() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("   ", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(OWNER_ID, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED);
+            verify(meetingMinutesRepository, never()).updateTitle(any(), any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 회의면 MEETING_NOT_FOUND 예외가 발생하고 멤버·회의록 조회를 시도하지 않는다")
+        void updateMinutes_throwsWhenMeetingNotFound() {
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(OWNER_ID, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MEETING_NOT_FOUND);
+            verifyNoInteractions(memberRepository);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 GUEST면 MINUTES_EDIT_DENIED 예외가 발생하고 회의록 조회를 시도하지 않는다")
+        void updateMinutes_throwsWhenRequesterIsGuest() {
+            Long guestUserId = 77L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, guestUserId))
+                    .willReturn(Optional.of(guestMember(guestUserId)));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(guestUserId, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_EDIT_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("요청자가 스페이스 멤버가 아니면 MINUTES_EDIT_DENIED 예외가 발생한다")
+        void updateMinutes_throwsWhenRequesterIsNotMember() {
+            Long nonMemberId = 99L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, nonMemberId)).willReturn(Optional.empty());
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(nonMemberId, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_EDIT_DENIED);
+            verifyNoInteractions(meetingMinutesRepository);
+        }
+
+        @Test
+        @DisplayName("회의는 있지만 회의록이 없으면 MINUTES_NOT_FOUND 예외가 발생한다")
+        void updateMinutes_throwsWhenMinutesNotFound() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.empty());
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(OWNER_ID, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("OWNER는 정상적으로 회의록을 수정할 수 있다")
+        void updateMinutes_allowsOwner() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            MinutesDetailDto result = reportService.updateMinutes(OWNER_ID, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("새 제목");
+        }
+
+        @Test
+        @DisplayName("MEMBER는 정상적으로 회의록을 수정할 수 있다")
+        void updateMinutes_allowsMember() {
+            Long memberUserId = 55L;
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes minutes = existingMinutes();
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, memberUserId))
+                    .willReturn(Optional.of(memberRoleMember(memberUserId)));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(minutes));
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("새 제목", null, null, null, null, null);
+
+            MinutesDetailDto result = reportService.updateMinutes(memberUserId, MEETING_ID, request);
+
+            assertThat(result.title()).isEqualTo("새 제목");
+        }
+
+        @Test
+        @DisplayName("확정된 회의록은 필드 값과 무관하게 MINUTES_ALREADY_CONFIRMED 예외로 즉시 거부된다")
+        void updateMinutes_throwsWhenAlreadyConfirmed() {
+            MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
+            MeetingMinutes confirmedMinutes = minutesOf(
+                    MEETING_ID, "스프린트 리뷰 회의록", "기존 요약",
+                    TOPICS_JSON, DECISIONS_JSON, ACTION_ITEMS_JSON, OPEN_ISSUES_JSON,
+                    true, OffsetDateTime.parse("2026-08-05T02:00:00Z"),
+                    OffsetDateTime.parse("2026-08-04T05:10:00Z"));
+            given(meetingRoomRepository.findById(MEETING_ID)).willReturn(Optional.of(meetingRoom));
+            given(memberRepository.findByTeamIdAndUserId(SPACE_ID, OWNER_ID)).willReturn(Optional.of(ownerMember()));
+            given(meetingMinutesRepository.findById(MEETING_ID)).willReturn(Optional.of(confirmedMinutes));
+            // 빈 문자열(원래대로면 VALIDATION_FAILED 대상)이어도 확정 체크가 먼저 걸려야 한다.
+            RequestUpdateMinutesDto request = new RequestUpdateMinutesDto("", null, null, null, null, null);
+
+            assertThatThrownBy(() -> reportService.updateMinutes(OWNER_ID, MEETING_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.MINUTES_ALREADY_CONFIRMED);
+            verify(meetingMinutesRepository, never()).updateTitle(any(), any());
         }
     }
 }
