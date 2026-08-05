@@ -126,7 +126,17 @@ check_service_contract() {
       and (.services | length) == 1
       and .services[0].status == "ACTIVE"
       and .services[0].desiredCount >= 1
-      and .services[0].launchType == "FARGATE"
+      and (
+        .services[0].launchType == "FARGATE"
+        or (
+          (.services[0].launchType // "") == ""
+          and (.services[0].capacityProviderStrategy | length) > 0
+          and all(
+            .services[0].capacityProviderStrategy[];
+            .capacityProvider == "FARGATE"
+          )
+        )
+      )
       and .services[0].deploymentController.type == "ECS"
       and .services[0].enableExecuteCommand == false
       and .services[0].networkConfiguration.awsvpcConfiguration.assignPublicIp == "DISABLED"
@@ -255,7 +265,10 @@ register_task_revision() {
           inferenceAccelerators: $source.taskDefinition.inferenceAccelerators,
           ephemeralStorage: $source.taskDefinition.ephemeralStorage,
           runtimePlatform: $source.taskDefinition.runtimePlatform,
-          tags: ($source.tags // [])
+          tags: (
+            ($source.tags // [])
+            | if length == 0 then null else . end
+          )
         }
       | with_entries(select(.value != null))
     ' "$register_source_file" >"$register_input_file" 2>/dev/null \
@@ -377,25 +390,38 @@ verify_service_rollout() {
   verify_service="$1"
   verify_task_definition="$2"
   verify_output="$3"
+  verify_attempt=1
+  verify_max_attempts=12
 
-  aws ecs describe-services \
-    --cluster "$DEPLOY_CLUSTER_NAME" \
-    --services "$verify_service" \
-    >"$verify_output" 2>/dev/null \
-    || fail_release "an ECS rollout result could not be read."
-  jq -e \
-    --arg task "$verify_task_definition" \
-    '(.failures | length) == 0
-      and (.services | length) == 1
-      and .services[0].desiredCount == .services[0].runningCount
-      and .services[0].pendingCount == 0
-      and ([.services[0].deployments[]
-        | select(.status == "PRIMARY"
-          and .taskDefinition == $task
-          and .rolloutState == "COMPLETED")]
-        | length) == 1' \
-    "$verify_output" >/dev/null 2>&1 \
-    || fail_release "an ECS service rolled back or failed its health checks."
+  while [ "$verify_attempt" -le "$verify_max_attempts" ]; do
+    aws ecs describe-services \
+      --cluster "$DEPLOY_CLUSTER_NAME" \
+      --services "$verify_service" \
+      >"$verify_output" 2>/dev/null \
+      || fail_release "an ECS rollout result could not be read."
+
+    if jq -e \
+      --arg task "$verify_task_definition" \
+      '(.failures | length) == 0
+        and (.services | length) == 1
+        and .services[0].desiredCount == .services[0].runningCount
+        and .services[0].pendingCount == 0
+        and ([.services[0].deployments[]
+          | select(.status == "PRIMARY"
+            and .taskDefinition == $task
+            and .rolloutState == "COMPLETED")]
+          | length) == 1' \
+      "$verify_output" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if [ "$verify_attempt" -lt "$verify_max_attempts" ]; then
+      sleep 5
+    fi
+    verify_attempt=$((verify_attempt + 1))
+  done
+
+  fail_release "an ECS service rolled back or failed its health checks."
 }
 
 verify_service_rollout \
@@ -494,15 +520,20 @@ jq -e '.status == "ok" and .database == "postgresql"' \
 websocket_key="$(head -c 16 /dev/urandom | base64 | tr -d '\n')"
 [ -n "$websocket_key" ] \
   || fail_release "a WebSocket handshake key could not be generated."
-curl --silent --show-error --http1.1 \
-  --connect-timeout 10 --max-time 5 \
-  --dump-header "$release_work_dir/websocket-headers.txt" \
-  --output /dev/null \
-  --header 'Connection: Upgrade' \
-  --header 'Upgrade: websocket' \
-  --header 'Sec-WebSocket-Version: 13' \
-  --header "Sec-WebSocket-Key: ${websocket_key}" \
-  "$DEPLOY_YJS_WEBSOCKET_URL" 2>/dev/null || true
+websocket_http_code="$(
+  curl --silent --show-error --http1.1 \
+    --connect-timeout 10 --max-time 5 \
+    --dump-header "$release_work_dir/websocket-headers.txt" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --header 'Connection: Upgrade' \
+    --header 'Upgrade: websocket' \
+    --header 'Sec-WebSocket-Version: 13' \
+    --header "Sec-WebSocket-Key: ${websocket_key}" \
+    "$yjs_https_url" 2>/dev/null || true
+)"
+[ "$websocket_http_code" = "101" ] \
+  || fail_release "the Yjs WebSocket endpoint returned HTTP ${websocket_http_code:-000} instead of 101."
 grep -Eq '^HTTP/[0-9.]+ 101([[:space:]]|$)' "$release_work_dir/websocket-headers.txt" \
   || fail_release "the Yjs WebSocket endpoint did not upgrade to HTTP 101."
 
@@ -538,7 +569,7 @@ blocked_cors_code="$(
 unset \
   aws_account_id ecr_registry backend_image yjs_image migration_image \
   backend_task_definition yjs_task_definition migration_task_definition \
-  migration_task invalidation_id websocket_key
+  migration_task invalidation_id websocket_key websocket_http_code
 
 echo "Production smoke checks passed without printing deployment endpoints or identifiers."
 echo "Production release completed successfully."
