@@ -82,6 +82,21 @@ public enum ErrorCode {
     SCHEDULE_NOT_FOUND(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "일정을 찾을 수 없습니다."),
     SCHEDULE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SCHEDULE_ACCESS_DENIED", "해당 일정을 수정·삭제할 권한이 없습니다."),
 
+    // REPORTS-02: 회의는 존재하지만 전사가 아직 없는 상태(처리 중이거나 실패). 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
+    TRANSCRIPT_NOT_FOUND(HttpStatus.NOT_FOUND, "TRANSCRIPT_NOT_FOUND", "회의 전사를 찾을 수 없습니다."),
+
+    // REPORTS-05: 회의는 존재하지만 회의록이 아직 생성되지 않은 상태. 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
+    MINUTES_NOT_FOUND(HttpStatus.NOT_FOUND, "MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
+    // REPORTS-06: 회의록 수정은 OWNER/MEMBER만 허용 — GUEST이거나 스페이스 멤버가 아니면 이 코드로 응답.
+    MINUTES_EDIT_DENIED(HttpStatus.FORBIDDEN, "MINUTES_EDIT_DENIED", "회의록을 수정할 권한이 없습니다."),
+    // REPORTS-06: 확정(isConfirmed=true)된 회의록은 필드 값과 무관하게 수정을 즉시 거부한다.
+    MINUTES_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "MINUTES_ALREADY_CONFIRMED", "이미 확정된 회의록은 수정할 수 없습니다."),
+    // REPORTS-08: 확정 전(isConfirmed=false) 회의록은 내보내기를 즉시 거부한다.
+    MINUTES_NOT_CONFIRMED(HttpStatus.CONFLICT, "MINUTES_NOT_CONFIRMED", "확정되지 않은 회의록은 내보낼 수 없습니다."),
+
+    // REPORTS-10: 회의는 존재하지만 퍼실리테이터 리포트가 아직 생성되지 않은 상태. 회의 자체 부재는 기존 MEETING_NOT_FOUND로 응답.
+    FACILITATOR_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "FACILITATOR_REPORT_NOT_FOUND", "퍼실리테이터 리포트를 찾을 수 없습니다."),
+
     PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다."),
     ALREADY_DELETED_USER(HttpStatus.CONFLICT, "ALREADY_DELETED_USER", "이미 탈퇴한 회원입니다."),
 

@@ -32,6 +32,8 @@ dependencies {
     implementation 'io.livekit:livekit-server:0.13.0'
     implementation platform('software.amazon.awssdk:bom:2.41.14')
     implementation 'software.amazon.awssdk:s3'
+    // REPORTS-03: 렌더링된 마크다운을 PDF로 변환. 순수 자바 구현이라 네이티브 바이너리(wkhtmltopdf 등) 의존이 없다.
+    implementation 'io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.66'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     compileOnly 'org.projectlombok:lombok'
