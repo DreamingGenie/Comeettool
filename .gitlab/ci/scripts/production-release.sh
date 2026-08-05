@@ -390,25 +390,38 @@ verify_service_rollout() {
   verify_service="$1"
   verify_task_definition="$2"
   verify_output="$3"
+  verify_attempt=1
+  verify_max_attempts=12
 
-  aws ecs describe-services \
-    --cluster "$DEPLOY_CLUSTER_NAME" \
-    --services "$verify_service" \
-    >"$verify_output" 2>/dev/null \
-    || fail_release "an ECS rollout result could not be read."
-  jq -e \
-    --arg task "$verify_task_definition" \
-    '(.failures | length) == 0
-      and (.services | length) == 1
-      and .services[0].desiredCount == .services[0].runningCount
-      and .services[0].pendingCount == 0
-      and ([.services[0].deployments[]
-        | select(.status == "PRIMARY"
-          and .taskDefinition == $task
-          and .rolloutState == "COMPLETED")]
-        | length) == 1' \
-    "$verify_output" >/dev/null 2>&1 \
-    || fail_release "an ECS service rolled back or failed its health checks."
+  while [ "$verify_attempt" -le "$verify_max_attempts" ]; do
+    aws ecs describe-services \
+      --cluster "$DEPLOY_CLUSTER_NAME" \
+      --services "$verify_service" \
+      >"$verify_output" 2>/dev/null \
+      || fail_release "an ECS rollout result could not be read."
+
+    if jq -e \
+      --arg task "$verify_task_definition" \
+      '(.failures | length) == 0
+        and (.services | length) == 1
+        and .services[0].desiredCount == .services[0].runningCount
+        and .services[0].pendingCount == 0
+        and ([.services[0].deployments[]
+          | select(.status == "PRIMARY"
+            and .taskDefinition == $task
+            and .rolloutState == "COMPLETED")]
+          | length) == 1' \
+      "$verify_output" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if [ "$verify_attempt" -lt "$verify_max_attempts" ]; then
+      sleep 5
+    fi
+    verify_attempt=$((verify_attempt + 1))
+  done
+
+  fail_release "an ECS service rolled back or failed its health checks."
 }
 
 verify_service_rollout \
