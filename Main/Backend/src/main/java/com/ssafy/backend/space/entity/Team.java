@@ -15,8 +15,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.OffsetDateTime;
 
 /**
- * teams 테이블 매핑 엔티티 (스페이스).
- * 스페이스 생성(SPACE-01) 시 이름·설명·설정과 소유자(team_owner_id)를 채운다.
+ * teams 테이블 매핑 엔티티 (스페이스). 스페이스 생성(SPACE-01) 시 이름·설명·설정과 소유자(team_owner_id)를 채운다.
  */
 @Entity
 @Table(name = "teams")
@@ -98,5 +97,9 @@ public class Team {
         if (profileImageUrl != null) {
             this.profileImageUrl = profileImageUrl;
         }
+    }
+
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 }

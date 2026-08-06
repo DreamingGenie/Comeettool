@@ -3,7 +3,6 @@ package com.ssafy.backend.meeting.client;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.HttpMethod.POST;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -21,19 +20,16 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
-import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
+import com.ssafy.backend.meeting.dto.ResponseProcessMeetingDto;
 
-@DisplayName("AI 회의 시작·종료 Client 테스트")
+@DisplayName("AI 회의 처리 Client 테스트")
 class AiTranscriptionClientTest {
 
     private static final String BASE_URL = "http://ai-server:8000";
     private static final String INTERNAL_TOKEN = "test-internal-token";
     private static final Long MEETING_ID = 15L;
-    private static final String STARTED_AT =
-            "2026-08-03T15:25:17.64601+09:00";
-    private static final String ENDED_AT =
-            "2026-08-03T16:25:17.64601+09:00";
+    private static final String PROCESS_URL =
+            BASE_URL + "/meetings/15/process";
 
     private MockRestServiceServer mockServer;
     private AiTranscriptionClient aiTranscriptionClient;
@@ -55,63 +51,42 @@ class AiTranscriptionClientTest {
     }
 
     @Test
-    @DisplayName("회의 생성 시 AI 시작 API를 호출한다")
-    void startTranscription_callsAiInternalApi() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/start"
-                ))
+    @DisplayName("회의 종료 후 AI process API를 내부 토큰과 함께 호출한다")
+    void processMeeting_callsAiProcessApi() {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andExpect(method(POST))
                 .andExpect(header(
                         "X-Internal-Token",
                         INTERNAL_TOKEN
                 ))
-                .andExpect(content().json("""
-                        {
-                          "startedAt": "2026-08-03T15:25:17.64601+09:00"
-                        }
-                        """))
-                .andRespond(withSuccess(
-                        """
-                        {
-                          "code": "SUCCESS",
-                          "message": "회의 시작",
-                          "meetingRoomId": 15,
-                          "s3Prefix": "conferences/15/"
-                        }
-                        """,
-                        MediaType.APPLICATION_JSON
-                ));
+                .andRespond(withStatus(HttpStatus.ACCEPTED)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {
+                                  "job_id": "job-15",
+                                  "meeting_id": 15,
+                                  "status": "pending"
+                                }
+                                """));
 
-        ResponseStartTranscriptionDto response =
-                aiTranscriptionClient.startTranscription(
-                        MEETING_ID,
-                        STARTED_AT
-                );
+        ResponseProcessMeetingDto response =
+                aiTranscriptionClient.processMeeting(MEETING_ID);
 
-        assertThat(response.code()).isEqualTo("SUCCESS");
-        assertThat(response.meetingRoomId()).isEqualTo(MEETING_ID);
-        assertThat(response.s3Prefix()).isEqualTo("conferences/15/");
+        assertThat(response.jobId()).isEqualTo("job-15");
+        assertThat(response.meetingId()).isEqualTo(MEETING_ID);
+        assertThat(response.status()).isEqualTo("pending");
         mockServer.verify();
     }
 
     @ParameterizedTest(name = "HTTP {0} 응답은 재시도한다")
     @ValueSource(ints = {408, 429, 500, 503})
     @DisplayName("일시적인 HTTP 오류는 재시도 가능한 오류로 분류한다")
-    void startTranscription_classifiesTemporaryStatusAsRetryable(
-            int status
-    ) {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/start"
-                ))
+    void processMeeting_classifiesTemporaryStatusAsRetryable(int status) {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andRespond(withStatus(HttpStatus.valueOf(status)));
 
         assertThatThrownBy(() ->
-                aiTranscriptionClient.startTranscription(
-                        MEETING_ID,
-                        STARTED_AT
-                ))
+                aiTranscriptionClient.processMeeting(MEETING_ID))
                 .isInstanceOf(AiTranscriptionException.class)
                 .satisfies(exception -> assertThat(
                         ((AiTranscriptionException) exception).isRetryable()
@@ -122,20 +97,12 @@ class AiTranscriptionClientTest {
     @ParameterizedTest(name = "HTTP {0} 응답은 재시도하지 않는다")
     @ValueSource(ints = {400, 401, 404})
     @DisplayName("영구적인 HTTP 오류는 재시도 불가능한 오류로 분류한다")
-    void startTranscription_classifiesPermanentStatusAsNonRetryable(
-            int status
-    ) {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/start"
-                ))
+    void processMeeting_classifiesPermanentStatusAsNonRetryable(int status) {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andRespond(withStatus(HttpStatus.valueOf(status)));
 
         assertThatThrownBy(() ->
-                aiTranscriptionClient.startTranscription(
-                        MEETING_ID,
-                        STARTED_AT
-                ))
+                aiTranscriptionClient.processMeeting(MEETING_ID))
                 .isInstanceOf(AiTranscriptionException.class)
                 .satisfies(exception -> assertThat(
                         ((AiTranscriptionException) exception).isRetryable()
@@ -145,20 +112,14 @@ class AiTranscriptionClientTest {
 
     @Test
     @DisplayName("연결 또는 응답 시간 초과는 재시도 가능한 오류로 분류한다")
-    void startTranscription_classifiesTimeoutAsRetryable() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/start"
-                ))
+    void processMeeting_classifiesTimeoutAsRetryable() {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andRespond(request -> {
                     throw new ResourceAccessException("timeout");
                 });
 
         assertThatThrownBy(() ->
-                aiTranscriptionClient.startTranscription(
-                        MEETING_ID,
-                        STARTED_AT
-                ))
+                aiTranscriptionClient.processMeeting(MEETING_ID))
                 .isInstanceOf(AiTranscriptionException.class)
                 .satisfies(exception -> assertThat(
                         ((AiTranscriptionException) exception).isRetryable()
@@ -167,29 +128,22 @@ class AiTranscriptionClientTest {
     }
 
     @Test
-    @DisplayName("AI 응답의 S3 Prefix가 다르면 재시도하지 않는다")
-    void startTranscription_rejectsInvalidS3PrefixWithoutRetry() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/start"
-                ))
+    @DisplayName("응답의 회의 ID가 다르면 재시도하지 않는다")
+    void processMeeting_rejectsMismatchedMeetingIdWithoutRetry() {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andRespond(withSuccess(
                         """
                         {
-                          "code": "SUCCESS",
-                          "message": "회의 시작",
-                          "meetingRoomId": 15,
-                          "s3Prefix": "meetings/15/"
+                          "job_id": "job-99",
+                          "meeting_id": 99,
+                          "status": "pending"
                         }
                         """,
                         MediaType.APPLICATION_JSON
                 ));
 
         assertThatThrownBy(() ->
-                aiTranscriptionClient.startTranscription(
-                        MEETING_ID,
-                        STARTED_AT
-                ))
+                aiTranscriptionClient.processMeeting(MEETING_ID))
                 .isInstanceOf(AiTranscriptionException.class)
                 .satisfies(exception -> assertThat(
                         ((AiTranscriptionException) exception).isRetryable()
@@ -198,109 +152,22 @@ class AiTranscriptionClientTest {
     }
 
     @Test
-    @DisplayName("회의 종료 시 AI 종료 API를 내부 토큰과 함께 호출한다")
-    void endTranscription_callsAiInternalApi() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/end"
-                ))
-                .andExpect(method(POST))
-                .andExpect(header(
-                        "X-Internal-Token",
-                        INTERNAL_TOKEN
-                ))
-                .andExpect(content().json("""
-                        {
-                          "endedAt": "2026-08-03T16:25:17.64601+09:00"
-                        }
-                        """))
+    @DisplayName("job_id가 비어 있으면 재시도하지 않는다")
+    void processMeeting_rejectsBlankJobIdWithoutRetry() {
+        mockServer.expect(requestTo(PROCESS_URL))
                 .andRespond(withSuccess(
                         """
                         {
-                          "code": "SUCCESS",
-                          "message": "회의 종료",
-                          "meetingRoomId": 15
-                        }
-                        """,
-                        MediaType.APPLICATION_JSON
-                ));
-
-        ResponseEndTranscriptionDto response =
-                aiTranscriptionClient.endTranscription(
-                        MEETING_ID,
-                        ENDED_AT
-                );
-
-        assertThat(response.code()).isEqualTo("SUCCESS");
-        assertThat(response.meetingRoomId()).isEqualTo(MEETING_ID);
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("회의 종료 API의 5xx 응답은 재시도 가능한 오류로 분류한다")
-    void endTranscription_classifiesServerErrorAsRetryable() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/end"
-                ))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
-
-        assertThatThrownBy(() ->
-                aiTranscriptionClient.endTranscription(
-                        MEETING_ID,
-                        ENDED_AT
-                ))
-                .isInstanceOf(AiTranscriptionException.class)
-                .satisfies(exception -> assertThat(
-                        ((AiTranscriptionException) exception).isRetryable()
-                ).isTrue());
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("회의 종료 API의 4xx 응답은 재시도 불가능한 오류로 분류한다")
-    void endTranscription_classifiesClientErrorAsNonRetryable() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/end"
-                ))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST));
-
-        assertThatThrownBy(() ->
-                aiTranscriptionClient.endTranscription(
-                        MEETING_ID,
-                        ENDED_AT
-                ))
-                .isInstanceOf(AiTranscriptionException.class)
-                .satisfies(exception -> assertThat(
-                        ((AiTranscriptionException) exception).isRetryable()
-                ).isFalse());
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("회의 종료 응답의 회의 ID가 다르면 재시도하지 않는다")
-    void endTranscription_rejectsMismatchedMeetingIdWithoutRetry() {
-        mockServer.expect(requestTo(
-                        BASE_URL
-                                + "/internal/v1/meetings/15/transcription/end"
-                ))
-                .andRespond(withSuccess(
-                        """
-                        {
-                          "code": "SUCCESS",
-                          "message": "회의 종료",
-                          "meetingRoomId": 99
+                          "job_id": "",
+                          "meeting_id": 15,
+                          "status": "pending"
                         }
                         """,
                         MediaType.APPLICATION_JSON
                 ));
 
         assertThatThrownBy(() ->
-                aiTranscriptionClient.endTranscription(
-                        MEETING_ID,
-                        ENDED_AT
-                ))
+                aiTranscriptionClient.processMeeting(MEETING_ID))
                 .isInstanceOf(AiTranscriptionException.class)
                 .satisfies(exception -> assertThat(
                         ((AiTranscriptionException) exception).isRetryable()

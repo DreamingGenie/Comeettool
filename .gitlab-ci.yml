@@ -2,11 +2,8 @@
 
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "develop" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
     - when: never
 
 stages:
@@ -60,7 +57,7 @@ backend:verify:
   image:
     name: eclipse-temurin:21-jdk-jammy
   services:
-    - name: postgres:17-alpine
+    - name: pgvector/pgvector:0.8.2-pg17-bookworm
       alias: postgres
   variables:
     POSTGRES_DB: "comeettool_ci"
@@ -121,7 +118,7 @@ migration:verify:
     name: flyway/flyway:12.11.0
     entrypoint: [""]
   services:
-    - name: postgres:17-alpine
+    - name: pgvector/pgvector:0.8.2-pg17-bookworm
       alias: postgres
   variables:
     POSTGRES_DB: "comeettool_ci"
@@ -142,6 +139,7 @@ migration:verify:
     FLYWAY_CONNECT_RETRIES: "60"
     FLYWAY_PLACEHOLDERS_BACKENDRUNTIMEROLE: "postgres"
     FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE: "postgres"
+    FLYWAY_PLACEHOLDERS_AIRUNTIMEROLE: "postgres"
   script:
     - flyway info
     - flyway migrate
@@ -186,6 +184,7 @@ frontend:verify:
     VITE_USE_MOCK_MEETING_API: "false"
     VITE_USE_MOCK_SCHEDULE_API: "false"
     VITE_USE_MOCK_NOTIFICATION_API: "false"
+    VITE_USE_MOCK_REPORT_API: "false"
     VITE_USE_MOCK_PASSWORD_RESET_API: "false"
     VITE_USE_MOCK_USER_WITHDRAW_API: "false"
     VITE_USE_MOCK_USER_SEARCH_API: "false"
@@ -238,7 +237,7 @@ yjs:verify:
   image:
     name: node:22-alpine
   services:
-    - name: postgres:17-alpine
+    - name: pgvector/pgvector:0.8.2-pg17-bookworm
       alias: postgres
   variables:
     POSTGRES_DB: "comeettool_ci"
@@ -279,17 +278,17 @@ yjs:verify:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
-        - Main/AI/**/*
+        - Main/AI_BE/**/*
     - if: '$CI_COMMIT_BRANCH == "develop"'
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
-        - Main/AI/**/*
+        - Main/AI_BE/**/*
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
-        - Main/AI/**/*
+        - Main/AI_BE/**/*
     - when: never
 
 ai:verify:
@@ -303,17 +302,21 @@ ai:verify:
   cache:
     key:
       files:
-        - Main/AI/requirements.txt
+        - Main/AI_BE/requirements.txt
     paths:
       - .pip-cache/
     policy: pull-push
   before_script:
     - python -m venv .ci-ai-venv
     - . .ci-ai-venv/bin/activate
-    - python -m pip install --requirement Main/AI/requirements.txt
+    - python -m pip install --requirement Main/AI_BE/requirements.txt
+    - python -m pip install 'pytest>=8.3,<9'
   script:
     - python -m pip check
-    - python -m compileall -q Main/AI
+    - python -m compileall -q Main/AI_BE
+    - cd Main/AI_BE
+    - python -m pytest -q pytest2.py
+    - cd "$CI_PROJECT_DIR"
     - mkdir -p "$CI_PROJECT_DIR/.ci-security/ai"
     - python -m pip freeze > "$CI_PROJECT_DIR/.ci-security/ai/requirements.txt"
   after_script:
@@ -424,6 +427,7 @@ production:package-images:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
+        - Main/AI_BE/**/*
         - Main/Backend/**/*
         - Main/Backend-Yjs/**/*
         - Main/Frontend/**/*
@@ -452,6 +456,7 @@ production:package-frontend:
     VITE_USE_MOCK_MEETING_API: "false"
     VITE_USE_MOCK_SCHEDULE_API: "false"
     VITE_USE_MOCK_NOTIFICATION_API: "false"
+    VITE_USE_MOCK_REPORT_API: "false"
     VITE_USE_MOCK_PASSWORD_RESET_API: "false"
     VITE_USE_MOCK_USER_WITHDRAW_API: "false"
     VITE_USE_MOCK_USER_SEARCH_API: "false"
@@ -466,6 +471,7 @@ production:package-frontend:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
+        - Main/AI_BE/**/*
         - Main/Backend/**/*
         - Main/Backend-Yjs/**/*
         - Main/Frontend/**/*
@@ -504,6 +510,7 @@ production:release:
       changes:
         - .gitlab-ci.yml
         - .gitlab/ci/**/*
+        - Main/AI_BE/**/*
         - Main/Backend/**/*
         - Main/Backend-Yjs/**/*
         - Main/Frontend/**/*

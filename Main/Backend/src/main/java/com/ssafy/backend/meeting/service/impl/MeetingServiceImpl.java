@@ -26,7 +26,6 @@ import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.entity.Participant;
 import com.ssafy.backend.meeting.event.MeetingTranscriptionEndedEvent;
-import com.ssafy.backend.meeting.event.MeetingTranscriptionStartedEvent;
 import com.ssafy.backend.meeting.livekit.LiveKitConnectionInfo;
 import com.ssafy.backend.meeting.livekit.LiveKitParticipantManager;
 import com.ssafy.backend.meeting.livekit.LiveKitRoomManager;
@@ -110,15 +109,6 @@ public class MeetingServiceImpl implements MeetingService {
                 .isInMeeting(false)
                 .build();
         participantRepository.save(hostParticipant);
-
-        String startedAt = savedMeetingRoom.getCreatedAt()
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        applicationEventPublisher.publishEvent(
-                new MeetingTranscriptionStartedEvent(
-                        savedMeetingRoom.getId(),
-                        startedAt
-                )
-        );
 
         return meetingMapper.toCreateResponse(
                 savedMeetingRoom,
@@ -221,6 +211,7 @@ public class MeetingServiceImpl implements MeetingService {
 
         return new ResponseJoinMeetingDto(
                 meetingRoom.getId(),
+                meetingRoom.getTeamId(),
                 participant.getParticipantRole(),
                 meetingRoom.isHost(requesterUserId),
                 connectionInfo.token(),

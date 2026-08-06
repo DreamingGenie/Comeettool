@@ -10,6 +10,7 @@ const emptyTeam = {
   role: '',
   memberCount: 0,
   description: '',
+  profileImage: '',
   ownerId: null,
   members: [],
   colorOptions: [],
@@ -70,7 +71,14 @@ const state = reactive({
     summary: null,
     feedback: null
   },
+  archivePagination: {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  },
   meetingRoom: { ...emptyMeetingRoom },
+  meetingInviteCandidates: [],
   inviteMembers: [],
   teamRoles: []
 })
@@ -101,6 +109,12 @@ function resetState() {
     summary: null,
     feedback: null
   }
+  state.archivePagination = {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  }
   state.meetingRoom = {
     ...emptyMeetingRoom,
     connection: null,
@@ -108,6 +122,7 @@ function resetState() {
     chatMessages: [],
     directContacts: []
   }
+  state.meetingInviteCandidates = []
   state.inviteMembers = []
   state.teamRoles = []
 }
@@ -136,6 +151,22 @@ function removeWorkspaceFromState(spaceId) {
     state.currentTeamId = ''
     state.team = { ...emptyTeam, members: [] }
     state.members = []
+  }
+}
+
+function setTeamProfileImage(teamId, profileImage) {
+  const normalizedTeamId = String(teamId)
+  if (String(state.team.id) === normalizedTeamId) {
+    state.team = { ...state.team, profileImage }
+  }
+  const workspaceIndex = state.workspaces.findIndex(
+    (workspace) => String(workspace.id) === normalizedTeamId
+  )
+  if (workspaceIndex >= 0) {
+    state.workspaces[workspaceIndex] = {
+      ...state.workspaces[workspaceIndex],
+      profileImage
+    }
   }
 }
 
@@ -258,13 +289,29 @@ export const boardStore = {
     const selectedMeeting = state.meetings.find(
       (meeting) => String(meeting.id) === String(meetingId)
     )
-    if (selectedMeeting) state.activeMeeting = selectedMeeting
+    if (selectedMeeting) {
+      state.activeMeeting = selectedMeeting
+    } else if (connection?.teamId) {
+      // 회의 목록을 거치지 않고 입장(새로고침/직접 진입)한 경우,
+      // Join 응답의 teamId로 activeMeeting을 최소 정보만 채워 팀 스페이스 연결을 유지한다.
+      state.activeMeeting = {
+        ...emptyMeeting,
+        id: String(meetingId),
+        teamId: String(connection.teamId)
+      }
+    }
+    if (connection?.teamId) {
+      state.currentTeamId = state.currentTeamId || String(connection.teamId)
+    }
     await boardStore.loadMeetingParticipants(meetingId)
     return state.meetingRoom
   },
-  async loadMeetingParticipants(meetingId = state.currentMeetingId) {
+  async loadMeetingParticipants(meetingId = state.currentMeetingId, options = {}) {
     if (!meetingId) return []
-    const participants = await withLoading(() => dataSource.board.getParticipants(meetingId))
+    const requestParticipants = () => dataSource.board.getParticipants(meetingId)
+    const participants = options.silent
+      ? await requestParticipants()
+      : await withLoading(requestParticipants)
     state.meetingRoom.participants = participants || []
     state.meetingRoom.totalParticipants = state.meetingRoom.participants.length
     return state.meetingRoom.participants
@@ -279,11 +326,53 @@ export const boardStore = {
     state.teamRoles = Array.isArray(roles) ? roles : []
     return state.teamRoles
   },
-  async loadArchive(teamId, section) {
-    const result = await withLoading(() => dataSource.board.getArchive(teamId, section))
+  async loadArchive(teamId, section, page = 0, size = 10) {
+    const source = ['minutes', 'summary', 'feedback'].includes(section)
+      ? dataSource.report
+      : dataSource.board
+    const result = await withLoading(() => source.getArchive(teamId, section, page, size))
     state.archives[section] = result?.rows || result || []
     state.archiveStats[section] = result?.stats || null
+    state.archivePagination[section] = result?.pagination || null
     return state.archives[section]
+  },
+  async loadReportDetail(meetingId, section, listRow) {
+    return withLoading(() => dataSource.report.getReportDetail(meetingId, section, listRow))
+  },
+  async updateMinutes(meetingId, minutes, listRow) {
+    const updated = await withLoading(() =>
+      dataSource.report.updateMinutes(meetingId, minutes, listRow)
+    )
+    const rowIndex = state.archives.summary.findIndex((row) => String(row.id) === String(meetingId))
+    if (rowIndex >= 0) {
+      state.archives.summary[rowIndex] = {
+        ...state.archives.summary[rowIndex],
+        title: updated.title,
+        confirmed: updated.confirmed,
+        updatedAt: updated.updatedAt
+      }
+    }
+    return updated
+  },
+  async exportTranscript(meetingId, format) {
+    return withLoading(() => dataSource.report.exportTranscript(meetingId, format))
+  },
+  async confirmMinutes(meetingId) {
+    const result = await withLoading(() => dataSource.report.confirmMinutes(meetingId))
+    const rowIndex = state.archives.summary.findIndex((row) => String(row.id) === String(meetingId))
+    if (rowIndex >= 0) {
+      state.archives.summary[rowIndex] = {
+        ...state.archives.summary[rowIndex],
+        confirmed: Boolean(result?.isConfirmed)
+      }
+    }
+    return result
+  },
+  async exportMinutes(meetingId, format) {
+    return withLoading(() => dataSource.report.exportMinutes(meetingId, format))
+  },
+  async exportFacilitatorReport(meetingId, format) {
+    return withLoading(() => dataSource.report.exportFacilitatorReport(meetingId, format))
   },
   async createWorkspace(data) {
     const workspace = await dataSource.board.createWorkspace(data)
@@ -317,6 +406,9 @@ export const boardStore = {
     state.activeMeeting = meeting
     return meeting
   },
+  async uploadVadRecording(meetingId, recording) {
+    return dataSource.board.uploadVadRecording(meetingId, recording)
+  },
   async leaveMeeting(meetingId = state.currentMeetingId) {
     const result = await withLoading(() => dataSource.board.leaveMeeting(meetingId))
     state.meetingRoom.connectionStatus = 'leaving'
@@ -338,8 +430,33 @@ export const boardStore = {
     await boardStore.loadMeetingParticipants(meetingId)
     return result
   },
+  async kickMeetingParticipant(meetingId, participantId) {
+    const result = await withLoading(() =>
+      dataSource.board.kickMeetingParticipant(meetingId, participantId)
+    )
+    await boardStore.loadMeetingParticipants(meetingId)
+    return result
+  },
+  async loadMeetingInviteCandidates(meetingId, keyword = '') {
+    const candidates = await withLoading(() =>
+      dataSource.board.getMeetingInviteCandidates(meetingId, keyword)
+    )
+    state.meetingInviteCandidates = candidates || []
+    return state.meetingInviteCandidates
+  },
+  async inviteMeetingMember(meetingId, userId) {
+    const result = await withLoading(() => dataSource.board.inviteMeetingMember(meetingId, userId))
+    state.meetingInviteCandidates = state.meetingInviteCandidates.filter(
+      (candidate) => String(candidate.userId) !== String(userId)
+    )
+    await boardStore.loadMeetingParticipants(meetingId)
+    return result
+  },
   setMeetingConnectionStatus(status) {
     state.meetingRoom.connectionStatus = status
+  },
+  clearError() {
+    state.error = ''
   },
   clearMeetingRoom() {
     state.currentMeetingId = ''
@@ -350,6 +467,7 @@ export const boardStore = {
       chatMessages: [],
       directContacts: []
     }
+    state.meetingInviteCandidates = []
   },
   async createSchedule(teamId, data) {
     const response = await withLoading(() => dataSource.board.createSchedule(teamId, data))
@@ -382,6 +500,19 @@ export const boardStore = {
       }
     }
     return state.team
+  },
+  previewTeamProfileImage(teamId, profileImage) {
+    setTeamProfileImage(teamId, profileImage)
+  },
+  async uploadTeamProfileImage(teamId, file, previewUrl = '') {
+    const uploaded = await withLoading(() =>
+      dataSource.board.uploadTeamProfileImage(teamId, file, previewUrl)
+    )
+    const profileImage = uploaded?.profileImage || ''
+    setTeamProfileImage(teamId, profileImage)
+    return String(state.team.id) === String(teamId)
+      ? state.team
+      : state.workspaces.find((workspace) => String(workspace.id) === String(teamId))
   },
   async inviteMember(teamId, targetUserId) {
     return withLoading(() => dataSource.board.inviteMember(teamId, targetUserId))
@@ -420,8 +551,7 @@ export const boardStore = {
     await withLoading(() => dataSource.board.deleteTeamRole(teamId, teamRoleId))
     await Promise.all([boardStore.loadTeamRoles(teamId), boardStore.loadMembers(teamId)])
   },
-  async sendMessage(meetingId, data) {
-    const message = await dataSource.board.sendMessage(meetingId, data)
+  appendChatMessage(message) {
     state.meetingRoom.chatMessages.push(message)
     return message
   },

@@ -2,6 +2,7 @@ import { authApi } from '../../features/auth/api'
 import { authMockApi } from '../../features/auth/mock/authMockApi'
 import { boardApi } from '../../features/board/api'
 import { boardMockApi } from '../../features/board/mock/boardMockApi'
+import { reportMockApi } from '../../features/board/mock/reportMockApi'
 import { documentApi } from '../../features/document/api'
 import { documentMockApi } from '../../features/document/mock/documentMockApi'
 import { notificationApi } from '../../features/notification/api'
@@ -22,6 +23,7 @@ export const mockMode = {
   document: getMockMode(import.meta.env.VITE_USE_MOCK_DOCUMENT_API),
   meeting: getMockMode(import.meta.env.VITE_USE_MOCK_MEETING_API),
   notification: getMockMode(import.meta.env.VITE_USE_MOCK_NOTIFICATION_API),
+  report: getMockMode(import.meta.env.VITE_USE_MOCK_REPORT_API),
   passwordReset: getMockMode(import.meta.env.VITE_USE_MOCK_PASSWORD_RESET_API),
   schedule: getMockMode(import.meta.env.VITE_USE_MOCK_SCHEDULE_API),
   space: getMockMode(import.meta.env.VITE_USE_MOCK_SPACE_API),
@@ -59,16 +61,21 @@ export const dataSource = {
     deleteTeamRole: spaceSource.deleteTeamRole,
     createWorkspace: spaceSource.createWorkspace,
     updateTeam: spaceSource.updateTeam,
+    uploadTeamProfileImage: spaceSource.uploadTeamProfileImage,
     reorderWorkspaces: spaceSource.reorderWorkspaces,
     leaveWorkspace: spaceSource.leaveWorkspace,
     deleteWorkspace: spaceSource.deleteWorkspace,
     transferWorkspaceOwnership: spaceSource.transferWorkspaceOwnership,
     getMeetings: meetingSource.getMeetings,
     joinMeeting: meetingSource.joinMeeting,
+    uploadVadRecording: meetingSource.uploadVadRecording,
     leaveMeeting: meetingSource.leaveMeeting,
     endMeeting: meetingSource.endMeeting,
     getParticipants: meetingSource.getParticipants,
     transferMeetingHost: meetingSource.transferMeetingHost,
+    kickMeetingParticipant: meetingSource.kickMeetingParticipant,
+    getMeetingInviteCandidates: meetingSource.getMeetingInviteCandidates,
+    inviteMeetingMember: meetingSource.inviteMeetingMember,
     createMeeting: meetingSource.createMeeting,
     getMySchedules: scheduleSource.getMySchedules,
     getSchedules: scheduleSource.getSchedules,
@@ -76,6 +83,7 @@ export const dataSource = {
     updateSchedule: scheduleSource.updateSchedule,
     deleteSchedule: scheduleSource.deleteSchedule
   },
+  report: mockMode.report ? reportMockApi : boardApi,
   document: documentSource,
   notification: notificationSource,
   user: {

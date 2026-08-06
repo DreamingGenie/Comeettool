@@ -10,7 +10,8 @@
     >
       <header>
         <i :style="workspace.color ? { backgroundColor: workspace.color } : undefined">
-          {{ workspace.badge }}
+          <img v-if="workspace.profileImage" :src="workspace.profileImage" alt="" />
+          <span v-else>{{ workspace.badge }}</span>
         </i>
         <span>
           <b>{{ workspace.name }}</b>
@@ -118,6 +119,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
+  overflow: hidden;
+}
+
+.workspace-context-menu header > i img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .workspace-context-menu header > span {

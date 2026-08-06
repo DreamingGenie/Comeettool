@@ -35,7 +35,8 @@
             @drop.prevent="dropWorkspace(workspace.id)"
           >
             <i :style="workspace.color ? { backgroundColor: workspace.color } : undefined">
-              {{ workspace.badge }}
+              <img v-if="workspace.profileImage" :src="workspace.profileImage" alt="" />
+              <span v-else>{{ workspace.badge }}</span>
             </i>
             <span>
               <b>{{ workspace.name }}</b>
@@ -112,10 +113,10 @@
             @change-month="changeMonth"
           />
           <button
-            class="floating-add"
+            class="home-meeting-fab"
             type="button"
             aria-label="새 회의 만들기"
-            @click="showMeeting = true"
+            @click="openMeetingCreation"
           >
             <span aria-hidden="true"></span>
           </button>
@@ -188,6 +189,7 @@ import NewMeetingModal from '../components/NewMeetingModal.vue'
 import NewTeamModal from '../components/NewTeamModal.vue'
 import WorkspaceContextMenu from '../components/WorkspaceContextMenu.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { meetingDocumentMode } from '../composables/useMeetingDocumentMode'
 import { boardStore } from '../stores/boardStore'
 
 const router = useRouter()
@@ -393,7 +395,13 @@ const dropWorkspace = async (targetWorkspaceId) => {
 }
 
 const enterMeeting = () => {
-  if (meetingId.value) router.push(`/meetings/${meetingId.value}`)
+  if (!meetingId.value || !meetingDocumentMode.allowMeetingAction(notify)) return
+  router.push(`/meetings/${meetingId.value}`)
+}
+
+const openMeetingCreation = () => {
+  if (!meetingDocumentMode.allowMeetingAction(notify)) return
+  showMeeting.value = true
 }
 
 async function logout() {
@@ -478,6 +486,16 @@ async function logout() {
     opacity 0.18s ease,
     background-color 0.18s ease,
     box-shadow 0.18s ease;
+}
+
+.workspace-item > i {
+  overflow: hidden;
+}
+
+.workspace-item > i img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .workspace-item:focus-visible {
@@ -566,47 +584,91 @@ async function logout() {
   box-shadow: 0 -10px 20px rgba(15, 24, 48, 0.18);
 }
 
-.floating-add {
+.home-meeting-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
   display: grid;
   place-items: center;
+  width: 58px;
+  height: 58px;
   padding: 0;
-  transform: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: #6274e9;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(41, 57, 133, 0.28);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  z-index: 30;
+  transform: translateY(0) scale(1);
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
-.floating-add:hover {
-  transform: none;
+.home-meeting-fab::before {
+  position: absolute;
+  border-radius: 50%;
+  content: '';
+  inset: -10px;
 }
 
-.floating-add > span {
+.home-meeting-fab:hover,
+.home-meeting-fab:focus-visible {
+  background: #5366de;
+  box-shadow: 0 15px 30px rgba(41, 57, 133, 0.38);
+  outline: none;
+  transform: scale(1.06);
+}
+
+.home-meeting-fab:focus-visible {
+  box-shadow:
+    0 0 0 4px rgba(98, 116, 233, 0.2),
+    0 15px 30px rgba(41, 57, 133, 0.38);
+}
+
+.home-meeting-fab:active {
+  box-shadow: 0 7px 16px rgba(41, 57, 133, 0.28);
+  transform: scale(0.98);
+}
+
+.home-meeting-fab > span {
   position: relative;
   display: block;
   width: 25px;
   height: 25px;
+  pointer-events: none;
+  color: #fff;
+  z-index: 1;
   transition: transform 0.24s ease;
 }
 
-.floating-add > span::before,
-.floating-add > span::after {
+.home-meeting-fab > span::before,
+.home-meeting-fab > span::after {
   position: absolute;
   top: 50%;
   left: 50%;
   border-radius: 999px;
-  background: currentColor;
+  background: #fff;
   content: '';
   transform: translate(-50%, -50%);
 }
 
-.floating-add > span::before {
+.home-meeting-fab > span::before {
   width: 24px;
   height: 2px;
 }
 
-.floating-add > span::after {
+.home-meeting-fab > span::after {
   width: 2px;
   height: 24px;
 }
 
-.floating-add:hover > span {
+.home-meeting-fab:hover > span,
+.home-meeting-fab:focus-visible > span {
   transform: rotate(90deg) scale(1.08);
 }
 </style>

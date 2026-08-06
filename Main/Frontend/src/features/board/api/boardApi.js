@@ -3,6 +3,7 @@ import {
   toCreateSpaceRequest,
   toDashboardViewModel,
   toMemberRowsViewModel,
+  toTeamProfileImageViewModel,
   toTeamViewModel,
   toUpdatedWorkspaceViewModel,
   toUpdateSpaceRequest,
@@ -10,11 +11,17 @@ import {
 } from '../mappers/spaceMapper'
 import {
   toMeetingConnectionViewModel,
+  toMeetingInviteCandidatesViewModel,
   toMeetingListViewModel,
   toMeetingParticipantsViewModel,
   toMeetingViewModel
 } from '../mappers/meetingMapper'
 import { toScheduleRequest } from '../mappers/calendarMapper'
+import {
+  toMinutesUpdateRequest,
+  toReportDetailViewModel,
+  toReportPageViewModel
+} from '../mappers/reportMapper'
 
 export const boardApi = {
   getDashboard: async (search = '') => {
@@ -36,6 +43,17 @@ export const boardApi = {
         method: 'POST'
       })
     ),
+  uploadVadRecording: (meetingId, { sequence, startedAt, endedAt, audio }) => {
+    const formData = new FormData()
+    formData.append('sequence', String(sequence))
+    formData.append('startedAt', String(startedAt))
+    formData.append('endedAt', String(endedAt))
+    formData.append('audio', audio, `segment-${String(sequence).padStart(6, '0')}.ogg`)
+    return request(`/api/v1/meetings/${meetingId}/vad-recordings`, {
+      method: 'POST',
+      body: formData
+    })
+  },
   leaveMeeting: (meetingId) =>
     request(`/api/v1/meetings/${meetingId}/leave`, {
       method: 'POST'
@@ -53,6 +71,24 @@ export const boardApi = {
         nextHostParticipantId: Number(nextHostParticipantId)
       })
     }),
+  kickMeetingParticipant: (meetingId, participantId) =>
+    request(`/api/v1/meetings/${meetingId}/participants/${participantId}`, {
+      method: 'DELETE'
+    }),
+  getMeetingInviteCandidates: async (meetingId, keyword = '') => {
+    const params = new URLSearchParams()
+    const searchKeyword = String(keyword || '').trim()
+    if (searchKeyword) params.set('keyword', searchKeyword)
+    const query = params.toString()
+
+    return toMeetingInviteCandidatesViewModel(
+      await request(`/api/v1/meetings/${meetingId}/invite-candidates${query ? `?${query}` : ''}`)
+    )
+  },
+  inviteMeetingMember: (meetingId, userId) =>
+    request(`/api/v1/meetings/${meetingId}/invitations/users/${userId}`, {
+      method: 'POST'
+    }),
   getTeamRoles: (spaceId) => request(`/api/v1/spaces/${spaceId}/members/team-roles`),
   updateTeam: async (teamId, data) =>
     toUpdatedWorkspaceViewModel(
@@ -61,6 +97,17 @@ export const boardApi = {
         body: JSON.stringify(toUpdateSpaceRequest(data))
       })
     ),
+  uploadTeamProfileImage: async (teamId, file) => {
+    const formData = new FormData()
+    formData.append('profileImage', file)
+    return toTeamProfileImageViewModel(
+      await request(`/api/v1/spaces/${teamId}/profile-image`, {
+        method: 'PATCH',
+        body: formData
+      }),
+      teamId
+    )
+  },
   reorderWorkspaces: async (spaceOrder) =>
     toDashboardViewModel(
       await request('/api/v1/spaces/order', {
@@ -105,7 +152,57 @@ export const boardApi = {
     request(`/api/v1/spaces/${spaceId}/members/team-roles/${teamRoleId}`, {
       method: 'DELETE'
     }),
-  getArchive: (teamId, section) => request(`/api/teams/${teamId}/archive/${section}`),
+  getArchive: async (teamId, section, page = 0, size = 10) => {
+    if (section === 'minutes' || section === 'summary' || section === 'feedback') {
+      const reportType =
+        section === 'minutes' ? 'transcripts' : section === 'feedback' ? 'facilitator' : 'minutes'
+      const params = new URLSearchParams({
+        page: String(page),
+        size: String(size),
+        sort: 'createdAt,desc'
+      })
+      const response = await request(
+        `/api/v1/spaces/${teamId}/reports/${reportType}?${params.toString()}`
+      )
+      return toReportPageViewModel(response, section)
+    }
+
+    return request(`/api/teams/${teamId}/archive/${section}`)
+  },
+  getReportDetail: async (meetingId, section, listRow) => {
+    const reportType =
+      section === 'minutes' ? 'transcript' : section === 'feedback' ? 'facilitator' : 'minutes'
+    const response = await request(`/api/v1/meetings/${meetingId}/reports/${reportType}`)
+    return toReportDetailViewModel(response, section, listRow)
+  },
+  updateMinutes: async (meetingId, minutes, listRow) =>
+    toReportDetailViewModel(
+      await request(`/api/v1/meetings/${meetingId}/reports/minutes`, {
+        method: 'PATCH',
+        body: JSON.stringify(toMinutesUpdateRequest(minutes))
+      }),
+      'summary',
+      listRow
+    ),
+  exportTranscript: (meetingId, format) =>
+    request(`/api/v1/meetings/${meetingId}/reports/transcript/export`, {
+      method: 'POST',
+      body: JSON.stringify({ format })
+    }),
+  confirmMinutes: (meetingId) =>
+    request(`/api/v1/meetings/${meetingId}/reports/minutes/confirm`, {
+      method: 'POST'
+    }),
+  exportMinutes: (meetingId, format) =>
+    request(`/api/v1/meetings/${meetingId}/reports/minutes/export`, {
+      method: 'POST',
+      body: JSON.stringify({ format })
+    }),
+  exportFacilitatorReport: (meetingId, format) =>
+    request(`/api/v1/meetings/${meetingId}/reports/facilitator/export`, {
+      method: 'POST',
+      body: JSON.stringify({ format })
+    }),
   createWorkspace: async (data) =>
     toWorkspaceViewModel(
       await request('/api/v1/spaces', {
@@ -134,12 +231,6 @@ export const boardApi = {
       }),
       data
     ),
-  getMessages: (code) => request(`/api/rooms/${code}/messages`),
-  sendMessage: (code, body) =>
-    request(`/api/rooms/${code}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
   sendDirectMessage: (code, userId, body) =>
     request(`/api/rooms/${code}/direct/${userId}/messages`, {
       method: 'POST',
@@ -162,6 +253,5 @@ export const boardApi = {
       method: 'PATCH',
       body: JSON.stringify(toScheduleRequest(data))
     }),
-  deleteSchedule: (scheduleId) =>
-    request(`/api/v1/schedules/${scheduleId}`, { method: 'DELETE' })
+  deleteSchedule: (scheduleId) => request(`/api/v1/schedules/${scheduleId}`, { method: 'DELETE' })
 }

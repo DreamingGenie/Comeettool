@@ -1063,6 +1063,25 @@ select:disabled {
   opacity: 1;
   transform: none;
 }
+.toast.toast-top-center {
+  top: clamp(24px, 7vh, 72px);
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  min-width: min(440px, calc(100vw - 32px));
+  padding: 14px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(24, 26, 31, 0.96);
+  box-shadow: 0 14px 36px rgba(10, 12, 18, 0.28);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  transform: translate(-50%, -10px);
+}
+.toast.toast-top-center.show {
+  transform: translate(-50%, 0);
+}
 @media (max-width: 720px) {
   .workspace {
     grid-template-columns: 52.8px 1fr;

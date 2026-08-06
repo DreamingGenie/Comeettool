@@ -65,6 +65,14 @@ public class Member {
         this.teamRoleId = teamRoleId;
     }
 
+    // AUTH-06: 개인 프로필 닉네임 변경 시 스페이스 멤버 닉네임도 동기화(현재 스페이스별 커스텀 닉네임 기능은 없음 —
+    // 항상 User.nickname의 스냅샷이라 변경 시 그대로 따라가야 한다). 실제 갱신은 여러 팀에 걸쳐 한 번에
+    // 반영해야 해서 MemberRepository.updateNicknameByUserId의 @Modifying UPDATE로 처리하며,
+    // 이 메서드는 단일 Member를 다루는 다른 도메인 메서드(changeAuthority 등)와의 일관성을 위해 남겨둔다.
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
     // SPACE-01: 생성자를 Owner 권한 멤버로 등록. 역할은 미배정(null).
     public static Member owner(Long userId, Long teamId, String nickname) {
         return Member.builder()

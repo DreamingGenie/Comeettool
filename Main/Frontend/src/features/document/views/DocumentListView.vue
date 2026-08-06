@@ -62,7 +62,7 @@
 
       <div v-else class="document-list">
         <article
-          v-for="document in visibleDocuments"
+          v-for="document in paginatedDocuments"
           :key="document.documentId"
           class="document-row"
           role="button"
@@ -100,7 +100,25 @@
         </article>
       </div>
 
-      <footer class="document-footer">총 {{ visibleDocuments.length }}개의 문서</footer>
+      <footer class="document-footer">
+        <span>총 {{ visibleDocuments.length }}개의 문서</span>
+        <nav v-if="totalPages > 1" class="document-pagination" aria-label="공유 문서 목록 페이지">
+          <button type="button" :disabled="currentPage === 1" @click="currentPage -= 1">‹</button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            type="button"
+            :class="{ active: currentPage === page }"
+            :aria-current="currentPage === page ? 'page' : undefined"
+            @click="currentPage = page"
+          >
+            {{ page }}
+          </button>
+          <button type="button" :disabled="currentPage === totalPages" @click="currentPage += 1">
+            ›
+          </button>
+        </nav>
+      </footer>
     </section>
 
     <BaseModal v-if="deleteTarget" modal-class="document-delete-modal" @close="closeDeleteModal">
@@ -151,6 +169,8 @@ const sortOptions = [
   { value: 'name', label: '이름 순' }
 ]
 const deleteTarget = ref(null)
+const pageSize = 10
+const currentPage = ref(1)
 
 const authority = computed(() => String(boardState.team.role || '').toUpperCase())
 const canCreate = computed(() => authority.value === 'OWNER' || authority.value === 'MEMBER')
@@ -184,6 +204,11 @@ const visibleDocuments = computed(() => {
   }
 
   return [...filtered].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+})
+const totalPages = computed(() => Math.max(1, Math.ceil(visibleDocuments.value.length / pageSize)))
+const paginatedDocuments = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return visibleDocuments.value.slice(start, start + pageSize)
 })
 const isDeleting = computed(() =>
   Boolean(deleteTarget.value && documentState.deletingDocumentId === deleteTarget.value.documentId)
@@ -266,6 +291,12 @@ async function confirmDelete() {
 
 onMounted(loadDocuments)
 watch(teamId, loadDocuments)
+watch([query, sort, teamId], () => {
+  currentPage.value = 1
+})
+watch(totalPages, (pageCount) => {
+  if (currentPage.value > pageCount) currentPage.value = pageCount
+})
 </script>
 
 <style scoped>
@@ -440,11 +471,44 @@ watch(teamId, loadDocuments)
   background: #eef1ff;
 }
 .document-footer {
+  justify-content: space-between;
   height: 48px;
   padding: 16px;
   background: #f5f6f9;
   color: #666f80;
   font-size: 10px;
+}
+.document-pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.document-pagination button {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid #dfe3ed;
+  border-radius: 6px;
+  background: #fff;
+  color: #697287;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.document-pagination button:hover:not(:disabled) {
+  border-color: #7086e8;
+  color: #5369d8;
+}
+.document-pagination button.active {
+  border-color: #6175e5;
+  background: #6175e5;
+  color: #fff;
+}
+.document-pagination button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 :deep(.async-state) {
   min-height: 230px;

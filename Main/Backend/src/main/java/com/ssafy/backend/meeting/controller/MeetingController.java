@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -12,7 +13,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.ssafy.backend.global.response.ApiResponse;
 import com.ssafy.backend.meeting.dto.RequestCreateMeetingDto;
@@ -25,7 +28,9 @@ import com.ssafy.backend.meeting.dto.ResponseMeetingInvitationDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingListDto;
 import com.ssafy.backend.meeting.dto.ResponseMeetingParticipantDto;
 import com.ssafy.backend.meeting.dto.ResponseTransferHostDto;
+import com.ssafy.backend.meeting.dto.ResponseVadRecordingDto;
 import com.ssafy.backend.meeting.service.MeetingService;
+import com.ssafy.backend.meeting.service.VadRecordingService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +44,7 @@ import lombok.RequiredArgsConstructor;
 public class MeetingController {
 
     private final MeetingService meetingService;
+    private final VadRecordingService vadRecordingService;
 
     /**
      * MEET-01: 팀 스페이스에 회의를 생성하고 생성자를 최초 참여자로 등록한다.
@@ -217,5 +223,31 @@ public class MeetingController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("회의 멤버 초대 성공", response));
+    }
+
+    /**
+     * MEET-12: 참가자별 VAD 발화 청크를 Object Storage에 업로드한다.
+     */
+    @PostMapping(
+            value = "/meetings/{meetingId}/vad-recordings",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<ApiResponse<ResponseVadRecordingDto>> addVadRecording(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long meetingId,
+            @RequestParam("sequence") Integer sequence,
+            @RequestParam("startedAt") Long startedAt,
+            @RequestParam("endedAt") Long endedAt,
+            @RequestPart("audio") MultipartFile audio
+    ) {
+        ResponseVadRecordingDto response = vadRecordingService.addVadRecording(
+                Long.parseLong(userId),
+                meetingId,
+                sequence,
+                startedAt,
+                endedAt,
+                audio
+        );
+        return ResponseEntity.ok(ApiResponse.success("VAD 음성 청크 업로드 성공", response));
     }
 }

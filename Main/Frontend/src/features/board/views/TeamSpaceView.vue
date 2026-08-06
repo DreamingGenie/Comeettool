@@ -20,12 +20,12 @@
         <p>{{ meeting.description }}</p>
         <footer>
           ◷ {{ meeting.date }} · {{ meeting.time }} 　♙ {{ meeting.participantCount }}명 참여 중
-          <button type="button" @click="$router.push(`/meetings/${meeting.id}`)">
+          <button type="button" @click="enterMeeting(meeting.id)">
             회의 입장 →
           </button>
         </footer>
       </article>
-      <button class="create-card" type="button" @click="showMeeting = true">
+      <button class="create-card" type="button" @click="openMeetingCreation">
         <i>＋</i><b>새 회의 만들기</b><span>팀원들과 바로 회의를 시작하세요.</span>
       </button>
     </div>
@@ -47,6 +47,7 @@
     v-if="showMeeting"
     :workspaces="boardState.workspaces"
     :team-id="teamId"
+    team-locked
     @close="showMeeting = false"
   />
   <ScheduleModal
@@ -64,12 +65,14 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import BoardCalendar from '../components/BoardCalendar.vue'
 import InviteModal from '../components/InviteModal.vue'
 import NewMeetingModal from '../components/NewMeetingModal.vue'
 import ScheduleModal from '../components/ScheduleModal.vue'
 import TeamLayout from '../components/TeamLayout.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { meetingDocumentMode } from '../composables/useMeetingDocumentMode'
 import { boardStore } from '../stores/boardStore'
 import { useToast } from '../../../shared/composables/useToast'
 
@@ -81,7 +84,18 @@ const showMeeting = ref(false)
 const scheduleModal = ref({ open: false, day: 1, event: null })
 const schedulePending = ref(false)
 const { notify } = useToast()
+const router = useRouter()
 let meetingCountRefreshTimer = null
+
+function enterMeeting(meetingId) {
+  if (!meetingDocumentMode.allowMeetingAction(notify)) return
+  router.push(`/meetings/${meetingId}`)
+}
+
+function openMeetingCreation() {
+  if (!meetingDocumentMode.allowMeetingAction(notify)) return
+  showMeeting.value = true
+}
 
 function openCreateSchedule(day) {
   scheduleModal.value = { open: true, day, event: null }

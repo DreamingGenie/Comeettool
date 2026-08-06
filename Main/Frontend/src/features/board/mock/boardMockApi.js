@@ -137,6 +137,10 @@ export const boardMockApi = {
         Object.values(boardMockDatabase.meetingRooms)[0]
       )?.participants || []
     ),
+  kickMeetingParticipant: () => mockResponse(null),
+  getMeetingInviteCandidates: () => mockResponse([]),
+  inviteMeetingMember: (meetingId, userId) =>
+    mockResponse({ meetingId, userId }),
   getMessages: (meetingId) =>
     mockResponse(
       (
@@ -160,6 +164,16 @@ export const boardMockApi = {
     )
     if (workspace) Object.assign(workspace, data)
     return mockResponse(workspace || team)
+  },
+  uploadTeamProfileImage: (teamId, _file, previewUrl = '') => {
+    const profileImage = previewUrl || ''
+    const team = findMockTeam(teamId)
+    const workspace = boardMockDatabase.workspaces.find(
+      (item) => String(item.id) === String(teamId)
+    )
+    if (team) team.profileImage = profileImage
+    if (workspace) workspace.profileImage = profileImage
+    return mockResponse({ id: String(teamId), profileImage })
   },
   reorderWorkspaces: (spaceOrder) => {
     const normalizedOrder = spaceOrder.map(String)
@@ -357,6 +371,14 @@ export const boardMockApi = {
     calendar?.events.push(event)
     return mockResponse(event)
   },
+  uploadVadRecording: (meetingId, data) =>
+    mockResponse({
+      meetingId,
+      participantId: 'me',
+      sequence: data.sequence,
+      startedAt: data.startedAt,
+      endedAt: data.endedAt
+    }),
   updateSchedule: (scheduleId, data) => {
     const event = Object.values(boardMockDatabase.calendars)
       .flatMap((calendar) => calendar.events || [])

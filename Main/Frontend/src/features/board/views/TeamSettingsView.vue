@@ -10,7 +10,22 @@
     </header>
     <div class="team-settings-grid">
       <section class="settings-card">
-        <header><i>{{ boardState.team.badge }}</i><div><h2>기본 정보</h2><p>팀 멤버에게 표시되는 정보입니다.</p></div></header>
+        <header class="basic-settings-header">
+          <i>
+            <img v-if="form.profileImage" :src="form.profileImage" alt="" />
+            <span v-else>{{ boardState.team.badge }}</span>
+          </i>
+          <div><h2>기본 정보</h2><p>팀 멤버에게 표시되는 정보입니다.</p></div>
+          <TeamProfileImagePicker
+            compact
+            :model-value="form.profileImage"
+            :fallback="boardState.team.badge"
+            :color="form.color"
+            label="팀 프로필 이미지"
+            @file-change="selectProfileImage"
+            @error="notify"
+          />
+        </header>
         <label class="field">팀 스페이스 이름<input v-model.trim="form.name" /></label>
         <label class="field">팀 설명<textarea v-model.trim="form.description"></textarea></label>
         <fieldset class="team-color-field">
@@ -148,13 +163,14 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppColorPicker from '../../../shared/components/AppColorPicker.vue'
 import AppSelect from '../../../shared/components/AppSelect.vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import TeamLayout from '../components/TeamLayout.vue'
+import TeamProfileImagePicker from '../components/TeamProfileImagePicker.vue'
 import { useBoardPage } from '../composables/useBoardPage'
 import { teamCreateColors } from '../constants/teamCreateColors'
 import { boardStore } from '../stores/boardStore'
@@ -168,6 +184,9 @@ const saving = ref(false)
 const actionPending = ref(false)
 const pendingAction = ref('')
 const selectedOwnerId = ref('')
+const imageFile = ref(null)
+const imagePreviewUrl = ref('')
+const originalProfileImage = ref('')
 const isOwner = computed(
   () => String(boardState.team.role || '').toLowerCase() === 'owner'
 )
@@ -220,6 +239,7 @@ const form = reactive({
   name: '',
   description: '',
   color: '',
+  profileImage: '',
   defaultMemberRole: '',
   inviteLinkEnabled: true,
   ownerApprovalRequired: false,
@@ -235,12 +255,38 @@ watch(
   () => boardState.team,
   team => {
     if (!team?.id) return
+    if (!imageFile.value) {
+      originalProfileImage.value = team.profileImage || ''
+    }
     Object.assign(form, team, {
+      profileImage: imageFile.value ? form.profileImage : team.profileImage || '',
       notifications: { ...form.notifications, ...(team.notifications || {}) }
     })
   },
   { immediate: true }
 )
+
+const revokePreviewUrl = () => {
+  if (imagePreviewUrl.value?.startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  imagePreviewUrl.value = ''
+}
+
+const selectProfileImage = file => {
+  revokePreviewUrl()
+  imageFile.value = file
+  imagePreviewUrl.value = URL.createObjectURL(file)
+  form.profileImage = imagePreviewUrl.value
+  boardStore.previewTeamProfileImage(teamId.value, imagePreviewUrl.value)
+}
+
+onBeforeUnmount(() => {
+  if (imageFile.value) {
+    boardStore.previewTeamProfileImage(teamId.value, originalProfileImage.value)
+  }
+  revokePreviewUrl()
+})
 
 function openConfirmation(action) {
   if (action === 'transfer' && !selectedOwnerId.value) {
@@ -293,6 +339,26 @@ async function save() {
       ownerApprovalRequired: form.ownerApprovalRequired,
       notifications: { ...form.notifications }
     })
+    if (imageFile.value) {
+      try {
+        const updatedTeam = await boardStore.uploadTeamProfileImage(
+          teamId.value,
+          imageFile.value,
+          imagePreviewUrl.value
+        )
+        const uploadedImage = updatedTeam.profileImage || ''
+        imageFile.value = null
+        originalProfileImage.value = uploadedImage
+        form.profileImage = uploadedImage
+        revokePreviewUrl()
+      } catch (error) {
+        notify(
+          error?.message ||
+            '기본 설정은 저장했지만 팀 프로필 이미지를 등록하지 못했습니다. 다시 시도해 주세요.'
+        )
+        return
+      }
+    }
     notify('팀 설정을 저장했습니다.')
   } catch (error) {
     notify(error?.message || '팀 설정을 저장하지 못했습니다.')
@@ -303,6 +369,31 @@ async function save() {
 </script>
 
 <style scoped>
+.basic-settings-header > i {
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 11px;
+}
+
+.basic-settings-header > i img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.basic-settings-header {
+  align-items: center;
+  min-height: 66px;
+}
+
+.basic-settings-header > div {
+  min-width: 0;
+}
+
 .notification-icon img,
 .access-icon img {
   display: block;
@@ -413,6 +504,10 @@ async function save() {
 }
 
 @media (max-width: 720px) {
+  .basic-settings-header {
+    flex-wrap: wrap;
+  }
+
   .ownership-transfer,
   .danger-action,
   .ownership-controls {

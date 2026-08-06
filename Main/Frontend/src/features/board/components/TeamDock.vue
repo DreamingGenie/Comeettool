@@ -26,7 +26,8 @@
         @dragover.prevent
         @drop.prevent="dropWorkspace(workspace.id)"
       >
-        {{ workspace.badge }}
+        <img v-if="workspace.profileImage" :src="workspace.profileImage" alt="" />
+        <span v-else>{{ workspace.badge }}</span>
       </button>
       <button type="button" class="team-bubble add" @click="$emit('create')">＋</button>
     </nav>
@@ -157,8 +158,18 @@ const dropWorkspace = targetWorkspaceId => {
 }
 
 .team-bubble {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
   transition: transform 0.18s ease, opacity 0.18s ease,
     box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.team-bubble > img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .team-bubble.drop-shift-up {

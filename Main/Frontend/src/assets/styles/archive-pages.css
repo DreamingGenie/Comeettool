@@ -985,7 +985,9 @@
   margin-top: 14.4px;
 }
 .document-ai img {
-  object-position: center 8%;
+  object-fit: contain;
+  object-position: center;
+  background: #ffffff;
 }
 .scheduling {
   background: #17233b;
@@ -995,7 +997,9 @@
   color: #aab3c5;
 }
 .scheduling img {
-  object-position: bottom;
+  object-fit: contain;
+  object-position: center;
+  background: #19253d;
 }
 .meeting-feature {
   grid-column: 1/-1;
@@ -1013,6 +1017,9 @@
 .meeting-feature img {
   height: 224px;
   margin: 0;
+  object-fit: contain;
+  object-position: center;
+  background: #101114;
 }
 .intro-cta {
   background: linear-gradient(135deg, #445fe5, #687bf0);
@@ -1369,7 +1376,7 @@
   overflow: hidden;
 }
 .home-dashboard .calendar-grid {
-  grid-template-rows: 21.76px repeat(5, minmax(0, 1fr));
+  grid-template-rows: 21.76px repeat(var(--calendar-week-count, 5), minmax(0, 1fr));
   height: calc(100% - 45.44px);
 }
 .home-dashboard .calendar-grid .day {
@@ -1454,7 +1461,9 @@
   width: 100%;
   height: 244px;
   margin: 0;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  background: #101114;
 }
 @media (max-width: 720px) {
   .feature-grid {

@@ -22,27 +22,8 @@ class MeetingTranscriptionEventListenerTest {
     private MeetingTranscriptionEventListener eventListener;
 
     @Test
-    @DisplayName("회의 생성 이벤트를 받으면 AI 시작 API를 호출한다")
-    void handleMeetingTranscriptionStarted_callsAiClient() {
-        Long meetingId = 15L;
-        String startedAt = "2026-08-03T15:25:17.64601+09:00";
-
-        eventListener.handleMeetingTranscriptionStarted(
-                new MeetingTranscriptionStartedEvent(
-                        meetingId,
-                        startedAt
-                )
-        );
-
-        verify(transcriptionProcessor).startTranscription(
-                meetingId,
-                startedAt
-        );
-    }
-
-    @Test
-    @DisplayName("회의 종료 이벤트를 받으면 AI 종료 API를 호출한다")
-    void handleMeetingTranscriptionEnded_callsAiClient() {
+    @DisplayName("회의 종료 이벤트를 받으면 AI process를 호출한다")
+    void handleMeetingTranscriptionEnded_callsProcessMeeting() {
         Long meetingId = 15L;
         String endedAt = "2026-08-03T16:25:17.64601+09:00";
 
@@ -53,9 +34,6 @@ class MeetingTranscriptionEventListenerTest {
                 )
         );
 
-        verify(transcriptionProcessor).endTranscription(
-                meetingId,
-                endedAt
-        );
+        verify(transcriptionProcessor).processMeeting(meetingId);
     }
 }

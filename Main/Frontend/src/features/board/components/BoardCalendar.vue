@@ -1,5 +1,8 @@
 <template>
-  <section class="calendar">
+  <section
+    class="calendar"
+    :style="{ '--calendar-week-count': weeks.length }"
+  >
     <header class="calendar-head">
       <h2>{{ title }}</h2>
       <div class="month-ctrl">
@@ -334,15 +337,11 @@ const hiddenSegmentsFor = day => segmentsCovering(day).filter(
   transform: scale(1.08);
 }
 
-.day:hover,
-.day:focus-within {
-  z-index: 5;
-}
-
 .add-event {
   position: absolute;
   top: 6px;
   right: 6px;
+  z-index: 4;
   display: grid;
   width: 22px;
   height: 22px;
@@ -403,7 +402,7 @@ const hiddenSegmentsFor = day => segmentsCovering(day).filter(
   top: 27px;
   right: 0;
   left: 0;
-  z-index: 2;
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   grid-auto-rows: 15px;
@@ -456,7 +455,7 @@ const hiddenSegmentsFor = day => segmentsCovering(day).filter(
   position: absolute;
   right: var(--calendar-cell-padding);
   bottom: 4px;
-  z-index: 3;
+  z-index: 4;
   display: block;
   width: auto;
   margin: 0;
@@ -500,8 +499,10 @@ const hiddenSegmentsFor = day => segmentsCovering(day).filter(
   left: auto;
 }
 
-.day:hover .event-overflow-popover,
-.day:focus-within .event-overflow-popover {
+.more-events:hover + .event-overflow-popover,
+.more-events:focus-visible + .event-overflow-popover,
+.event-overflow-popover:hover,
+.event-overflow-popover:focus-within {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);

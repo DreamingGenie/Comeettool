@@ -9,8 +9,11 @@ import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
+import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
+import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.member.entity.MemberAuthority;
 import com.ssafy.backend.space.entity.Team;
@@ -31,7 +34,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -73,6 +78,9 @@ class SpaceServiceImplTest {
 
     @Mock
     private InvitationRepository invitationRepository;
+
+    @Mock
+    private ProfileImageStorageService profileImageStorageService;
 
     // 실제 매퍼를 주입해 변환 결과까지 검증한다(순수 변환 로직이라 @Spy로 실제 구현 사용).
     @Spy
@@ -714,6 +722,106 @@ class SpaceServiceImplTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(ex -> ((CustomException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.SPACE_TRANSFER_TARGET_NOT_ELIGIBLE);
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-264 팀 프로필 이미지 변경")
+    class ChangeProfileImage {
+
+        private MockMultipartFile imageFile(String filename, long size) {
+            byte[] content = new byte[(int) size];
+            return new MockMultipartFile("profileImage", filename, "image/png", content);
+        }
+
+        @Test
+        @DisplayName("Owner 요청이면 새 URL을 Team.profileImageUrl에 반영하고 응답한다")
+        void changeProfileImage_updatesUrl() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            String newUrl = "http://localhost:8080/files/profile-images/teams/10/new.png";
+            given(profileImageStorageService.upload(any(MultipartFile.class), any(ProfileImageOwner.class)))
+                    .willReturn(newUrl);
+
+            ResponseSpaceProfileImageDto response =
+                    spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.png", 100));
+
+            assertThat(response.spaceId()).isEqualTo(TEAM_ID);
+            assertThat(response.teamProfileImage()).isEqualTo(newUrl);
+            assertThat(team.getProfileImageUrl()).isEqualTo(newUrl);
+        }
+
+        @Test
+        @DisplayName("기존 이미지가 있으면 새 이미지 저장 후 기존 이미지를 삭제한다")
+        void changeProfileImage_deletesPreviousAfterUpload() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            String previousUrl = "http://localhost:8080/files/profile-images/teams/10/old.png";
+            ReflectionTestUtils.setField(team, "profileImageUrl", previousUrl);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+            String newUrl = "http://localhost:8080/files/profile-images/teams/10/new.png";
+            given(profileImageStorageService.upload(any(MultipartFile.class), any(ProfileImageOwner.class)))
+                    .willReturn(newUrl);
+
+            spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.png", 100));
+
+            verify(profileImageStorageService).delete(previousUrl);
+        }
+
+        @Test
+        @DisplayName("Owner가 아니면 SPACE_OWNER_ONLY 예외가 발생하고 StorageService를 호출하지 않는다")
+        void changeProfileImage_rejectsNonOwner() {
+            Team team = teamWithId(TEAM_ID, 99L);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.png", 100)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_OWNER_ONLY);
+
+            verify(profileImageStorageService, never()).upload(any(), any());
+        }
+
+        @Test
+        @DisplayName("스페이스가 없으면 SPACE_NOT_FOUND 예외가 발생한다")
+        void changeProfileImage_notFound() {
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.png", 100)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SPACE_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("5MB를 초과하면 PROFILE_IMAGE_TOO_LARGE 예외가 발생하고 업로드하지 않는다")
+        void changeProfileImage_rejectsTooLarge() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.png", 5L * 1024 * 1024 + 1)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PROFILE_IMAGE_TOO_LARGE);
+
+            verify(profileImageStorageService, never()).upload(any(), any());
+        }
+
+        @Test
+        @DisplayName("지원하지 않는 확장자(gif)면 PROFILE_IMAGE_INVALID_TYPE 예외가 발생한다")
+        void changeProfileImage_rejectsUnsupportedType() {
+            Team team = teamWithId(TEAM_ID, USER_ID);
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID)).willReturn(Optional.of(team));
+
+            assertThatThrownBy(() ->
+                    spaceService.changeProfileImage(USER_ID, TEAM_ID, imageFile("team.gif", 100)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(ex -> ((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+
+            verify(profileImageStorageService, never()).upload(any(), any());
         }
     }
 }

@@ -6,6 +6,7 @@ import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.jwt.JwtProvider;
 import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
 import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
+import com.ssafy.backend.member.repository.MemberRepository;
 import com.ssafy.backend.user.dto.RequestChangePasswordDto;
 import com.ssafy.backend.user.dto.RequestUpdateProfileDto;
 import com.ssafy.backend.user.dto.ResponseChangePasswordDto;
@@ -38,6 +39,7 @@ public class UserServiceImpl implements UserService {
     private static final java.util.Set<String> ALLOWED_IMAGE_EXTENSIONS = java.util.Set.of("jpg", "jpeg", "png");
 
     private final UserRepository userRepository;
+    private final MemberRepository memberRepository;
     private final UserProfileMapper userProfileMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
@@ -70,6 +72,13 @@ public class UserServiceImpl implements UserService {
                 request.nickname(), request.phone(), request.sex(), request.age(),
                 request.jobFamily(), request.jobRole(), request.userDescription(), request.userColor()
         );
+
+        // 닉네임이 요청에 포함된 경우에만(부분 수정 컨벤션) 이 사용자가 속한 모든 스페이스의 멤버 닉네임도
+        // 같이 갱신한다 — 스페이스별 커스텀 닉네임 기능이 없어 Member.nickname은 항상 User.nickname을
+        // 그대로 따라가야 하는데, 지금까지는 팀 가입 시점에 한 번만 복사되고 이후 동기화가 안 되고 있었다.
+        if (request.nickname() != null) {
+            memberRepository.updateNicknameByUserId(userId, request.nickname());
+        }
 
         return userProfileMapper.toMyProfileResponse(user);
     }
