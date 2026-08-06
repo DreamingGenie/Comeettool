@@ -70,6 +70,12 @@ const state = reactive({
     summary: null,
     feedback: null
   },
+  archivePagination: {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  },
   meetingRoom: { ...emptyMeetingRoom },
   meetingInviteCandidates: [],
   inviteMembers: [],
@@ -97,6 +103,12 @@ function resetState() {
     feedback: []
   }
   state.archiveStats = {
+    documents: null,
+    minutes: null,
+    summary: null,
+    feedback: null
+  }
+  state.archivePagination = {
     documents: null,
     minutes: null,
     summary: null,
@@ -281,11 +293,53 @@ export const boardStore = {
     state.teamRoles = Array.isArray(roles) ? roles : []
     return state.teamRoles
   },
-  async loadArchive(teamId, section) {
-    const result = await withLoading(() => dataSource.board.getArchive(teamId, section))
+  async loadArchive(teamId, section, page = 0, size = 10) {
+    const source = ['minutes', 'summary', 'feedback'].includes(section)
+      ? dataSource.report
+      : dataSource.board
+    const result = await withLoading(() => source.getArchive(teamId, section, page, size))
     state.archives[section] = result?.rows || result || []
     state.archiveStats[section] = result?.stats || null
+    state.archivePagination[section] = result?.pagination || null
     return state.archives[section]
+  },
+  async loadReportDetail(meetingId, section, listRow) {
+    return withLoading(() => dataSource.report.getReportDetail(meetingId, section, listRow))
+  },
+  async updateMinutes(meetingId, minutes, listRow) {
+    const updated = await withLoading(() =>
+      dataSource.report.updateMinutes(meetingId, minutes, listRow)
+    )
+    const rowIndex = state.archives.summary.findIndex((row) => String(row.id) === String(meetingId))
+    if (rowIndex >= 0) {
+      state.archives.summary[rowIndex] = {
+        ...state.archives.summary[rowIndex],
+        title: updated.title,
+        confirmed: updated.confirmed,
+        updatedAt: updated.updatedAt
+      }
+    }
+    return updated
+  },
+  async exportTranscript(meetingId, format) {
+    return withLoading(() => dataSource.report.exportTranscript(meetingId, format))
+  },
+  async confirmMinutes(meetingId) {
+    const result = await withLoading(() => dataSource.report.confirmMinutes(meetingId))
+    const rowIndex = state.archives.summary.findIndex((row) => String(row.id) === String(meetingId))
+    if (rowIndex >= 0) {
+      state.archives.summary[rowIndex] = {
+        ...state.archives.summary[rowIndex],
+        confirmed: Boolean(result?.isConfirmed)
+      }
+    }
+    return result
+  },
+  async exportMinutes(meetingId, format) {
+    return withLoading(() => dataSource.report.exportMinutes(meetingId, format))
+  },
+  async exportFacilitatorReport(meetingId, format) {
+    return withLoading(() => dataSource.report.exportFacilitatorReport(meetingId, format))
   },
   async createWorkspace(data) {
     const workspace = await dataSource.board.createWorkspace(data)
@@ -358,11 +412,9 @@ export const boardStore = {
     return state.meetingInviteCandidates
   },
   async inviteMeetingMember(meetingId, userId) {
-    const result = await withLoading(() =>
-      dataSource.board.inviteMeetingMember(meetingId, userId)
-    )
+    const result = await withLoading(() => dataSource.board.inviteMeetingMember(meetingId, userId))
     state.meetingInviteCandidates = state.meetingInviteCandidates.filter(
-      candidate => String(candidate.userId) !== String(userId)
+      (candidate) => String(candidate.userId) !== String(userId)
     )
     await boardStore.loadMeetingParticipants(meetingId)
     return result

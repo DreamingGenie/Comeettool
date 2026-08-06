@@ -70,6 +70,10 @@ async function submit() {
   background: #f8f9fc;
 }
 
+.field textarea {
+  resize: none;
+}
+
 .team-color-field legend {
   display: block;
   width: 100%;

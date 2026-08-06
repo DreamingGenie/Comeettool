@@ -10,7 +10,7 @@
       <span>WORK SMARTER, TOGETHER</span>
       <h1>AI와 함께하는<br /><strong>스마트한 팀 협업</strong>, 코밋툴</h1>
       <p>
-        문서 분석부터 스마트 스케줄링, 지능형 화상 회의까지.<br />
+        공유 문서 편집부터 팀 일정 관리, 지능형 화상 회의까지.<br />
         엔터프라이즈급 AI 보안 기술로 당신의 팀이 더 본질적인 업무에 집중하도록 돕습니다.
       </p>
       <div>
@@ -26,18 +26,21 @@
       </header>
       <div class="feature-grid">
         <article class="feature-card document-ai">
-          <h3>Document AI</h3>
-          <p>수천 장의 문서를 빠르게 분석하고, 핵심 요약부터 콘텐츠 기반 질문 답변까지 제공합니다.</p>
+          <h3>공유 문서 편집</h3>
+          <p>팀원들과 문서를 실시간으로 함께 작성하고, 권한에 따라 안전하게 공유하고 편집합니다.</p>
+          <img src="/assets/landing-document-ai.png" alt="코밋툴 공유 문서 화면" />
         </article>
         <article class="feature-card scheduling">
-          <h3>Smart Scheduling</h3>
-          <p>팀원들의 스케줄을 분석해 최적의 미팅 시간을 제안하고 우선순위를 관리합니다.</p>
+          <h3>팀 일정 관리</h3>
+          <p>팀 일정을 캘린더에서 한눈에 확인하고, 회의와 주요 일정을 손쉽게 등록하고 관리합니다.</p>
+          <img src="/assets/landing-scheduling.png" alt="코밋툴 팀 일정 화면" />
         </article>
         <article class="feature-card meeting-feature">
           <div>
             <h3>지능형 화상 회의</h3>
             <p>실시간 자동 자막, 회의록 요약과 주요 안건 트래킹까지 회의 전 과정을 AI가 보조합니다.</p>
           </div>
+          <img src="/assets/landing-meeting.png" alt="코밋툴 화상회의 화면" />
         </article>
       </div>
     </section>
