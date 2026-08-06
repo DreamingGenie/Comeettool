@@ -56,6 +56,7 @@ while IFS= read -r migration_file; do
     sed \
         -e 's/${backendRuntimeRole}/postgres/g' \
         -e 's/${yjsRuntimeRole}/postgres/g' \
+        -e 's/${aiRuntimeRole}/postgres/g' \
         "${migration_file}" >"${rendered_file}"
 
     echo "Applying $(basename "${migration_file}") to the disposable CI database."

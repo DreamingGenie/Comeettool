@@ -8,6 +8,7 @@ set -eu
 : "${FLYWAY_PASSWORD:?FLYWAY_PASSWORD is required}"
 : "${FLYWAY_PLACEHOLDERS_BACKENDRUNTIMEROLE:?FLYWAY_PLACEHOLDERS_BACKENDRUNTIMEROLE is required}"
 : "${FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE:?FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE is required}"
+: "${FLYWAY_PLACEHOLDERS_AIRUNTIMEROLE:?FLYWAY_PLACEHOLDERS_AIRUNTIMEROLE is required}"
 
 fail_validation() {
     echo "$1 is invalid" >&2
@@ -50,6 +51,9 @@ validate_identifier \
 validate_identifier \
     "$FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE" \
     "FLYWAY_PLACEHOLDERS_YJSRUNTIMEROLE"
+validate_identifier \
+    "$FLYWAY_PLACEHOLDERS_AIRUNTIMEROLE" \
+    "FLYWAY_PLACEHOLDERS_AIRUNTIMEROLE"
 
 export FLYWAY_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=verify-full&sslrootcert=/flyway/certs/rds-ca-bundle.pem"
 

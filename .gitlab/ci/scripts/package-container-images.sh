@@ -5,6 +5,7 @@ set -eu
 DEPLOY_BACKEND_REPOSITORY="a707-dev-backend"
 DEPLOY_YJS_REPOSITORY="a707-dev-yjs"
 DEPLOY_MIGRATION_REPOSITORY="a707-dev-migration"
+DEPLOY_AI_REPOSITORY="a707-dev-ai"
 
 fail_package() {
   echo "Container packaging failed: $1" >&2
@@ -49,7 +50,8 @@ check_repository_contract() {
 for package_repository in \
   "$DEPLOY_BACKEND_REPOSITORY" \
   "$DEPLOY_YJS_REPOSITORY" \
-  "$DEPLOY_MIGRATION_REPOSITORY"; do
+  "$DEPLOY_MIGRATION_REPOSITORY" \
+  "$DEPLOY_AI_REPOSITORY"; do
   check_repository_contract "$package_repository"
 done
 
@@ -133,6 +135,11 @@ build_and_push \
   Main/Backend/Dockerfile.migration \
   Main/Backend \
   migration
+build_and_push \
+  "$DEPLOY_AI_REPOSITORY" \
+  Main/AI_BE/Dockerfile \
+  Main/AI_BE \
+  ai
 
 buildah logout "$ecr_registry" >/dev/null 2>&1 || true
 unset aws_account_id ecr_registry remote_image local_image

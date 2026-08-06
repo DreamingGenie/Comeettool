@@ -12,8 +12,8 @@ facilitator_report_history 테이블에 쌓고, 다음 회의를 처리할 때 �
 
 누적된 히스토리 전체를 대상으로 코사인 거리(<=> 연산자, HNSW 인덱스)로 검색한다.
 
-PostgreSQL 15+ + pgvector 확장을 사용한다. 연결 정보는 환경변수 DATABASE_URL
-(libpq 연결 문자열, 예: postgresql://user:pass@host:5432/dbname)로 받는다.
+PostgreSQL 15+ + pgvector 확장을 사용한다. 로컬 DATABASE_URL 또는 ECS에서
+Secrets Manager로 주입한 분리 DB 환경변수를 사용한다.
 """
 
 import os
@@ -22,6 +22,8 @@ import psycopg2
 from openai import OpenAI
 from pgvector import Vector
 from pgvector.psycopg2 import register_vector
+
+from app.core.config import get_settings
 
 TABLE_NAME = "facilitator_report_history"
 
@@ -35,11 +37,9 @@ MAX_DOC_CHARS = 6000
 
 
 def get_connection():
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
-    with conn.cursor() as cur:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    conn.commit()
-    register_vector(conn)  # vector 타입 어댑터 등록은 확장이 존재해야 가능
+    conn = psycopg2.connect(**get_settings().psycopg2_connect_kwargs)
+    # vector 확장과 RAG 테이블은 Backend Flyway 마이그레이션이 관리한다.
+    register_vector(conn)
     return conn
 
 
@@ -50,28 +50,6 @@ def _embed(text: str) -> list[float]:
     )
     response = client.embeddings.create(model=EMBEDDING_MODEL, input=text[:MAX_DOC_CHARS])
     return response.data[0].embedding
-
-
-def ensure_schema(conn) -> None:
-    """테이블, HNSW 인덱스가 없으면 생성한다(vector 확장은 get_connection에서 이미 보장됨)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                id BIGINT PRIMARY KEY,
-                document TEXT NOT NULL,
-                embedding vector({EMBEDDING_DIM}) NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """
-        )
-        cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {TABLE_NAME}_embedding_hnsw_idx
-            ON {TABLE_NAME} USING hnsw (embedding vector_cosine_ops);
-            """
-        )
-    conn.commit()
 
 
 def save_facilitator_report(meeting_id: int, document: str, created_at=None) -> None:
@@ -86,7 +64,6 @@ def save_facilitator_report(meeting_id: int, document: str, created_at=None) -> 
     embedding = _embed(content)
     conn = get_connection()
     try:
-        ensure_schema(conn)
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -123,7 +100,6 @@ def get_relevant_facilitator_reports(
 
     conn = get_connection()
     try:
-        ensure_schema(conn)
         with conn.cursor() as cur:
             if exclude_id is not None:
                 cur.execute(
