@@ -451,6 +451,10 @@ import { useUserPage } from '../../user/composables/useUserPage'
 import { meetingControls } from '../constants/meetingControls'
 import { useBoardPage } from '../composables/useBoardPage'
 import { useLiveKitMeeting } from '../composables/useLiveKitMeeting'
+import {
+  findMeetingPictureInPictureVideo,
+  meetingDocumentMode
+} from '../composables/useMeetingDocumentMode'
 import { useVadRecording } from '../composables/useVadRecording'
 import { boardStore } from '../stores/boardStore'
 
@@ -484,6 +488,7 @@ const {
 } = useLiveKitMeeting({
   onStatusChange: status => boardStore.setMeetingConnectionStatus(status),
   onDisconnected: ({ message }) => {
+    meetingDocumentMode.clear()
     notify(message)
     boardStore.clearMeetingRoom()
     const teamId = boardState.activeMeeting.teamId || boardState.currentTeamId
@@ -663,6 +668,8 @@ const isFullscreen = ref(false)
 const sidePanel = ref('participants')
 const controlsCollapsed = ref(false)
 const controlsHovered = ref(false)
+let pictureInPictureVideo = null
+let suppressPictureInPictureReturn = false
 
 const toggleControlsCollapsed = () => {
   controlsCollapsed.value = !controlsCollapsed.value
@@ -794,6 +801,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  pictureInPictureVideo?.removeEventListener(
+    'leavepictureinpicture',
+    returnToMeetingFromPictureInPicture
+  )
+  pictureInPictureVideo = null
   participantRefreshTimers.forEach(timer => window.clearTimeout(timer))
   window.clearTimeout(vadStartTimer)
   stopVadRecording()
@@ -845,7 +857,7 @@ async function handleControl(id) {
     return
   }
   if (id === 'document') {
-    notify('공유문서와 연결됩니다.')
+    await openDocumentsInPictureInPicture()
     return
   }
   if (id === 'chat') {
@@ -873,6 +885,79 @@ async function handleControl(id) {
   }
 }
 
+async function returnToMeetingFromPictureInPicture() {
+  if (suppressPictureInPictureReturn) return
+  if (!meetingDocumentMode.isActiveMeeting(meetingId.value)) return
+
+  const returnRoute = meetingDocumentMode.state.returnRoute || `/meetings/${meetingId.value}`
+  try {
+    await router.push(returnRoute)
+  } finally {
+    meetingDocumentMode.clear()
+    pictureInPictureVideo = null
+  }
+}
+
+async function openDocumentsInPictureInPicture() {
+  if (!document.pictureInPictureEnabled) {
+    notify('현재 브라우저에서는 PiP 모드를 지원하지 않습니다.')
+    return
+  }
+
+  const teamId = boardState.activeMeeting.teamId || boardState.currentTeamId
+  if (!teamId) {
+    notify('회의가 연결된 팀 스페이스를 찾을 수 없습니다.')
+    return
+  }
+
+  const video = findMeetingPictureInPictureVideo(meetingRoomElement.value)
+  if (!video?.requestPictureInPicture) {
+    notify('PiP로 표시할 카메라 또는 화면 공유 영상이 없습니다.')
+    return
+  }
+
+  const returnRoute = router.currentRoute.value.fullPath || `/meetings/${meetingId.value}`
+  meetingDocumentMode.begin({
+    meetingId: meetingId.value,
+    teamId,
+    returnRoute
+  })
+
+  pictureInPictureVideo = video
+  video.addEventListener(
+    'leavepictureinpicture',
+    returnToMeetingFromPictureInPicture,
+    { once: true }
+  )
+
+  try {
+    if (document.pictureInPictureElement && document.pictureInPictureElement !== video) {
+      suppressPictureInPictureReturn = true
+      await document.exitPictureInPicture()
+      suppressPictureInPictureReturn = false
+    }
+    await video.requestPictureInPicture()
+    await router.push({
+      name: 'team-documents',
+      params: { teamId: String(teamId) },
+      query: { meetingId: meetingId.value }
+    })
+  } catch (error) {
+    video.removeEventListener(
+      'leavepictureinpicture',
+      returnToMeetingFromPictureInPicture
+    )
+    suppressPictureInPictureReturn = true
+    if (document.pictureInPictureElement === video) {
+      await document.exitPictureInPicture().catch(() => undefined)
+    }
+    suppressPictureInPictureReturn = false
+    pictureInPictureVideo = null
+    meetingDocumentMode.clear()
+    notify(error?.message || '공유 문서 PiP 모드를 시작하지 못했습니다.')
+  }
+}
+
 async function exitMeeting() {
   if (exiting.value) return
   if (isHost.value && !window.confirm('회의를 종료하면 모든 참가자의 연결이 종료됩니다. 계속할까요?')) {
@@ -880,6 +965,7 @@ async function exitMeeting() {
   }
 
   const action = isHost.value ? 'end' : 'leave'
+  meetingDocumentMode.clear()
   exiting.value = true
   requestServerExit(action)
   try {

@@ -107,7 +107,7 @@ const routes = [
     path: '/meetings/:meetingId',
     name: 'meeting',
     component: MeetingView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, keepAlive: true }
   },
   {
     path: '/profile',
