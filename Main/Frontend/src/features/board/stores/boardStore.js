@@ -289,7 +289,20 @@ export const boardStore = {
     const selectedMeeting = state.meetings.find(
       (meeting) => String(meeting.id) === String(meetingId)
     )
-    if (selectedMeeting) state.activeMeeting = selectedMeeting
+    if (selectedMeeting) {
+      state.activeMeeting = selectedMeeting
+    } else if (connection?.teamId) {
+      // 회의 목록을 거치지 않고 입장(새로고침/직접 진입)한 경우,
+      // Join 응답의 teamId로 activeMeeting을 최소 정보만 채워 팀 스페이스 연결을 유지한다.
+      state.activeMeeting = {
+        ...emptyMeeting,
+        id: String(meetingId),
+        teamId: String(connection.teamId)
+      }
+    }
+    if (connection?.teamId) {
+      state.currentTeamId = state.currentTeamId || String(connection.teamId)
+    }
     await boardStore.loadMeetingParticipants(meetingId)
     return state.meetingRoom
   },
