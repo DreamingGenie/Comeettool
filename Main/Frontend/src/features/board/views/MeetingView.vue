@@ -442,6 +442,12 @@
   </BaseModal>
 </template>
 
+<script>
+export default {
+  name: 'MeetingView'
+}
+</script>
+
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'

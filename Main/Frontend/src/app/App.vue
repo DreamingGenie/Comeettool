@@ -1,26 +1,17 @@
 <template>
   <RouterView v-slot="{ Component, route }">
-    <KeepAlive
-      v-if="route.meta.keepAlive || meetingDocumentMode.state.active"
-      :max="1"
-    >
+    <KeepAlive :include="cachedViewNames" :max="1">
       <component
-        v-if="route.meta.keepAlive"
         :is="Component"
-        :key="`meeting-${route.params.meetingId}`"
+        :key="route.meta.keepAlive ? `meeting-${route.params.meetingId}` : route.fullPath"
       />
     </KeepAlive>
-    <component
-      :is="Component"
-      v-if="!route.meta.keepAlive"
-      :key="route.fullPath"
-    />
   </RouterView>
   <AppToast />
 </template>
 
 <script setup>
-import { provide, watch } from 'vue'
+import { computed, provide, watch } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { meetingDocumentMode } from '../features/board/composables/useMeetingDocumentMode'
 import { boardStore } from '../features/board/stores/boardStore'
@@ -29,6 +20,9 @@ import AppToast from '../shared/components/AppToast.vue'
 import { notificationContextKey } from '../shared/injection/notificationContext'
 
 const router = useRouter()
+const cachedViewNames = computed(() =>
+  meetingDocumentMode.state.active ? ['MeetingView'] : []
+)
 
 const loadMeetingInvites = () =>
   notificationStore.loadMeetingInvites({
