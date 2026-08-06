@@ -38,7 +38,9 @@ class FakeRoom {
 
   async connect() {}
 
-  async disconnect() {}
+  async disconnect() {
+    this.emit(RoomEvent.Disconnected, 0)
+  }
 }
 
 vi.mock('livekit-client', () => ({
@@ -101,6 +103,43 @@ async function connectRoom(options = {}) {
 describe('useLiveKitMeeting 채팅', () => {
   beforeEach(() => {
     localStorage.clear()
+  })
+
+  describe('LiveKit connection lifecycle', () => {
+    it('문서 PiP 모드에서는 화면 컴포넌트가 바뀌어도 회의 연결을 유지한다', async () => {
+      const { api, room, unmount } = await connectRoom({
+        preserveConnectionOnUnmount: () => true
+      })
+      const disconnect = vi.spyOn(room, 'disconnect')
+
+      unmount()
+      await Promise.resolve()
+
+      expect(disconnect).not.toHaveBeenCalled()
+    })
+
+    it('reuses the active room when the same token is loaded again', async () => {
+      const onDisconnected = vi.fn()
+      const { api, room, unmount } = await connectRoom({ onDisconnected })
+
+      const connectedAgain = await api.connect({ url: 'ws://livekit.test', token: 'token' })
+
+      expect(connectedAgain).toBe(room)
+      expect(api.room.value).toBe(room)
+      expect(onDisconnected).not.toHaveBeenCalled()
+      unmount()
+    })
+
+    it('does not treat a token refresh room replacement as meeting termination', async () => {
+      const onDisconnected = vi.fn()
+      const { api, room, unmount } = await connectRoom({ onDisconnected })
+
+      await api.connect({ url: 'ws://livekit.test', token: 'refreshed-token' })
+
+      expect(api.room.value).not.toBe(room)
+      expect(onDisconnected).not.toHaveBeenCalled()
+      unmount()
+    })
   })
 
   describe('sendChatMessage', () => {

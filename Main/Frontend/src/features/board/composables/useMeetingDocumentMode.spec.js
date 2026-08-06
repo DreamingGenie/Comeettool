@@ -1,9 +1,83 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { findMeetingPictureInPictureVideo, meetingDocumentMode } from './useMeetingDocumentMode'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createMeetingPictureInPictureVideo,
+  findMeetingPictureInPictureVideo,
+  meetingDocumentMode,
+  releaseMeetingPictureInPictureVideo
+} from './useMeetingDocumentMode'
+
+class FakeMediaStream {
+  constructor(tracks = []) {
+    this.tracks = tracks
+  }
+
+  getVideoTracks() {
+    return this.tracks.filter(track => track.kind === 'video')
+  }
+
+  getTracks() {
+    return this.tracks
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal('MediaStream', FakeMediaStream)
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+})
 
 afterEach(() => {
+  releaseMeetingPictureInPictureVideo()
   meetingDocumentMode.clear()
   document.body.innerHTML = ''
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('createMeetingPictureInPictureVideo', () => {
+  it('회의 화면과 분리된 비디오에 활성 카메라 트랙을 연결한다', async () => {
+    const cameraTrack = {
+      kind: 'video',
+      readyState: 'live',
+      enabled: true,
+      muted: false
+    }
+    const sourceVideo = document.createElement('video')
+    sourceVideo.srcObject = new FakeMediaStream([cameraTrack])
+
+    const pipVideo = await createMeetingPictureInPictureVideo(sourceVideo)
+
+    expect(pipVideo).not.toBe(sourceVideo)
+    expect(pipVideo.isConnected).toBe(true)
+    expect(pipVideo.srcObject.getVideoTracks()).toEqual([cameraTrack])
+  })
+
+  it('카메라가 꺼져 있으면 안내 화면 스트림으로 PiP를 준비한다', async () => {
+    const placeholderTrack = { kind: 'video', stop: vi.fn() }
+    const placeholderStream = new FakeMediaStream([placeholderTrack])
+    const context = {
+      fillStyle: '',
+      font: '',
+      textAlign: '',
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      fillText: vi.fn()
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context)
+    Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
+      configurable: true,
+      value: vi.fn(() => placeholderStream)
+    })
+
+    const pipVideo = await createMeetingPictureInPictureVideo()
+
+    expect(pipVideo.srcObject).toBe(placeholderStream)
+
+    releaseMeetingPictureInPictureVideo()
+    expect(placeholderTrack.stop).toHaveBeenCalledOnce()
+  })
 })
 
 describe('meetingDocumentMode', () => {
