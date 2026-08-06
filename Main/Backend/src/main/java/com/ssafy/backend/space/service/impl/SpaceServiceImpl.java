@@ -2,6 +2,8 @@ package com.ssafy.backend.space.service.impl;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
+import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
@@ -9,6 +11,7 @@ import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.member.entity.Member;
@@ -35,10 +38,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 팀 스페이스(teams/members) 조회·생성 로직 (SPACE-01/02/05).
- * Controller는 요청/응답만, 비즈니스 로직은 이 계층에 둔다(코드 컨벤션).
+ * 팀 스페이스(teams/members) 조회·생성 로직 (SPACE-01/02/05). Controller는 요청/응답만, 비즈니스 로직은 이 계층에 둔다(코드 컨벤션).
  */
 @Service
 @RequiredArgsConstructor
@@ -51,6 +54,7 @@ public class SpaceServiceImpl implements SpaceService {
     private final MeetingRoomRepository meetingRoomRepository;
     private final InvitationRepository invitationRepository;
     private final SpaceMapper spaceMapper;
+    private final ProfileImageStorageService profileImageStorageService;
 
     @Override
     @Transactional
@@ -295,6 +299,32 @@ public class SpaceServiceImpl implements SpaceService {
         team.changeOwner(newOwnerUserId);
 
         return new ResponseTransferOwnerDto(spaceId, requesterUserId, newOwnerUserId);
+    }
+
+    @Override
+    @Transactional
+    public ResponseSpaceProfileImageDto changeProfileImage(
+            Long userId,
+            Long spaceId,
+            MultipartFile file
+    ) {
+        Team team = loadActiveTeamForUpdate(spaceId);
+        if (!isOwner(team, userId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        String previousUrl = team.getProfileImageUrl();
+        String newUrl = profileImageStorageService.upload(
+                file,
+                ProfileImageOwner.team(spaceId)
+        );
+        team.updateProfileImage(newUrl);
+
+        if (previousUrl != null && !previousUrl.equals(newUrl)) {
+            profileImageStorageService.delete(previousUrl);
+        }
+
+        return new ResponseSpaceProfileImageDto(newUrl);
     }
 
     // SPACE-05 등 읽기 전용: 삭제되지 않은 스페이스 조회(잠금 없음, 없으면 404).
