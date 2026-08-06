@@ -10,6 +10,7 @@ const emptyTeam = {
   role: '',
   memberCount: 0,
   description: '',
+  profileImage: '',
   ownerId: null,
   members: [],
   colorOptions: [],
@@ -150,6 +151,22 @@ function removeWorkspaceFromState(spaceId) {
     state.currentTeamId = ''
     state.team = { ...emptyTeam, members: [] }
     state.members = []
+  }
+}
+
+function setTeamProfileImage(teamId, profileImage) {
+  const normalizedTeamId = String(teamId)
+  if (String(state.team.id) === normalizedTeamId) {
+    state.team = { ...state.team, profileImage }
+  }
+  const workspaceIndex = state.workspaces.findIndex(
+    (workspace) => String(workspace.id) === normalizedTeamId
+  )
+  if (workspaceIndex >= 0) {
+    state.workspaces[workspaceIndex] = {
+      ...state.workspaces[workspaceIndex],
+      profileImage
+    }
   }
 }
 
@@ -464,6 +481,19 @@ export const boardStore = {
       }
     }
     return state.team
+  },
+  previewTeamProfileImage(teamId, profileImage) {
+    setTeamProfileImage(teamId, profileImage)
+  },
+  async uploadTeamProfileImage(teamId, file, previewUrl = '') {
+    const uploaded = await withLoading(() =>
+      dataSource.board.uploadTeamProfileImage(teamId, file, previewUrl)
+    )
+    const profileImage = uploaded?.profileImage || ''
+    setTeamProfileImage(teamId, profileImage)
+    return String(state.team.id) === String(teamId)
+      ? state.team
+      : state.workspaces.find((workspace) => String(workspace.id) === String(teamId))
   },
   async inviteMember(teamId, targetUserId) {
     return withLoading(() => dataSource.board.inviteMember(teamId, targetUserId))

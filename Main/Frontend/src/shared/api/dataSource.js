@@ -61,6 +61,7 @@ export const dataSource = {
     deleteTeamRole: spaceSource.deleteTeamRole,
     createWorkspace: spaceSource.createWorkspace,
     updateTeam: spaceSource.updateTeam,
+    uploadTeamProfileImage: spaceSource.uploadTeamProfileImage,
     reorderWorkspaces: spaceSource.reorderWorkspaces,
     leaveWorkspace: spaceSource.leaveWorkspace,
     deleteWorkspace: spaceSource.deleteWorkspace,
