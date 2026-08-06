@@ -168,6 +168,7 @@ const dropWorkspace = targetWorkspaceId => {
 .team-bubble > img {
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   object-fit: cover;
 }
 

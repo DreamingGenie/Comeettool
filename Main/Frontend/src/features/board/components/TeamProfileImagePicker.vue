@@ -152,16 +152,17 @@ const selectFile = event => {
 }
 
 .team-profile-picker.compact {
+  flex: 0 0 auto;
   margin-left: auto;
-  padding: 8px 10px;
+  padding: 6px 0 6px 12px;
   border: 0;
   background: transparent;
 }
 
 .team-profile-picker.compact .team-profile-preview {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
   font-size: 13px;
 }
 
@@ -170,8 +171,9 @@ const selectFile = event => {
 }
 
 .team-profile-picker.compact .team-profile-upload {
-  margin-top: 2px;
-  padding: 5px 9px;
+  margin-top: 3px;
+  padding: 6px 10px;
+  border-radius: 8px;
 }
 
 @media (max-width: 620px) {

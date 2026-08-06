@@ -370,13 +370,28 @@ async function save() {
 
 <style scoped>
 .basic-settings-header > i {
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  width: 42px;
+  height: 42px;
   overflow: hidden;
+  border-radius: 11px;
 }
 
 .basic-settings-header > i img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.basic-settings-header {
+  align-items: center;
+  min-height: 66px;
+}
+
+.basic-settings-header > div {
+  min-width: 0;
 }
 
 .notification-icon img,
