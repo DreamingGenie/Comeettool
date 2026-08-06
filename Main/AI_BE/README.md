@@ -50,7 +50,9 @@ app/
 
 ## 처리 흐름
 
-1. 클라이언트가 `POST /meetings/{meeting_id}/process` 호출 (회의 종료 + S3 업로드 완료 후).
+1. 클라이언트(BE)가 `POST /meetings/{meeting_id}/process` 호출 (회의 종료 + S3 업로드 완료 후).
+   내부 호출 인증을 위해 `X-Internal-Token` 헤더에 `AI_INTERNAL_TOKEN`(.env)과 동일한 값을
+   담아 보내야 하며, 없거나 값이 다르면 401을 반환한다.
 2. 서버는 `ProcessingJob` 레코드를 만들고 즉시 202로 `job_id`를 반환한다(비동기 처리).
 3. 백그라운드에서: S3에서 `conferences/{meeting_id}/` 전체 다운로드 → STT → RAG →
    LLM 구조화 추출(회의록 + Facilitator 보고서) → 결과를 각 테이블에 저장 → job 상태를
