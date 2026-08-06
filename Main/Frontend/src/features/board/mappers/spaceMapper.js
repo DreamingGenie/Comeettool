@@ -54,6 +54,12 @@ export const toUpdatedWorkspaceViewModel = (space) => {
   }
 }
 
+export const toTeamProfileImageViewModel = (response, spaceId = '') => ({
+  id: String(response?.spaceId ?? response?.id ?? spaceId),
+  profileImage:
+    response?.teamProfileImage || response?.teamProfileImageUrl || response?.profileImage || ''
+})
+
 export const toTeamViewModel = (space, currentUserId) => {
   const members = Array.isArray(space?.members) ? space.members : []
   const currentMember = members.find((member) => String(member.userId) === String(currentUserId))

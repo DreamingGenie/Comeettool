@@ -211,6 +211,7 @@ public class MeetingServiceImpl implements MeetingService {
 
         return new ResponseJoinMeetingDto(
                 meetingRoom.getId(),
+                meetingRoom.getTeamId(),
                 participant.getParticipantRole(),
                 meetingRoom.isHost(requesterUserId),
                 connectionInfo.token(),

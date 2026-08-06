@@ -10,6 +10,7 @@ const emptyTeam = {
   role: '',
   memberCount: 0,
   description: '',
+  profileImage: '',
   ownerId: null,
   members: [],
   colorOptions: [],
@@ -153,6 +154,22 @@ function removeWorkspaceFromState(spaceId) {
   }
 }
 
+function setTeamProfileImage(teamId, profileImage) {
+  const normalizedTeamId = String(teamId)
+  if (String(state.team.id) === normalizedTeamId) {
+    state.team = { ...state.team, profileImage }
+  }
+  const workspaceIndex = state.workspaces.findIndex(
+    (workspace) => String(workspace.id) === normalizedTeamId
+  )
+  if (workspaceIndex >= 0) {
+    state.workspaces[workspaceIndex] = {
+      ...state.workspaces[workspaceIndex],
+      profileImage
+    }
+  }
+}
+
 export const boardStore = {
   state,
   async loadResources(resources = [], context = {}) {
@@ -272,13 +289,29 @@ export const boardStore = {
     const selectedMeeting = state.meetings.find(
       (meeting) => String(meeting.id) === String(meetingId)
     )
-    if (selectedMeeting) state.activeMeeting = selectedMeeting
+    if (selectedMeeting) {
+      state.activeMeeting = selectedMeeting
+    } else if (connection?.teamId) {
+      // 회의 목록을 거치지 않고 입장(새로고침/직접 진입)한 경우,
+      // Join 응답의 teamId로 activeMeeting을 최소 정보만 채워 팀 스페이스 연결을 유지한다.
+      state.activeMeeting = {
+        ...emptyMeeting,
+        id: String(meetingId),
+        teamId: String(connection.teamId)
+      }
+    }
+    if (connection?.teamId) {
+      state.currentTeamId = state.currentTeamId || String(connection.teamId)
+    }
     await boardStore.loadMeetingParticipants(meetingId)
     return state.meetingRoom
   },
-  async loadMeetingParticipants(meetingId = state.currentMeetingId) {
+  async loadMeetingParticipants(meetingId = state.currentMeetingId, options = {}) {
     if (!meetingId) return []
-    const participants = await withLoading(() => dataSource.board.getParticipants(meetingId))
+    const requestParticipants = () => dataSource.board.getParticipants(meetingId)
+    const participants = options.silent
+      ? await requestParticipants()
+      : await withLoading(requestParticipants)
     state.meetingRoom.participants = participants || []
     state.meetingRoom.totalParticipants = state.meetingRoom.participants.length
     return state.meetingRoom.participants
@@ -422,6 +455,9 @@ export const boardStore = {
   setMeetingConnectionStatus(status) {
     state.meetingRoom.connectionStatus = status
   },
+  clearError() {
+    state.error = ''
+  },
   clearMeetingRoom() {
     state.currentMeetingId = ''
     state.meetingRoom = {
@@ -464,6 +500,19 @@ export const boardStore = {
       }
     }
     return state.team
+  },
+  previewTeamProfileImage(teamId, profileImage) {
+    setTeamProfileImage(teamId, profileImage)
+  },
+  async uploadTeamProfileImage(teamId, file, previewUrl = '') {
+    const uploaded = await withLoading(() =>
+      dataSource.board.uploadTeamProfileImage(teamId, file, previewUrl)
+    )
+    const profileImage = uploaded?.profileImage || ''
+    setTeamProfileImage(teamId, profileImage)
+    return String(state.team.id) === String(teamId)
+      ? state.team
+      : state.workspaces.find((workspace) => String(workspace.id) === String(teamId))
   },
   async inviteMember(teamId, targetUserId) {
     return withLoading(() => dataSource.board.inviteMember(teamId, targetUserId))

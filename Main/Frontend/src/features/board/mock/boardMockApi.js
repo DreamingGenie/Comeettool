@@ -165,6 +165,16 @@ export const boardMockApi = {
     if (workspace) Object.assign(workspace, data)
     return mockResponse(workspace || team)
   },
+  uploadTeamProfileImage: (teamId, _file, previewUrl = '') => {
+    const profileImage = previewUrl || ''
+    const team = findMockTeam(teamId)
+    const workspace = boardMockDatabase.workspaces.find(
+      (item) => String(item.id) === String(teamId)
+    )
+    if (team) team.profileImage = profileImage
+    if (workspace) workspace.profileImage = profileImage
+    return mockResponse({ id: String(teamId), profileImage })
+  },
   reorderWorkspaces: (spaceOrder) => {
     const normalizedOrder = spaceOrder.map(String)
     const workspaceMap = new Map(

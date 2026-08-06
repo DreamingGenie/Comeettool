@@ -3,6 +3,7 @@ import {
   toCreateSpaceRequest,
   toDashboardViewModel,
   toMemberRowsViewModel,
+  toTeamProfileImageViewModel,
   toTeamViewModel,
   toUpdatedWorkspaceViewModel,
   toUpdateSpaceRequest,
@@ -96,6 +97,17 @@ export const boardApi = {
         body: JSON.stringify(toUpdateSpaceRequest(data))
       })
     ),
+  uploadTeamProfileImage: async (teamId, file) => {
+    const formData = new FormData()
+    formData.append('profileImage', file)
+    return toTeamProfileImageViewModel(
+      await request(`/api/v1/spaces/${teamId}/profile-image`, {
+        method: 'PATCH',
+        body: formData
+      }),
+      teamId
+    )
+  },
   reorderWorkspaces: async (spaceOrder) =>
     toDashboardViewModel(
       await request('/api/v1/spaces/order', {

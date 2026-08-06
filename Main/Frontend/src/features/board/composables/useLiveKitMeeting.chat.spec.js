@@ -38,7 +38,9 @@ class FakeRoom {
 
   async connect() {}
 
-  async disconnect() {}
+  async disconnect() {
+    this.emit(RoomEvent.Disconnected, 0)
+  }
 }
 
 vi.mock('livekit-client', () => ({
@@ -101,6 +103,76 @@ async function connectRoom(options = {}) {
 describe('useLiveKitMeeting 채팅', () => {
   beforeEach(() => {
     localStorage.clear()
+  })
+
+  describe('LiveKit connection lifecycle', () => {
+    it('문서 PiP 모드에서는 화면 컴포넌트가 바뀌어도 회의 연결을 유지한다', async () => {
+      const { api, room, unmount } = await connectRoom({
+        preserveConnectionOnUnmount: () => true
+      })
+      const disconnect = vi.spyOn(room, 'disconnect')
+
+      unmount()
+      await Promise.resolve()
+
+      expect(disconnect).not.toHaveBeenCalled()
+    })
+
+    it('reuses the active room when the same token is loaded again', async () => {
+      const onDisconnected = vi.fn()
+      const { api, room, unmount } = await connectRoom({ onDisconnected })
+
+      const connectedAgain = await api.connect({ url: 'ws://livekit.test', token: 'token' })
+
+      expect(connectedAgain).toBe(room)
+      expect(api.room.value).toBe(room)
+      expect(onDisconnected).not.toHaveBeenCalled()
+      unmount()
+    })
+
+    it('does not treat a token refresh room replacement as meeting termination', async () => {
+      const onDisconnected = vi.fn()
+      const { api, room, unmount } = await connectRoom({ onDisconnected })
+
+      await api.connect({ url: 'ws://livekit.test', token: 'refreshed-token' })
+
+      expect(api.room.value).not.toBe(room)
+      expect(onDisconnected).not.toHaveBeenCalled()
+      unmount()
+    })
+
+    it('회의 화면이 다시 활성화되면 기존 참가자 영상을 재생한다', async () => {
+      const { api, room, unmount } = await connectRoom()
+      const video = document.createElement('video')
+      const play = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(video, 'play', { configurable: true, value: play })
+      const track = {
+        kind: 'video',
+        sid: 'camera-track',
+        source: 'camera',
+        attach: vi.fn(() => video),
+        detach: vi.fn()
+      }
+      const participant = {
+        identity: 'participant-3',
+        getTrackPublication: () => undefined
+      }
+
+      room.emit(
+        RoomEvent.TrackSubscribed,
+        track,
+        { source: 'camera' },
+        participant
+      )
+      const container = document.createElement('div')
+      api.mountParticipantMedia('participant-3', container)
+
+      await api.resumeParticipantMedia()
+
+      expect(container.contains(video)).toBe(true)
+      expect(play).toHaveBeenCalledTimes(1)
+      unmount()
+    })
   })
 
   describe('sendChatMessage', () => {

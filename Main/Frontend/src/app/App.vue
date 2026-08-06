@@ -1,17 +1,32 @@
 <template>
-  <RouterView />
+  <RouterView v-slot="{ Component, route }">
+    <KeepAlive :include="cachedViewNames" :max="1">
+      <component
+        :is="Component"
+        :key="route.meta.keepAlive ? `meeting-${route.params.meetingId}` : route.fullPath"
+      />
+    </KeepAlive>
+  </RouterView>
   <AppToast />
 </template>
 
 <script setup>
-import { provide, watch } from 'vue'
+import { computed, provide, watch } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
+import { meetingDocumentMode } from '../features/board/composables/useMeetingDocumentMode'
 import { boardStore } from '../features/board/stores/boardStore'
 import { notificationStore } from '../features/notification/stores/notificationStore'
 import AppToast from '../shared/components/AppToast.vue'
+import { useToast } from '../shared/composables/useToast'
 import { notificationContextKey } from '../shared/injection/notificationContext'
 
 const router = useRouter()
+const { notify } = useToast()
+const cachedViewNames = computed(() =>
+  router.currentRoute.value.name === 'meeting' || boardStore.state.currentMeetingId
+    ? ['MeetingView']
+    : []
+)
 
 const loadMeetingInvites = () =>
   notificationStore.loadMeetingInvites({
@@ -35,6 +50,7 @@ provide(notificationContextKey, {
   },
   reject: (invitationId) => notificationStore.rejectInvitation(invitationId),
   join(meetingId) {
+    if (!meetingDocumentMode.allowMeetingAction(notify)) return
     notificationStore.dismissMeetingInvite(meetingId)
     return router.push(`/meetings/${meetingId}`)
   }

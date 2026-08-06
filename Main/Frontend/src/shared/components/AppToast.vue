@@ -1,5 +1,13 @@
 <template>
-  <div class="toast" :class="{ show: toastState.visible }" role="status" aria-live="polite">
+  <div
+    class="toast"
+    :class="{
+      show: toastState.visible,
+      'toast-top-center': toastState.placement === 'top-center'
+    }"
+    role="status"
+    aria-live="polite"
+  >
     {{ toastState.message }}
   </div>
 </template>

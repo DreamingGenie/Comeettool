@@ -442,8 +442,23 @@
   </BaseModal>
 </template>
 
+<script>
+export default {
+  name: 'MeetingView'
+}
+</script>
+
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch
+} from 'vue'
 import { useRouter } from 'vue-router'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
@@ -451,6 +466,12 @@ import { useUserPage } from '../../user/composables/useUserPage'
 import { meetingControls } from '../constants/meetingControls'
 import { useBoardPage } from '../composables/useBoardPage'
 import { useLiveKitMeeting } from '../composables/useLiveKitMeeting'
+import {
+  createMeetingPictureInPictureVideo,
+  findMeetingPictureInPictureVideo,
+  meetingDocumentMode,
+  releaseMeetingPictureInPictureVideo
+} from '../composables/useMeetingDocumentMode'
 import { useVadRecording } from '../composables/useVadRecording'
 import { boardStore } from '../stores/boardStore'
 
@@ -477,13 +498,16 @@ const {
   selectDevice,
   applySelectedDevices,
   mountParticipantMedia,
+  resumeParticipantMedia,
   sendChatMessage,
   setDeviceEnabled,
   requestServerExit,
   disconnectAfterServerExit
 } = useLiveKitMeeting({
+  preserveConnectionOnUnmount: () => meetingDocumentMode.isActiveMeeting(meetingId.value),
   onStatusChange: status => boardStore.setMeetingConnectionStatus(status),
   onDisconnected: ({ message }) => {
+    meetingDocumentMode.clear()
     notify(message)
     boardStore.clearMeetingRoom()
     const teamId = boardState.activeMeeting.teamId || boardState.currentTeamId
@@ -663,6 +687,8 @@ const isFullscreen = ref(false)
 const sidePanel = ref('participants')
 const controlsCollapsed = ref(false)
 const controlsHovered = ref(false)
+let pictureInPictureVideo = null
+let suppressPictureInPictureReturn = false
 
 const toggleControlsCollapsed = () => {
   controlsCollapsed.value = !controlsCollapsed.value
@@ -695,7 +721,7 @@ const helpItems = [
 const scheduleParticipantRefresh = () => {
   for (const delay of [500, 1500]) {
     participantRefreshTimers.push(window.setTimeout(() => {
-      boardStore.loadMeetingParticipants(meetingId.value).catch(() => undefined)
+      boardStore.loadMeetingParticipants(meetingId.value, { silent: true }).catch(() => undefined)
     }, delay))
   }
 }
@@ -714,7 +740,7 @@ watch(
         hasAskedDeviceSetup.value = true
         entryDeviceSelection.microphone = !deviceState.microphone
         entryDeviceSelection.camera = !deviceState.camera
-        await loadMediaDevices({ requestPermission: true })
+        await loadMediaDevices()
         modal.value = 'device-setup'
       }
     } catch (error) {
@@ -793,10 +819,24 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', syncFullscreenState)
 })
 
+onActivated(async () => {
+  await nextTick()
+  await resumeParticipantMedia()
+})
+
 onBeforeUnmount(() => {
+  const shouldKeepPictureInPicture = meetingDocumentMode.isActiveMeeting(meetingId.value)
+  if (!shouldKeepPictureInPicture) {
+    pictureInPictureVideo?.removeEventListener(
+      'leavepictureinpicture',
+      returnToMeetingFromPictureInPicture
+    )
+    pictureInPictureVideo = null
+    releaseMeetingPictureInPictureVideo()
+    stopVadRecording()
+  }
   participantRefreshTimers.forEach(timer => window.clearTimeout(timer))
   window.clearTimeout(vadStartTimer)
-  stopVadRecording()
   document.removeEventListener('fullscreenchange', syncFullscreenState)
 })
 
@@ -845,7 +885,7 @@ async function handleControl(id) {
     return
   }
   if (id === 'document') {
-    notify('공유문서와 연결됩니다.')
+    await openDocumentsInPictureInPicture()
     return
   }
   if (id === 'chat') {
@@ -873,6 +913,87 @@ async function handleControl(id) {
   }
 }
 
+async function returnToMeetingFromPictureInPicture() {
+  if (suppressPictureInPictureReturn) return
+  if (!meetingDocumentMode.isActiveMeeting(meetingId.value)) return
+
+  const returnRoute = meetingDocumentMode.state.returnRoute || `/meetings/${meetingId.value}`
+  try {
+    await router.push(returnRoute)
+  } finally {
+    meetingDocumentMode.clear()
+    releaseMeetingPictureInPictureVideo()
+    pictureInPictureVideo = null
+  }
+}
+
+async function openDocumentsInPictureInPicture() {
+  if (!document.pictureInPictureEnabled) {
+    notify('현재 브라우저에서는 PiP 모드를 지원하지 않습니다.')
+    return
+  }
+
+  const teamId = boardState.activeMeeting.teamId || boardState.currentTeamId
+  if (!teamId) {
+    notify('회의가 연결된 팀 스페이스를 찾을 수 없습니다.')
+    return
+  }
+
+  const sourceVideo = findMeetingPictureInPictureVideo(meetingRoomElement.value)
+
+  const returnRoute = router.currentRoute.value.fullPath || `/meetings/${meetingId.value}`
+  meetingDocumentMode.begin({
+    meetingId: meetingId.value,
+    teamId,
+    returnRoute
+  })
+
+  try {
+    if (document.pictureInPictureElement) {
+      suppressPictureInPictureReturn = true
+      await document.exitPictureInPicture()
+      suppressPictureInPictureReturn = false
+    }
+
+    const video = await createMeetingPictureInPictureVideo(sourceVideo)
+    if (!video?.requestPictureInPicture) {
+      throw new Error('현재 브라우저에서는 PiP 모드를 지원하지 않습니다.')
+    }
+
+    pictureInPictureVideo = video
+    video.addEventListener(
+      'leavepictureinpicture',
+      returnToMeetingFromPictureInPicture,
+      { once: true }
+    )
+
+    await video.requestPictureInPicture()
+    boardStore.clearError()
+    await router.push({
+      name: 'team-documents',
+      params: { teamId: String(teamId) },
+      query: { meetingId: meetingId.value }
+    })
+    notify('PiP를 종료하면 회의로 돌아갑니다.', 3000, {
+      placement: 'top-center'
+    })
+  } catch (error) {
+    pictureInPictureVideo?.removeEventListener(
+      'leavepictureinpicture',
+      returnToMeetingFromPictureInPicture
+    )
+    suppressPictureInPictureReturn = true
+    if (document.pictureInPictureElement === pictureInPictureVideo) {
+      await document.exitPictureInPicture().catch(() => undefined)
+    }
+    suppressPictureInPictureReturn = false
+    releaseMeetingPictureInPictureVideo()
+    pictureInPictureVideo = null
+    meetingDocumentMode.clear()
+    notify(error?.message || '공유 문서 PiP 모드를 시작하지 못했습니다.')
+  }
+}
+
 async function exitMeeting() {
   if (exiting.value) return
   if (isHost.value && !window.confirm('회의를 종료하면 모든 참가자의 연결이 종료됩니다. 계속할까요?')) {
@@ -880,6 +1001,8 @@ async function exitMeeting() {
   }
 
   const action = isHost.value ? 'end' : 'leave'
+  meetingDocumentMode.clear()
+  releaseMeetingPictureInPictureVideo()
   exiting.value = true
   requestServerExit(action)
   try {
@@ -964,7 +1087,7 @@ async function openDeviceSettings() {
   showMore.value = false
   activeControls.delete('more')
   try {
-    await loadMediaDevices({ requestPermission: true })
+    await loadMediaDevices()
     entryDeviceSelection.microphone = deviceState.microphone
     entryDeviceSelection.camera = deviceState.camera
     modal.value = 'device-settings'

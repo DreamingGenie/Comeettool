@@ -228,6 +228,7 @@ class MeetingControllerTest {
     void joinMeeting_returns200WithLiveKitConnectionInfo() throws Exception {
         ResponseJoinMeetingDto response = new ResponseJoinMeetingDto(
                 MEETING_ID,
+                10L,
                 "BE",
                 true,
                 "livekit-token",

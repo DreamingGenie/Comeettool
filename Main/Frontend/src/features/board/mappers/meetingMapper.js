@@ -75,6 +75,7 @@ export const toMeetingListViewModel = meetings =>
 
 export const toMeetingConnectionViewModel = connection => ({
   meetingId: String(connection?.meetingRoomId ?? ''),
+  teamId: String(connection?.teamId ?? ''),
   role: connection?.role || '',
   isHost: Boolean(connection?.isHost),
   token: connection?.token || '',
