@@ -12,6 +12,7 @@ import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
 import com.ssafy.backend.space.dto.ResponseSpaceMemberDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.space.service.SpaceService;
@@ -24,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -39,6 +41,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -436,6 +439,85 @@ class SpaceControllerTest {
                             .content(objectMapper.writeValueAsString(new RequestTransferOwnerDto(2L))))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("SPACE_TRANSFER_TARGET_NOT_ELIGIBLE"));
+        }
+    }
+
+    @Nested
+    @DisplayName("SPACE-264 PATCH /api/v1/spaces/{spaceId}/profile-image")
+    class ChangeProfileImage {
+
+        private MockMultipartFile imagePart(String filename, String contentType) {
+            return new MockMultipartFile("profileImage", filename, contentType, new byte[]{1, 2, 3});
+        }
+
+        @Test
+        @DisplayName("Owner가 JPG를 업로드하면 200과 변경된 이미지 URL을 반환한다")
+        void changeProfileImage_jpg_returns200() throws Exception {
+            String url = "http://localhost:8080/files/profile-images/teams/10/team.jpg";
+            given(spaceService.changeProfileImage(eq(7L), eq(10L), any()))
+                    .willReturn(new ResponseSpaceProfileImageDto(10L, url));
+
+            mockMvc.perform(multipart("/api/v1/spaces/{spaceId}/profile-image", 10L)
+                            .file(imagePart("team.jpg", "image/jpeg"))
+                            .with(request -> {
+                                request.setMethod("PATCH");
+                                return request;
+                            }))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.spaceId").value(10))
+                    .andExpect(jsonPath("$.data.teamProfileImage").value(url));
+
+            verify(spaceService).changeProfileImage(eq(7L), eq(10L), any());
+        }
+
+        @Test
+        @DisplayName("Owner가 PNG를 업로드하면 200을 반환한다")
+        void changeProfileImage_png_returns200() throws Exception {
+            String url = "http://localhost:8080/files/profile-images/teams/10/team.png";
+            given(spaceService.changeProfileImage(eq(7L), eq(10L), any()))
+                    .willReturn(new ResponseSpaceProfileImageDto(10L, url));
+
+            mockMvc.perform(multipart("/api/v1/spaces/{spaceId}/profile-image", 10L)
+                            .file(imagePart("team.png", "image/png"))
+                            .with(request -> {
+                                request.setMethod("PATCH");
+                                return request;
+                            }))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("SUCCESS"));
+        }
+
+        @Test
+        @DisplayName("Owner가 아니면 403 SPACE_OWNER_ONLY를 반환한다")
+        void changeProfileImage_returns403ForNonOwner() throws Exception {
+            given(spaceService.changeProfileImage(eq(7L), eq(10L), any()))
+                    .willThrow(new CustomException(ErrorCode.SPACE_OWNER_ONLY));
+
+            mockMvc.perform(multipart("/api/v1/spaces/{spaceId}/profile-image", 10L)
+                            .file(imagePart("team.png", "image/png"))
+                            .with(request -> {
+                                request.setMethod("PATCH");
+                                return request;
+                            }))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("SPACE_OWNER_ONLY"));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 스페이스면 404 SPACE_NOT_FOUND를 반환한다")
+        void changeProfileImage_returns404WhenAbsent() throws Exception {
+            given(spaceService.changeProfileImage(eq(7L), eq(99L), any()))
+                    .willThrow(new CustomException(ErrorCode.SPACE_NOT_FOUND));
+
+            mockMvc.perform(multipart("/api/v1/spaces/{spaceId}/profile-image", 99L)
+                            .file(imagePart("team.png", "image/png"))
+                            .with(request -> {
+                                request.setMethod("PATCH");
+                                return request;
+                            }))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SPACE_NOT_FOUND"));
         }
     }
 }

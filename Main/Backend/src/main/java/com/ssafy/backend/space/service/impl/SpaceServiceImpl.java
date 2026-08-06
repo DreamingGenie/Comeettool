@@ -2,6 +2,8 @@ package com.ssafy.backend.space.service.impl;
 
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
+import com.ssafy.backend.global.storage.profile.ProfileImageOwner;
+import com.ssafy.backend.global.storage.profile.ProfileImageStorageService;
 import com.ssafy.backend.space.dto.RequestCreateSpaceDto;
 import com.ssafy.backend.space.dto.RequestTransferOwnerDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
@@ -9,6 +11,7 @@ import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.member.entity.Member;
@@ -35,14 +38,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 팀 스페이스(teams/members) 조회·생성 로직 (SPACE-01/02/05).
- * Controller는 요청/응답만, 비즈니스 로직은 이 계층에 둔다(코드 컨벤션).
+ * 팀 스페이스(teams/members) 조회·생성 로직 (SPACE-01/02/05). Controller는 요청/응답만, 비즈니스 로직은 이 계층에 둔다(코드 컨벤션).
  */
 @Service
 @RequiredArgsConstructor
 public class SpaceServiceImpl implements SpaceService {
+
+    // 팀 프로필 이미지 검증 정책 — 사용자 프로필(AUTH-11)과 동일 기준(확장자·크기).
+    private static final long MAX_PROFILE_IMAGE_BYTES = 5L * 1024 * 1024; // 5MB
+    private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png");
 
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
@@ -51,6 +58,7 @@ public class SpaceServiceImpl implements SpaceService {
     private final MeetingRoomRepository meetingRoomRepository;
     private final InvitationRepository invitationRepository;
     private final SpaceMapper spaceMapper;
+    private final ProfileImageStorageService profileImageStorageService;
 
     @Override
     @Transactional
@@ -295,6 +303,50 @@ public class SpaceServiceImpl implements SpaceService {
         team.changeOwner(newOwnerUserId);
 
         return new ResponseTransferOwnerDto(spaceId, requesterUserId, newOwnerUserId);
+    }
+
+    @Override
+    @Transactional
+    public ResponseSpaceProfileImageDto changeProfileImage(
+            Long userId,
+            Long spaceId,
+            MultipartFile file
+    ) {
+        Team team = loadActiveTeamForUpdate(spaceId);
+        if (!isOwner(team, userId)) {
+            throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
+        }
+
+        validateProfileImage(file);
+
+        // 실패 시 기존 이미지 보존: 새 업로드 성공 → URL 갱신 → 기존 삭제 순으로 처리(SPACE-264).
+        String previousUrl = team.getProfileImageUrl();
+        String newUrl = profileImageStorageService.upload(
+                file,
+                ProfileImageOwner.team(spaceId)
+        );
+        team.updateProfileImage(newUrl);
+
+        if (previousUrl != null && !previousUrl.equals(newUrl)) {
+            profileImageStorageService.delete(previousUrl);
+        }
+
+        return new ResponseSpaceProfileImageDto(team.getId(), newUrl);
+    }
+
+    // 사용자 프로필 이미지 업로드와 동일한 검증 기준(크기 5MB, 확장자 jpg/jpeg/png).
+    private void validateProfileImage(MultipartFile file) {
+        if (file.getSize() > MAX_PROFILE_IMAGE_BYTES) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_TOO_LARGE);
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = (originalFilename != null && originalFilename.contains("."))
+                ? originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase()
+                : "";
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(ext)) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+        }
     }
 
     // SPACE-05 등 읽기 전용: 삭제되지 않은 스페이스 조회(잠금 없음, 없으면 404).

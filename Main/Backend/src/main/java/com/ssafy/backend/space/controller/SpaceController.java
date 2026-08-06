@@ -8,12 +8,14 @@ import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseCreateSpaceDto;
 import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.space.service.SpaceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,14 +26,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * SPACE 도메인 REST 컨트롤러 (inventory.md §2).
- * 인증 필요(SecurityConfig에서 permitAll 목록에 없음) — principal = userId(String).
- * 요청/응답만 담당하고 비즈니스 로직은 SpaceService에 위임한다.
+ * SPACE 도메인 REST 컨트롤러 (inventory.md §2). 인증 필요(SecurityConfig에서 permitAll 목록에 없음) — principal = userId(String). 요청/응답만
+ * 담당하고 비즈니스 로직은 SpaceService에 위임한다.
  */
 @RestController
 @RequestMapping("/api/v1/spaces")
@@ -114,5 +117,23 @@ public class SpaceController {
         ResponseTransferOwnerDto response =
                 spaceService.transferOwner(Long.parseLong(userId), spaceId, request);
         return ResponseEntity.ok(ApiResponse.success("소유권이 위임되었습니다.", response));
+    }
+
+    @PatchMapping(
+            value = "/{spaceId}/profile-image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<ApiResponse<ResponseSpaceProfileImageDto>> changeProfileImage(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long spaceId,
+            @RequestPart("profileImage") MultipartFile file) {
+        ResponseSpaceProfileImageDto response = spaceService.changeProfileImage(
+                Long.parseLong(userId),
+                spaceId,
+                file
+        );
+        return ResponseEntity.ok(
+                ApiResponse.success("스페이스 프로필 사진 변경 성공", response)
+        );
     }
 }

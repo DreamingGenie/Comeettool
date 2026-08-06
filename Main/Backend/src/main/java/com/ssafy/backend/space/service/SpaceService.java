@@ -7,10 +7,12 @@ import com.ssafy.backend.space.dto.ResponseSpaceDetailDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceDto;
 import com.ssafy.backend.space.dto.RequestUpdateSpaceOrderDto;
 import com.ssafy.backend.space.dto.ResponseSpaceListDto;
+import com.ssafy.backend.space.dto.ResponseSpaceProfileImageDto;
 import com.ssafy.backend.space.dto.ResponseTransferOwnerDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface SpaceService {
 
@@ -39,4 +41,6 @@ public interface SpaceService {
 
     // SPACE-101: Owner가 다른 멤버에게 소유권을 위임한다(teams.team_owner_id + members.authority 갱신).
     ResponseTransferOwnerDto transferOwner(Long requesterUserId, Long spaceId, RequestTransferOwnerDto request);
+
+    ResponseSpaceProfileImageDto changeProfileImage(Long userId, Long spaceId, MultipartFile file);
 }
