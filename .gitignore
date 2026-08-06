@@ -74,6 +74,7 @@ wandb/
 secrets/
 !Main/Backend/certs/ap-northeast-2-bundle.pem
 !Main/Backend-Yjs/certs/ap-northeast-2-bundle.pem
+!Main/AI_BE/certs/ap-northeast-2-bundle.pem
 
 # ===== Claude Code (개인 하네스 설정) =====
 CLAUDE.md

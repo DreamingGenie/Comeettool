@@ -5,15 +5,19 @@ set -eu
 DEPLOY_CLUSTER_NAME="a707-dev-cluster"
 DEPLOY_BACKEND_SERVICE="a707-dev-backend"
 DEPLOY_YJS_SERVICE="a707-dev-yjs"
+DEPLOY_AI_SERVICE="a707-dev-ai"
 DEPLOY_BACKEND_TASK_FAMILY="a707-dev-backend"
 DEPLOY_YJS_TASK_FAMILY="a707-dev-yjs"
 DEPLOY_MIGRATION_TASK_FAMILY="a707-dev-migration"
+DEPLOY_AI_TASK_FAMILY="a707-dev-ai"
 DEPLOY_BACKEND_CONTAINER="backend"
 DEPLOY_YJS_CONTAINER="yjs"
 DEPLOY_MIGRATION_CONTAINER="migration"
+DEPLOY_AI_CONTAINER="ai"
 DEPLOY_BACKEND_REPOSITORY="a707-dev-backend"
 DEPLOY_YJS_REPOSITORY="a707-dev-yjs"
 DEPLOY_MIGRATION_REPOSITORY="a707-dev-migration"
+DEPLOY_AI_REPOSITORY="a707-dev-ai"
 
 fail_release() {
   echo "Production release failed: $1" >&2
@@ -173,12 +177,14 @@ cluster_status="$(
 for release_repository in \
   "$DEPLOY_BACKEND_REPOSITORY" \
   "$DEPLOY_YJS_REPOSITORY" \
-  "$DEPLOY_MIGRATION_REPOSITORY"; do
+  "$DEPLOY_MIGRATION_REPOSITORY" \
+  "$DEPLOY_AI_REPOSITORY"; do
   check_repository_contract "$release_repository"
 done
 
 backend_service_file="$release_work_dir/backend-service.json"
 yjs_service_file="$release_work_dir/yjs-service.json"
+ai_service_file="$release_work_dir/ai-service.json"
 check_service_contract \
   "$DEPLOY_BACKEND_SERVICE" \
   "$DEPLOY_BACKEND_TASK_FAMILY" \
@@ -189,6 +195,11 @@ check_service_contract \
   "$DEPLOY_YJS_TASK_FAMILY" \
   "$DEPLOY_YJS_CONTAINER" \
   "$yjs_service_file"
+check_service_contract \
+  "$DEPLOY_AI_SERVICE" \
+  "$DEPLOY_AI_TASK_FAMILY" \
+  "$DEPLOY_AI_CONTAINER" \
+  "$ai_service_file"
 
 bucket_versioning="$(
   aws s3api get-bucket-versioning \
@@ -214,6 +225,7 @@ fi
 backend_image="$(resolve_image_reference "$DEPLOY_BACKEND_REPOSITORY")"
 yjs_image="$(resolve_image_reference "$DEPLOY_YJS_REPOSITORY")"
 migration_image="$(resolve_image_reference "$DEPLOY_MIGRATION_REPOSITORY")"
+ai_image="$(resolve_image_reference "$DEPLOY_AI_REPOSITORY")"
 
 echo "Production preflight passed for the intentionally reused physical environment."
 
@@ -352,6 +364,7 @@ echo "Database migration completed successfully."
 
 backend_source_task="$(jq -r '.services[0].taskDefinition' "$backend_service_file")"
 yjs_source_task="$(jq -r '.services[0].taskDefinition' "$yjs_service_file")"
+ai_source_task="$(jq -r '.services[0].taskDefinition' "$ai_service_file")"
 backend_task_definition="$(
   register_task_revision \
     "$backend_source_task" \
@@ -368,7 +381,20 @@ yjs_task_definition="$(
     "$yjs_image" \
     yjs
 )"
+ai_task_definition="$(
+  register_task_revision \
+    "$ai_source_task" \
+    "$DEPLOY_AI_TASK_FAMILY" \
+    "$DEPLOY_AI_CONTAINER" \
+    "$ai_image" \
+    ai
+)"
 
+aws ecs update-service \
+  --cluster "$DEPLOY_CLUSTER_NAME" \
+  --service "$DEPLOY_AI_SERVICE" \
+  --task-definition "$ai_task_definition" >/dev/null 2>&1 \
+  || fail_release "the AI service update was rejected."
 aws ecs update-service \
   --cluster "$DEPLOY_CLUSTER_NAME" \
   --service "$DEPLOY_BACKEND_SERVICE" \
@@ -382,7 +408,10 @@ aws ecs update-service \
 
 aws ecs wait services-stable \
   --cluster "$DEPLOY_CLUSTER_NAME" \
-  --services "$DEPLOY_BACKEND_SERVICE" "$DEPLOY_YJS_SERVICE" \
+  --services \
+    "$DEPLOY_AI_SERVICE" \
+    "$DEPLOY_BACKEND_SERVICE" \
+    "$DEPLOY_YJS_SERVICE" \
   >/dev/null 2>&1 \
   || fail_release "the ECS services did not stabilize."
 
@@ -425,6 +454,10 @@ verify_service_rollout() {
 }
 
 verify_service_rollout \
+  "$DEPLOY_AI_SERVICE" \
+  "$ai_task_definition" \
+  "$release_work_dir/ai-rollout.json"
+verify_service_rollout \
   "$DEPLOY_BACKEND_SERVICE" \
   "$backend_task_definition" \
   "$release_work_dir/backend-rollout.json"
@@ -432,7 +465,7 @@ verify_service_rollout \
   "$DEPLOY_YJS_SERVICE" \
   "$yjs_task_definition" \
   "$release_work_dir/yjs-rollout.json"
-echo "Backend and Yjs ECS rollouts completed on the requested revisions."
+echo "AI, Backend, and Yjs ECS rollouts completed on the requested revisions."
 
 frontend_dist="Main/Frontend/dist"
 [ -f "$frontend_dist/index.html" ] \
@@ -567,8 +600,9 @@ blocked_cors_code="$(
   || fail_release "an untrusted Origin was not rejected."
 
 unset \
-  aws_account_id ecr_registry backend_image yjs_image migration_image \
-  backend_task_definition yjs_task_definition migration_task_definition \
+  aws_account_id ecr_registry backend_image yjs_image migration_image ai_image \
+  backend_task_definition yjs_task_definition ai_task_definition \
+  migration_task_definition \
   migration_task invalidation_id websocket_key websocket_http_code
 
 echo "Production smoke checks passed without printing deployment endpoints or identifiers."
