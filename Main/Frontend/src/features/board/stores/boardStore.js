@@ -293,9 +293,12 @@ export const boardStore = {
     await boardStore.loadMeetingParticipants(meetingId)
     return state.meetingRoom
   },
-  async loadMeetingParticipants(meetingId = state.currentMeetingId) {
+  async loadMeetingParticipants(meetingId = state.currentMeetingId, options = {}) {
     if (!meetingId) return []
-    const participants = await withLoading(() => dataSource.board.getParticipants(meetingId))
+    const requestParticipants = () => dataSource.board.getParticipants(meetingId)
+    const participants = options.silent
+      ? await requestParticipants()
+      : await withLoading(requestParticipants)
     state.meetingRoom.participants = participants || []
     state.meetingRoom.totalParticipants = state.meetingRoom.participants.length
     return state.meetingRoom.participants
@@ -438,6 +441,9 @@ export const boardStore = {
   },
   setMeetingConnectionStatus(status) {
     state.meetingRoom.connectionStatus = status
+  },
+  clearError() {
+    state.error = ''
   },
   clearMeetingRoom() {
     state.currentMeetingId = ''

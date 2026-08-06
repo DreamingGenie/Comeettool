@@ -13,7 +13,6 @@
 <script setup>
 import { computed, provide, watch } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
-import { meetingDocumentMode } from '../features/board/composables/useMeetingDocumentMode'
 import { boardStore } from '../features/board/stores/boardStore'
 import { notificationStore } from '../features/notification/stores/notificationStore'
 import AppToast from '../shared/components/AppToast.vue'
@@ -21,7 +20,7 @@ import { notificationContextKey } from '../shared/injection/notificationContext'
 
 const router = useRouter()
 const cachedViewNames = computed(() =>
-  meetingDocumentMode.state.active ? ['MeetingView'] : []
+  boardStore.state.currentMeetingId ? ['MeetingView'] : []
 )
 
 const loadMeetingInvites = () =>

@@ -711,7 +711,7 @@ const helpItems = [
 const scheduleParticipantRefresh = () => {
   for (const delay of [500, 1500]) {
     participantRefreshTimers.push(window.setTimeout(() => {
-      boardStore.loadMeetingParticipants(meetingId.value).catch(() => undefined)
+      boardStore.loadMeetingParticipants(meetingId.value, { silent: true }).catch(() => undefined)
     }, delay))
   }
 }
@@ -818,10 +818,10 @@ onBeforeUnmount(() => {
     )
     pictureInPictureVideo = null
     releaseMeetingPictureInPictureVideo()
+    stopVadRecording()
   }
   participantRefreshTimers.forEach(timer => window.clearTimeout(timer))
   window.clearTimeout(vadStartTimer)
-  stopVadRecording()
   document.removeEventListener('fullscreenchange', syncFullscreenState)
 })
 
@@ -953,6 +953,7 @@ async function openDocumentsInPictureInPicture() {
     )
 
     await video.requestPictureInPicture()
+    boardStore.clearError()
     await router.push({
       name: 'team-documents',
       params: { teamId: String(teamId) },

@@ -2,12 +2,27 @@ import { computed, onMounted, unref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { boardStore } from '../stores/boardStore'
 
+const teamScopedResources = new Set([
+  'team',
+  'members',
+  'activeMeeting',
+  'calendar',
+  'inviteMembers',
+  'teamRoles',
+  'archive'
+])
+
 export function useBoardPage(options = {}) {
   const route = useRoute()
   const resources = options.resources || []
   const teamId = computed(() => String(route.params.teamId || ''))
   const meetingId = computed(() =>
-    String(route.params.meetingId || boardStore.state.activeMeeting.id || '')
+    String(
+      route.params.meetingId ||
+      boardStore.state.currentMeetingId ||
+      boardStore.state.activeMeeting.id ||
+      ''
+    )
   )
   const archiveSection = computed(() => {
     const section = typeof options.section === 'function'
@@ -41,8 +56,19 @@ export function useBoardPage(options = {}) {
   }
 
   onMounted(loadSafely)
-  watch(teamId, loadSafely)
-  if (resources.includes('meetingRoom')) watch(meetingId, loadSafely)
+  if (resources.some(resource => teamScopedResources.has(resource))) {
+    watch(teamId, loadSafely)
+  }
+  if (resources.includes('meetingRoom')) {
+    watch(
+      () => String(route.params.meetingId || ''),
+      nextMeetingId => {
+        if (nextMeetingId && nextMeetingId !== boardStore.state.currentMeetingId) {
+          loadSafely()
+        }
+      }
+    )
+  }
   if (resources.includes('archive')) watch(archiveSection, loadSafely)
 
   return {
