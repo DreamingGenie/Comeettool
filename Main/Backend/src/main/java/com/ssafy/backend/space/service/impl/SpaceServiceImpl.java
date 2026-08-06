@@ -47,6 +47,10 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class SpaceServiceImpl implements SpaceService {
 
+    // 팀 프로필 이미지 검증 정책 — 사용자 프로필(AUTH-11)과 동일 기준(확장자·크기).
+    private static final long MAX_PROFILE_IMAGE_BYTES = 5L * 1024 * 1024; // 5MB
+    private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png");
+
     private final TeamRepository teamRepository;
     private final MemberRepository memberRepository;
     private final UserRepository userRepository;
@@ -313,6 +317,9 @@ public class SpaceServiceImpl implements SpaceService {
             throw new CustomException(ErrorCode.SPACE_OWNER_ONLY);
         }
 
+        validateProfileImage(file);
+
+        // 실패 시 기존 이미지 보존: 새 업로드 성공 → URL 갱신 → 기존 삭제 순으로 처리(SPACE-264).
         String previousUrl = team.getProfileImageUrl();
         String newUrl = profileImageStorageService.upload(
                 file,
@@ -324,7 +331,22 @@ public class SpaceServiceImpl implements SpaceService {
             profileImageStorageService.delete(previousUrl);
         }
 
-        return new ResponseSpaceProfileImageDto(newUrl);
+        return new ResponseSpaceProfileImageDto(team.getId(), newUrl);
+    }
+
+    // 사용자 프로필 이미지 업로드와 동일한 검증 기준(크기 5MB, 확장자 jpg/jpeg/png).
+    private void validateProfileImage(MultipartFile file) {
+        if (file.getSize() > MAX_PROFILE_IMAGE_BYTES) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_TOO_LARGE);
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = (originalFilename != null && originalFilename.contains("."))
+                ? originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase()
+                : "";
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(ext)) {
+            throw new CustomException(ErrorCode.PROFILE_IMAGE_INVALID_TYPE);
+        }
     }
 
     // SPACE-05 등 읽기 전용: 삭제되지 않은 스페이스 조회(잠금 없음, 없으면 404).
