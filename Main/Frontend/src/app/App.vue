@@ -20,7 +20,9 @@ import { notificationContextKey } from '../shared/injection/notificationContext'
 
 const router = useRouter()
 const cachedViewNames = computed(() =>
-  boardStore.state.currentMeetingId ? ['MeetingView'] : []
+  router.currentRoute.value.name === 'meeting' || boardStore.state.currentMeetingId
+    ? ['MeetingView']
+    : []
 )
 
 const loadMeetingInvites = () =>

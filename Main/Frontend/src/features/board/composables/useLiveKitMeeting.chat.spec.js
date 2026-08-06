@@ -140,6 +140,39 @@ describe('useLiveKitMeeting 채팅', () => {
       expect(onDisconnected).not.toHaveBeenCalled()
       unmount()
     })
+
+    it('회의 화면이 다시 활성화되면 기존 참가자 영상을 재생한다', async () => {
+      const { api, room, unmount } = await connectRoom()
+      const video = document.createElement('video')
+      const play = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(video, 'play', { configurable: true, value: play })
+      const track = {
+        kind: 'video',
+        sid: 'camera-track',
+        source: 'camera',
+        attach: vi.fn(() => video),
+        detach: vi.fn()
+      }
+      const participant = {
+        identity: 'participant-3',
+        getTrackPublication: () => undefined
+      }
+
+      room.emit(
+        RoomEvent.TrackSubscribed,
+        track,
+        { source: 'camera' },
+        participant
+      )
+      const container = document.createElement('div')
+      api.mountParticipantMedia('participant-3', container)
+
+      await api.resumeParticipantMedia()
+
+      expect(container.contains(video)).toBe(true)
+      expect(play).toHaveBeenCalledTimes(1)
+      unmount()
+    })
   })
 
   describe('sendChatMessage', () => {

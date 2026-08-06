@@ -222,6 +222,30 @@ export function useLiveKitMeeting(options = {}) {
     appendMedia(mediaKey)
   }
 
+  const resumeParticipantMedia = async () => {
+    for (const mediaKey of containerByMediaKey.keys()) {
+      appendMedia(mediaKey)
+    }
+
+    const mediaElements = []
+    for (const entries of mediaByIdentity.values()) {
+      for (const entry of entries) {
+        if (entry.element instanceof HTMLMediaElement) {
+          mediaElements.push(entry.element)
+        }
+      }
+    }
+
+    await Promise.allSettled(
+      mediaElements.map(element => {
+        element.autoplay = true
+        element.playsInline = true
+        return element.play()
+      })
+    )
+    syncParticipants()
+  }
+
   const attachTrack = (track, publication, participant) => {
     if (!track || !participant?.identity) return
     const source = publication?.source || track.source
@@ -494,6 +518,7 @@ export function useLiveKitMeeting(options = {}) {
     selectDevice,
     applySelectedDevices,
     mountParticipantMedia,
+    resumeParticipantMedia,
     sendChatMessage,
     setDeviceEnabled,
     requestServerExit,

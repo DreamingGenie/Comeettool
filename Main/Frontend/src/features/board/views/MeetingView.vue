@@ -449,7 +449,16 @@ export default {
 </script>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch
+} from 'vue'
 import { useRouter } from 'vue-router'
 import BaseModal from '../../../shared/components/BaseModal.vue'
 import { useToast } from '../../../shared/composables/useToast'
@@ -489,6 +498,7 @@ const {
   selectDevice,
   applySelectedDevices,
   mountParticipantMedia,
+  resumeParticipantMedia,
   sendChatMessage,
   setDeviceEnabled,
   requestServerExit,
@@ -807,6 +817,11 @@ const syncFullscreenState = () => {
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', syncFullscreenState)
+})
+
+onActivated(async () => {
+  await nextTick()
+  await resumeParticipantMedia()
 })
 
 onBeforeUnmount(() => {
