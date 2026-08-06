@@ -29,19 +29,14 @@ import org.springframework.scheduling.TaskScheduler;
 import com.ssafy.backend.meeting.client.AiTranscriptionClient;
 import com.ssafy.backend.meeting.client.AiTranscriptionException;
 import com.ssafy.backend.meeting.client.AiTranscriptionFailureType;
-import com.ssafy.backend.meeting.dto.ResponseEndTranscriptionDto;
-import com.ssafy.backend.meeting.dto.ResponseStartTranscriptionDto;
+import com.ssafy.backend.meeting.dto.ResponseProcessMeetingDto;
 import com.ssafy.backend.meeting.vad.VadUploadFlightTracker;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("회의 STT 시작·종료 Processor 테스트")
+@DisplayName("회의 AI 처리 Processor 테스트")
 class MeetingTranscriptionProcessorTest {
 
     private static final Long MEETING_ID = 15L;
-    private static final String STARTED_AT =
-            "2026-08-03T15:25:17.64601+09:00";
-    private static final String ENDED_AT =
-            "2026-08-03T16:25:17.64601+09:00";
 
     @Mock
     private AiTranscriptionClient aiTranscriptionClient;
@@ -74,39 +69,14 @@ class MeetingTranscriptionProcessorTest {
     }
 
     @Test
-    @DisplayName("회의 시작 작업을 전용 Executor에 제출한다")
-    void startTranscription_submitsFirstAttemptToExecutor() {
-        captureExecutorTasks();
-        given(aiTranscriptionClient.startTranscription(
-                MEETING_ID,
-                STARTED_AT
-        )).willReturn(startSuccessResponse());
-
-        processor.startTranscription(MEETING_ID, STARTED_AT);
-
-        verify(transcriptionTaskExecutor).execute(any(Runnable.class));
-        verifyNoInteractions(aiTranscriptionClient);
-
-        runNextExecutorTask();
-
-        verify(aiTranscriptionClient).startTranscription(
-                MEETING_ID,
-                STARTED_AT
-        );
-        assertThat(retryTasks).isEmpty();
-    }
-
-    @Test
-    @DisplayName("회의 종료 작업을 전용 Executor에 제출한다")
-    void endTranscription_submitsFirstAttemptToExecutor() {
+    @DisplayName("회의 처리 작업을 전용 Executor에 제출한다")
+    void processMeeting_submitsFirstAttemptToExecutor() {
         captureExecutorTasks();
         given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
-        given(aiTranscriptionClient.endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        )).willReturn(endSuccessResponse());
+        given(aiTranscriptionClient.processMeeting(MEETING_ID))
+                .willReturn(processSuccessResponse());
 
-        processor.endTranscription(MEETING_ID, ENDED_AT);
+        processor.processMeeting(MEETING_ID);
 
         verify(transcriptionTaskExecutor).execute(any(Runnable.class));
         verifyNoInteractions(aiTranscriptionClient);
@@ -114,49 +84,38 @@ class MeetingTranscriptionProcessorTest {
         runNextExecutorTask();
 
         verify(vadUploadFlightTracker).awaitIdle(MEETING_ID);
-        verify(aiTranscriptionClient).endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        );
+        verify(aiTranscriptionClient).processMeeting(MEETING_ID);
         verify(vadUploadFlightTracker).clear(MEETING_ID);
         assertThat(retryTasks).isEmpty();
     }
 
     @Test
-    @DisplayName("VAD drain timeout이어도 AI 종료 호출을 진행한다")
-    void endTranscription_proceedsAfterDrainTimeout() {
+    @DisplayName("VAD drain timeout이어도 AI process 호출을 진행한다")
+    void processMeeting_proceedsAfterDrainTimeout() {
         captureExecutorTasks();
         given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(false);
-        given(aiTranscriptionClient.endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        )).willReturn(endSuccessResponse());
+        given(aiTranscriptionClient.processMeeting(MEETING_ID))
+                .willReturn(processSuccessResponse());
 
-        processor.endTranscription(MEETING_ID, ENDED_AT);
+        processor.processMeeting(MEETING_ID);
         runNextExecutorTask();
 
         verify(vadUploadFlightTracker).awaitIdle(MEETING_ID);
-        verify(aiTranscriptionClient).endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        );
+        verify(aiTranscriptionClient).processMeeting(MEETING_ID);
         verify(vadUploadFlightTracker).clear(MEETING_ID);
     }
 
     @Test
-    @DisplayName("종료 요청의 재시도 가능한 오류는 Scheduler에 다음 시도를 예약한다")
-    void endTranscription_schedulesRetryForRetryableFailure() {
+    @DisplayName("처리 요청의 재시도 가능한 오류는 Scheduler에 다음 시도를 예약한다")
+    void processMeeting_schedulesRetryForRetryableFailure() {
         captureExecutorTasks();
         captureRetryTasks();
         given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
-        given(aiTranscriptionClient.endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        ))
+        given(aiTranscriptionClient.processMeeting(MEETING_ID))
                 .willThrow(retryableException())
-                .willReturn(endSuccessResponse());
+                .willReturn(processSuccessResponse());
 
-        processor.endTranscription(MEETING_ID, ENDED_AT);
+        processor.processMeeting(MEETING_ID);
         runNextExecutorTask();
 
         verify(transcriptionRetryScheduler).schedule(
@@ -169,25 +128,20 @@ class MeetingTranscriptionProcessorTest {
         runNextRetryTask();
         runNextExecutorTask();
 
-        verify(aiTranscriptionClient, times(2)).endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        );
+        verify(aiTranscriptionClient, times(2)).processMeeting(MEETING_ID);
         verify(vadUploadFlightTracker, times(2)).awaitIdle(MEETING_ID);
         verify(vadUploadFlightTracker).clear(MEETING_ID);
     }
 
     @Test
-    @DisplayName("종료 요청의 재시도 불가능한 오류는 추가 시도를 예약하지 않는다")
-    void endTranscription_doesNotRetryNonRetryableFailure() {
+    @DisplayName("처리 요청의 재시도 불가능한 오류는 추가 시도를 예약하지 않는다")
+    void processMeeting_doesNotRetryNonRetryableFailure() {
         captureExecutorTasks();
         given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
-        given(aiTranscriptionClient.endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        )).willThrow(nonRetryableException());
+        given(aiTranscriptionClient.processMeeting(MEETING_ID))
+                .willThrow(nonRetryableException());
 
-        processor.endTranscription(MEETING_ID, ENDED_AT);
+        processor.processMeeting(MEETING_ID);
         runNextExecutorTask();
 
         verify(
@@ -199,27 +153,22 @@ class MeetingTranscriptionProcessorTest {
     }
 
     @Test
-    @DisplayName("종료 요청은 최대 시도 횟수 이후 추가 재시도를 예약하지 않는다")
-    void endTranscription_stopsAfterMaximumAttempts() {
+    @DisplayName("처리 요청은 최대 시도 횟수 이후 추가 재시도를 예약하지 않는다")
+    void processMeeting_stopsAfterMaximumAttempts() {
         captureExecutorTasks();
         captureRetryTasks();
         given(vadUploadFlightTracker.awaitIdle(MEETING_ID)).willReturn(true);
-        given(aiTranscriptionClient.endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        )).willThrow(retryableException());
+        given(aiTranscriptionClient.processMeeting(MEETING_ID))
+                .willThrow(retryableException());
 
-        processor.endTranscription(MEETING_ID, ENDED_AT);
+        processor.processMeeting(MEETING_ID);
         runNextExecutorTask();
         runNextRetryTask();
         runNextExecutorTask();
         runNextRetryTask();
         runNextExecutorTask();
 
-        verify(aiTranscriptionClient, times(3)).endTranscription(
-                MEETING_ID,
-                ENDED_AT
-        );
+        verify(aiTranscriptionClient, times(3)).processMeeting(MEETING_ID);
         verify(transcriptionRetryScheduler, times(2)).schedule(
                 any(Runnable.class),
                 any(Instant.class)
@@ -229,15 +178,14 @@ class MeetingTranscriptionProcessorTest {
     }
 
     @Test
-    @DisplayName("Executor가 종료 작업을 거부해도 요청 스레드에서 AI를 호출하지 않는다")
-    void endTranscription_doesNotCallAiWhenExecutorRejectsTask() {
+    @DisplayName("Executor가 처리 작업을 거부해도 요청 스레드에서 AI를 호출하지 않는다")
+    void processMeeting_doesNotCallAiWhenExecutorRejectsTask() {
         doThrow(new TaskRejectedException("executor saturated"))
                 .when(transcriptionTaskExecutor)
                 .execute(any(Runnable.class));
 
-        assertThatCode(() ->
-                processor.endTranscription(MEETING_ID, ENDED_AT)
-        ).doesNotThrowAnyException();
+        assertThatCode(() -> processor.processMeeting(MEETING_ID))
+                .doesNotThrowAnyException();
 
         verifyNoInteractions(aiTranscriptionClient);
         verify(
@@ -271,20 +219,11 @@ class MeetingTranscriptionProcessorTest {
         retryTasks.removeFirst().run();
     }
 
-    private ResponseStartTranscriptionDto startSuccessResponse() {
-        return new ResponseStartTranscriptionDto(
-                "SUCCESS",
-                "회의 시작",
+    private ResponseProcessMeetingDto processSuccessResponse() {
+        return new ResponseProcessMeetingDto(
+                "job-15",
                 MEETING_ID,
-                "conferences/15/"
-        );
-    }
-
-    private ResponseEndTranscriptionDto endSuccessResponse() {
-        return new ResponseEndTranscriptionDto(
-                "SUCCESS",
-                "회의 종료",
-                MEETING_ID
+                "pending"
         );
     }
 
