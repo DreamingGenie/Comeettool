@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
 
+    # BE -> AI 내부 호출 인증용 (X-Internal-Token 헤더와 대조)
+    AI_INTERNAL_TOKEN: str
+
 
 @lru_cache
 def get_settings() -> Settings:

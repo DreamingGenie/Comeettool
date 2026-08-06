@@ -1,8 +1,11 @@
 """회의 처리 트리거 + 결과 조회 API"""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import secrets
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import FacilitatorReportRecord, MeetingMinutesRecord, ProcessingJob
 from app.db.session import get_db
 from app.schemas.meeting import ProcessingJobStatusResponse, ProcessMeetingResponse
@@ -11,13 +14,26 @@ from app.workers.processor import process_meeting
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 
 
-@router.post("/{meeting_id}/process", response_model=ProcessMeetingResponse, status_code=202)
+def verify_internal_token(x_internal_token: str = Header(..., alias="X-Internal-Token")) -> None:
+    """BE -> AI 내부 호출 인증. X-Internal-Token 헤더를 AI_INTERNAL_TOKEN과 대조한다."""
+    expected = get_settings().AI_INTERNAL_TOKEN
+    if not secrets.compare_digest(x_internal_token, expected):
+        raise HTTPException(status_code=401, detail="invalid internal token")
+
+
+@router.post(
+    "/{meeting_id}/process",
+    response_model=ProcessMeetingResponse,
+    status_code=202,
+    dependencies=[Depends(verify_internal_token)],
+)
 def trigger_processing(
     meeting_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ):
     """회의 종료 후 호출. 녹음이 S3에 다 올라간 뒤 호출한다고 가정한다.
 
     바로 202를 반환하고, 실제 STT/LLM 처리는 백그라운드에서 진행한다.
+    X-Internal-Token 헤더로 BE 내부 호출임을 검증한다.
     """
     job = ProcessingJob(meeting_id=meeting_id, status="pending")
     db.add(job)
