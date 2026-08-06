@@ -757,9 +757,9 @@ function scheduleVadStart() {
     return
   }
 
-  vadStartTimer = window.setTimeout(() => {
+  vadStartTimer = window.setTimeout(async () => {
     if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) return
-    const started = startVadRecording(meetingId.value, liveKitRoom.value)
+    const started = await startVadRecording(meetingId.value, liveKitRoom.value)
     if (!started) console.warn('[VAD] microphone track is not ready yet')
   }, 400)
 }
