@@ -974,6 +974,9 @@ async function openDocumentsInPictureInPicture() {
       params: { teamId: String(teamId) },
       query: { meetingId: meetingId.value }
     })
+    notify('PiP를 종료하면 회의로 돌아갑니다.', 3000, {
+      placement: 'top-center'
+    })
   } catch (error) {
     pictureInPictureVideo?.removeEventListener(
       'leavepictureinpicture',

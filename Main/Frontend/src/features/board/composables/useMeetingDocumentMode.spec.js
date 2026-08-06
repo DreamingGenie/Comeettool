@@ -105,6 +105,19 @@ describe('meetingDocumentMode', () => {
       returnRoute: ''
     })
   })
+
+  it('PiP 회의가 활성화되어 있으면 다른 회의 입장을 차단한다', () => {
+    const notify = vi.fn()
+    meetingDocumentMode.begin({ meetingId: 12, teamId: 3, returnRoute: '/meetings/12' })
+
+    expect(meetingDocumentMode.allowMeetingAction(notify)).toBe(false)
+    expect(notify).toHaveBeenCalledWith('이미 회의에 참여 중입니다.')
+
+    meetingDocumentMode.clear()
+
+    expect(meetingDocumentMode.allowMeetingAction(notify)).toBe(true)
+    expect(notify).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('findMeetingPictureInPictureVideo', () => {

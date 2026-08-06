@@ -116,7 +116,7 @@
             class="home-meeting-fab"
             type="button"
             aria-label="새 회의 만들기"
-            @click="showMeeting = true"
+            @click="openMeetingCreation"
           >
             <span aria-hidden="true"></span>
           </button>
@@ -189,6 +189,7 @@ import NewMeetingModal from '../components/NewMeetingModal.vue'
 import NewTeamModal from '../components/NewTeamModal.vue'
 import WorkspaceContextMenu from '../components/WorkspaceContextMenu.vue'
 import { useBoardPage } from '../composables/useBoardPage'
+import { meetingDocumentMode } from '../composables/useMeetingDocumentMode'
 import { boardStore } from '../stores/boardStore'
 
 const router = useRouter()
@@ -394,7 +395,13 @@ const dropWorkspace = async (targetWorkspaceId) => {
 }
 
 const enterMeeting = () => {
-  if (meetingId.value) router.push(`/meetings/${meetingId.value}`)
+  if (!meetingId.value || !meetingDocumentMode.allowMeetingAction(notify)) return
+  router.push(`/meetings/${meetingId.value}`)
+}
+
+const openMeetingCreation = () => {
+  if (!meetingDocumentMode.allowMeetingAction(notify)) return
+  showMeeting.value = true
 }
 
 async function logout() {

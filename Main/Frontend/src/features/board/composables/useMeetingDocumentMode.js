@@ -29,6 +29,13 @@ function isActiveMeeting(meetingId) {
   return state.active && state.meetingId === String(meetingId || '')
 }
 
+function allowMeetingAction(notify) {
+  if (!state.active) return true
+
+  notify?.('이미 회의에 참여 중입니다.')
+  return false
+}
+
 export function findMeetingPictureInPictureVideo(root) {
   if (!root?.querySelector) return null
 
@@ -161,5 +168,6 @@ export const meetingDocumentMode = {
   state,
   begin,
   clear,
-  isActiveMeeting
+  isActiveMeeting,
+  allowMeetingAction
 }
