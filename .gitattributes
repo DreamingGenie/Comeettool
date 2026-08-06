@@ -1,2 +1,15 @@
+.gitattributes text eol=lf
 .gitlab-ci.yml text eol=lf
 .gitlab/ci/scripts/**/*.sh text eol=lf
+
+# Frontend formatting is checked with Prettier endOfLine=lf in Linux CI.
+Main/Frontend/**/*.css text eol=lf
+Main/Frontend/**/*.html text eol=lf
+Main/Frontend/**/*.js text eol=lf
+Main/Frontend/**/*.json text eol=lf
+Main/Frontend/**/*.md text eol=lf
+Main/Frontend/**/*.mjs text eol=lf
+Main/Frontend/**/*.svg text eol=lf
+Main/Frontend/**/*.vue text eol=lf
+Main/Frontend/.env* text eol=lf
+Main/Frontend/.prettier* text eol=lf
