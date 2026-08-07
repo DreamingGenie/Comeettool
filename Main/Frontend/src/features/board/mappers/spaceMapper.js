@@ -70,6 +70,7 @@ export const toTeamViewModel = (space, currentUserId) => {
       userId: member.userId ?? null,
       name,
       avatarText: initials(name),
+      profileImage: member.profileImage || member.profileImageUrl || '',
       authority: String(member.authority || 'MEMBER').toUpperCase(),
       authorityLabel: authorityLabel(member.authority),
       teamRoleId: member.teamRoleId ?? null
@@ -97,6 +98,7 @@ export const toMemberRowsViewModel = (space) =>
       memberId: String(member.memberId ?? ''),
       userId: member.userId ?? null,
       avatarText: initials(name),
+      profileImage: member.profileImage || member.profileImageUrl || '',
       name,
       authority: String(member.authority || 'MEMBER').toUpperCase(),
       authorityLabel: authorityLabel(member.authority),

@@ -40,9 +40,11 @@
                 type="button"
                 @click="selectUser(user)"
               >
-                <i :style="{ backgroundColor: user.userColor }">
-                  {{ user.avatarText }}
-                </i>
+                <UserAvatar
+                  :image-url="user.profileImage"
+                  :fallback-text="user.avatarText"
+                  :fallback-color="user.userColor"
+                />
                 <span>
                   <b>{{ user.nickname || '이름 없음' }}</b>
                   <small>{{ user.email }}</small>
@@ -74,9 +76,12 @@
           v-for="(member, index) in members"
           :key="member.memberId || member.userId || member.id"
         >
-          <i class="invite-avatar" :style="{ '--avatar-hue': `${(index * 43 + 222) % 360}` }">
-            {{ member.avatarText }}
-          </i>
+          <UserAvatar
+            class="invite-avatar"
+            :image-url="member.profileImage"
+            :fallback-text="member.avatarText"
+            :style="{ '--avatar-hue': `${(index * 43 + 222) % 360}` }"
+          />
           <span class="invite-member">
             <b>{{ member.name }}</b>
             <small>{{ member.email }}</small>
@@ -107,6 +112,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
 import BaseModal from '../../../shared/components/BaseModal.vue'
+import UserAvatar from '../../../shared/components/UserAvatar.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import { userStore } from '../../user/stores/userStore'
 import { boardStore } from '../stores/boardStore'
@@ -434,7 +440,7 @@ onBeforeUnmount(() => {
   background: #eceffd;
 }
 
-.invite-search-results > button > i {
+.invite-search-results > button > :deep(.user-avatar) {
   display: grid;
   place-items: center;
   width: 44px;
