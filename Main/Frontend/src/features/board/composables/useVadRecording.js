@@ -1,11 +1,25 @@
 import { ref } from 'vue'
 import { Track } from 'livekit-client'
+import { MicVAD } from '@ricky0123/vad-web'
 
 const MAX_UPLOAD_RETRIES = 5
-const SPEECH_THRESHOLD = 0.025
-const SILENCE_MS = 700
-const MIN_SPEECH_MS = 400
-const POLL_MS = 100
+const VAD_PACKAGE_VERSION = '0.0.30'
+const ONNX_RUNTIME_VERSION = '1.27.0'
+
+export const SILERO_VAD_CONFIG = Object.freeze({
+  model: 'v5',
+  positiveSpeechThreshold: 0.5,
+  negativeSpeechThreshold: 0.35,
+  minSpeechMs: 250,
+  redemptionMs: 800,
+  preSpeechPadMs: 200,
+  maxChunkMs: 30_000
+})
+
+const VAD_ASSET_BASE_PATH =
+  `https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@${VAD_PACKAGE_VERSION}/dist/`
+const ONNX_WASM_BASE_PATH =
+  `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ONNX_RUNTIME_VERSION}/dist/`
 
 function getSupportedMimeType() {
   for (const type of [
@@ -18,18 +32,13 @@ function getSupportedMimeType() {
   return ''
 }
 
-function computeRms(data) {
-  let sum = 0
-  for (let index = 0; index < data.length; index += 1) {
-    const normalized = (data[index] - 128) / 128
-    sum += normalized * normalized
-  }
-  return Math.sqrt(sum / data.length)
+function stopStream(stream) {
+  stream?.getTracks().forEach(track => track.stop())
 }
 
 /**
- * MEET-12 임시 VAD 업로드 PoC.
- * LiveKit 로컬 마이크 트랙을 간단한 음량 임계값으로 구간 절단 후 직렬 업로드한다.
+ * LiveKit의 로컬 마이크 트랙은 그대로 유지하면서 Silero VAD로 발화 구간만 판정한다.
+ * 실제 업로드 파일은 기존 MEET-12 규격을 지키기 위해 MediaRecorder로 생성한다.
  */
 export function useVadRecording(options = {}) {
   const status = ref('idle')
@@ -39,17 +48,23 @@ export function useVadRecording(options = {}) {
   let sequence = 1
   let uploadChain = Promise.resolve()
   let running = false
-  let pollTimer = 0
-  let audioContext = null
-  let analyser = null
-  let sourceNode = null
+  let lifecycle = 0
+  let vad = null
+  let vadStream = null
+  let mediaStreamTrack = null
+  let recorderAudioContext = null
+  let recorderSourceNode = null
+  let recorderDelayNode = null
+  let recorderDestinationNode = null
   let mediaRecorder = null
   let chunkStartedAt = 0
+  let chunkTimer = 0
   let recordedChunks = []
   let isSpeaking = false
-  let silenceStartedAt = 0
-  let mediaStreamTrack = null
+  let isValidatedSpeech = false
   let recorderStopPromise = Promise.resolve()
+
+  const createVad = options.createVad || (vadOptions => MicVAD.new(vadOptions))
 
   async function uploadChunk(blob, startedAt, endedAt, attemptSequence) {
     if (typeof options.uploadRecording !== 'function') {
@@ -85,7 +100,7 @@ export function useVadRecording(options = {}) {
       }
     }
 
-    throw new Error('VAD 업로드 재시도 한도를 초과했습니다.')
+    throw new Error('VAD 업로드 재시도 횟수를 초과했습니다.')
   }
 
   function enqueueUpload(task) {
@@ -101,8 +116,22 @@ export function useVadRecording(options = {}) {
     return uploadChain
   }
 
+  function clearChunkTimer() {
+    if (!chunkTimer) return
+    window.clearTimeout(chunkTimer)
+    chunkTimer = 0
+  }
+
+  function scheduleMaximumChunkSplit() {
+    clearChunkTimer()
+    chunkTimer = window.setTimeout(async () => {
+      await finishRecorder({ upload: isValidatedSpeech })
+      if (running && isSpeaking) startRecorder()
+    }, SILERO_VAD_CONFIG.maxChunkMs)
+  }
+
   function startRecorder() {
-    if (!mediaStreamTrack || mediaRecorder?.state === 'recording') return
+    if (!recorderDestinationNode || mediaRecorder?.state === 'recording') return
 
     const mimeType = getSupportedMimeType()
     if (!mimeType) {
@@ -110,17 +139,19 @@ export function useVadRecording(options = {}) {
     }
 
     recordedChunks = []
-    chunkStartedAt = Date.now()
-    mediaRecorder = new MediaRecorder(new MediaStream([mediaStreamTrack]), {
+    chunkStartedAt = Date.now() - SILERO_VAD_CONFIG.preSpeechPadMs
+    mediaRecorder = new MediaRecorder(recorderDestinationNode.stream, {
       mimeType
     })
     mediaRecorder.ondataavailable = event => {
       if (event.data?.size) recordedChunks.push(event.data)
     }
     mediaRecorder.start()
+    scheduleMaximumChunkSplit()
   }
 
-  function finishRecorder() {
+  function finishRecorder({ upload = true } = {}) {
+    clearChunkTimer()
     if (!mediaRecorder || mediaRecorder.state === 'inactive') return recorderStopPromise
 
     const startedAt = chunkStartedAt
@@ -128,14 +159,17 @@ export function useVadRecording(options = {}) {
 
     recorderStopPromise = new Promise(resolve => {
       recorder.onstop = () => {
-        mediaRecorder = null
+        if (mediaRecorder === recorder) mediaRecorder = null
         const endedAt = Date.now()
-        if (endedAt - startedAt < MIN_SPEECH_MS) {
+        const chunks = recordedChunks
+        recordedChunks = []
+
+        if (!upload || endedAt - startedAt < SILERO_VAD_CONFIG.minSpeechMs) {
           resolve()
           return
         }
 
-        const blob = new Blob(recordedChunks, { type: recorder.mimeType })
+        const blob = new Blob(chunks, { type: recorder.mimeType })
         if (!blob.size) {
           resolve()
           return
@@ -150,38 +184,6 @@ export function useVadRecording(options = {}) {
     return recorderStopPromise
   }
 
-  function pollSpeech() {
-    if (!running || !analyser) return
-
-    const data = new Uint8Array(analyser.fftSize)
-    analyser.getByteTimeDomainData(data)
-    const rms = computeRms(data)
-    const now = Date.now()
-
-    if (rms >= SPEECH_THRESHOLD) {
-      silenceStartedAt = 0
-      if (!isSpeaking) {
-        isSpeaking = true
-        try {
-          startRecorder()
-        } catch (error) {
-          options.onUploadError?.(error)
-          stopMonitoring()
-          return
-        }
-      }
-    } else if (isSpeaking) {
-      if (!silenceStartedAt) silenceStartedAt = now
-      if (now - silenceStartedAt >= SILENCE_MS) {
-        isSpeaking = false
-        silenceStartedAt = 0
-        finishRecorder()
-      }
-    }
-
-    pollTimer = window.setTimeout(pollSpeech, POLL_MS)
-  }
-
   function resolveMicTrack(room) {
     const publication = room?.localParticipant?.getTrackPublication(
       Track.Source.Microphone
@@ -189,50 +191,124 @@ export function useVadRecording(options = {}) {
     return publication?.track?.mediaStreamTrack || null
   }
 
-  function start(id, room) {
-    stopMonitoring()
+  async function createRecorderPipeline(track) {
+    recorderAudioContext = new AudioContext()
+    if (recorderAudioContext.state === 'suspended') {
+      await recorderAudioContext.resume()
+    }
+    recorderSourceNode = recorderAudioContext.createMediaStreamSource(
+      new MediaStream([track])
+    )
+    recorderDelayNode = recorderAudioContext.createDelay(
+      SILERO_VAD_CONFIG.preSpeechPadMs / 1000
+    )
+    recorderDelayNode.delayTime.value = SILERO_VAD_CONFIG.preSpeechPadMs / 1000
+    recorderDestinationNode = recorderAudioContext.createMediaStreamDestination()
+    recorderSourceNode.connect(recorderDelayNode)
+    recorderDelayNode.connect(recorderDestinationNode)
+  }
+
+  async function start(id, room) {
+    const currentLifecycle = ++lifecycle
+    await stopMonitoring({ preserveLifecycle: true })
 
     meetingId = id
     mediaStreamTrack = resolveMicTrack(room)
     if (!mediaStreamTrack) return false
 
-    audioContext = new AudioContext()
-    sourceNode = audioContext.createMediaStreamSource(
-      new MediaStream([mediaStreamTrack])
-    )
-    analyser = audioContext.createAnalyser()
-    analyser.fftSize = 2048
-    sourceNode.connect(analyser)
+    status.value = 'initializing'
+    try {
+      await createRecorderPipeline(mediaStreamTrack)
+      vadStream = new MediaStream([mediaStreamTrack.clone()])
+      const createdVad = await createVad({
+        ...SILERO_VAD_CONFIG,
+        startOnLoad: false,
+        baseAssetPath: VAD_ASSET_BASE_PATH,
+        onnxWASMBasePath: ONNX_WASM_BASE_PATH,
+        getStream: async () => vadStream,
+        pauseStream: async stream => stopStream(stream),
+        resumeStream: async () => {
+          vadStream = new MediaStream([mediaStreamTrack.clone()])
+          return vadStream
+        },
+        onSpeechStart: () => {
+          if (!running) return
+          isSpeaking = true
+          isValidatedSpeech = false
+          try {
+            startRecorder()
+          } catch (error) {
+            options.onUploadError?.(error)
+            void stopMonitoring()
+          }
+        },
+        onSpeechRealStart: () => {
+          if (running) isValidatedSpeech = true
+        },
+        onVADMisfire: () => {
+          isSpeaking = false
+          isValidatedSpeech = false
+          void finishRecorder({ upload: false })
+        },
+        onSpeechEnd: () => {
+          const shouldUpload = isValidatedSpeech
+          isSpeaking = false
+          isValidatedSpeech = false
+          void finishRecorder({ upload: shouldUpload })
+        }
+      })
 
-    running = true
-    status.value = 'recording'
-    pollSpeech()
-    return true
+      if (currentLifecycle !== lifecycle || !mediaStreamTrack) {
+        await createdVad.destroy()
+        return false
+      }
+
+      vad = createdVad
+      running = true
+      await createdVad.start()
+      status.value = 'recording'
+      return true
+    } catch (error) {
+      options.onUploadError?.(
+        new Error(`Silero VAD 초기화에 실패했습니다: ${error?.message || error}`)
+      )
+      await stopMonitoring()
+      return false
+    }
   }
 
-  function stopMonitoring() {
+  async function stopMonitoring({ preserveLifecycle = false } = {}) {
+    if (!preserveLifecycle) lifecycle += 1
     running = false
+    clearChunkTimer()
 
-    if (pollTimer) {
-      window.clearTimeout(pollTimer)
-      pollTimer = 0
+    const shouldUpload = isSpeaking && isValidatedSpeech
+    isSpeaking = false
+    isValidatedSpeech = false
+    await finishRecorder({ upload: shouldUpload })
+
+    const currentVad = vad
+    vad = null
+    if (currentVad) {
+      try {
+        await currentVad.destroy()
+      } catch (error) {
+        console.warn('[VAD destroy failed]', error)
+      }
     }
 
-    if (isSpeaking) {
-      isSpeaking = false
-      finishRecorder()
-    } else if (mediaRecorder?.state === 'recording') {
-      finishRecorder()
-    }
-
-    sourceNode?.disconnect()
-    sourceNode = null
-    analyser = null
+    stopStream(vadStream)
+    vadStream = null
+    recorderSourceNode?.disconnect()
+    recorderDelayNode?.disconnect()
+    recorderSourceNode = null
+    recorderDelayNode = null
+    recorderDestinationNode = null
     mediaStreamTrack = null
 
-    if (audioContext) {
-      audioContext.close().catch(() => undefined)
-      audioContext = null
+    if (recorderAudioContext) {
+      await recorderAudioContext.close().catch(() => undefined)
+      recorderAudioContext = null
     }
 
     status.value = 'idle'

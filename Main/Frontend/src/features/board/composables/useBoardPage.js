@@ -57,7 +57,11 @@ export function useBoardPage(options = {}) {
 
   onMounted(loadSafely)
   if (resources.some(resource => teamScopedResources.has(resource))) {
-    watch(teamId, loadSafely)
+    watch(teamId, nextTeamId => {
+      if (nextTeamId) {
+        loadSafely()
+      }
+    })
   }
   if (resources.includes('meetingRoom')) {
     watch(

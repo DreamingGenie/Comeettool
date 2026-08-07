@@ -94,6 +94,16 @@
               <span>{{ participant.displayName }}</span>
             </div>
           </article>
+          <button
+            class="video-layout-toggle"
+            type="button"
+            :aria-label="videoLayoutMode === 'grid' ? '페이지 보기로 전환' : '한 화면에 모두 보기'"
+            @click="toggleVideoLayoutMode"
+          >
+            <i class="material-symbols-rounded" aria-hidden="true">
+              {{ videoLayoutMode === 'grid' ? 'view_carousel' : 'grid_view' }}
+            </i>
+          </button>
           <nav
             v-if="videoPageCount > 1"
             class="video-pagination"
@@ -473,6 +483,15 @@ import {
   releaseMeetingPictureInPictureVideo
 } from '../composables/useMeetingDocumentMode'
 import { useVadRecording } from '../composables/useVadRecording'
+import {
+  VIDEO_LAYOUT_STORAGE_KEY,
+  normalizeLayoutMode,
+  nextLayoutMode,
+  computeVideoPageCount,
+  computeVisibleTiles,
+  computeVideoLayoutClass,
+  clampPage
+} from '../composables/videoLayout'
 import { boardStore } from '../stores/boardStore'
 
 const { boardState, meetingId } = useBoardPage({
@@ -527,11 +546,10 @@ const {
 } = useVadRecording({
   uploadRecording: (activeMeetingId, recording) =>
     boardStore.uploadVadRecording(activeMeetingId, recording),
-  onUploadSuccess: ({ sequence }) => {
-    notify(`VAD 청크 #${sequence} 업로드 완료`)
-  },
+  // 실서비스에선 VAD 업로드 진행/실패를 사용자에게 토스트로 알리지 않는다.
+  // (백그라운드 기능 — 테스트용 완료 메시지 제거, 실패는 콘솔로만)
   onUploadError: error => {
-    notify(error?.message || 'VAD 업로드에 실패했습니다.')
+    console.warn('[VAD] 업로드 실패:', error?.message || error)
   }
 })
 let vadStartTimer = 0
@@ -606,8 +624,16 @@ const markAvatarImageFailed = url => {
   if (url) failedAvatarImageUrls.add(url)
 }
 
-const participantsPerPage = 4
 const currentVideoPage = ref(0)
+// 'paged'(페이지네이션) | 'grid'(한 화면에 전체). 설정을 로컬에 저장한다.
+const videoLayoutMode = ref(
+  normalizeLayoutMode(localStorage.getItem(VIDEO_LAYOUT_STORAGE_KEY))
+)
+const toggleVideoLayoutMode = () => {
+  videoLayoutMode.value = nextLayoutMode(videoLayoutMode.value)
+  localStorage.setItem(VIDEO_LAYOUT_STORAGE_KEY, videoLayoutMode.value)
+  currentVideoPage.value = 0
+}
 const liveParticipantCount = computed(() => liveParticipants.value.length)
 const meetingTiles = computed(() => {
   const participants = liveParticipants.value
@@ -633,20 +659,27 @@ const meetingTiles = computed(() => {
   })
 })
 const videoPageCount = computed(() =>
-  Math.max(1, Math.ceil(meetingTiles.value.length / participantsPerPage))
+  computeVideoPageCount({
+    tileCount: meetingTiles.value.length,
+    mode: videoLayoutMode.value,
+    hasPinned: Boolean(pinnedParticipantId.value)
+  })
 )
-const visibleParticipants = computed(() => {
-  const pageStart = currentVideoPage.value * participantsPerPage
-  return meetingTiles.value.slice(pageStart, pageStart + participantsPerPage)
-})
-const videoLayoutClass = computed(() => {
-  const count = visibleParticipants.value.length
-  if (pinnedParticipantId.value && count > 1) return 'layout-pinned'
-  if (count <= 1) return 'layout-single'
-  if (count === 2) return 'layout-two'
-  if (count === 3) return 'layout-three'
-  return 'layout-four'
-})
+const visibleParticipants = computed(() =>
+  computeVisibleTiles({
+    tiles: meetingTiles.value,
+    pinnedId: pinnedParticipantId.value,
+    page: currentVideoPage.value,
+    mode: videoLayoutMode.value
+  })
+)
+const videoLayoutClass = computed(() =>
+  computeVideoLayoutClass({
+    visibleCount: visibleParticipants.value.length,
+    mode: videoLayoutMode.value,
+    hasPinned: Boolean(pinnedParticipantId.value)
+  })
+)
 const participantPreview = computed(() => liveParticipants.value.slice(0, 3))
 const isHost = computed(() => Boolean(boardState.meetingRoom.connection?.isHost))
 const connectionStatusLabel = computed(() => ({
@@ -757,9 +790,9 @@ function scheduleVadStart() {
     return
   }
 
-  vadStartTimer = window.setTimeout(() => {
+  vadStartTimer = window.setTimeout(async () => {
     if (!deviceState.microphone || !liveKitRoom.value || !meetingId.value) return
-    const started = startVadRecording(meetingId.value, liveKitRoom.value)
+    const started = await startVadRecording(meetingId.value, liveKitRoom.value)
     if (!started) console.warn('[VAD] microphone track is not ready yet')
   }, 400)
 }
@@ -799,10 +832,13 @@ watch(
 )
 
 watch(videoPageCount, pageCount => {
-  currentVideoPage.value = Math.min(
-    currentVideoPage.value,
-    pageCount - 1
-  )
+  currentVideoPage.value = clampPage(currentVideoPage.value, pageCount)
+})
+
+// 페이지 이동/레이아웃 전환 시 새로 보이는 <video>가 정지 프레임으로 남지 않도록 재생 재개
+watch([currentVideoPage, videoLayoutMode], async () => {
+  await nextTick()
+  await resumeParticipantMedia()
 })
 
 watch(meetingTiles, tiles => {
@@ -1357,6 +1393,38 @@ async function send() {
 
 .video-grid.layout-pinned .video-tile:not(.is-pinned) {
   grid-column: 2 !important;
+}
+
+/* 한 화면에 전체 표시(그리드) 모드 — 인원 수에 맞춰 자동 배치 */
+.video-grid.layout-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+  grid-template-rows: none !important;
+  grid-auto-rows: minmax(0, 1fr) !important;
+}
+
+/* 레이아웃(페이지네이션 ↔ 한 화면) 전환 토글 */
+.video-layout-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.video-layout-toggle:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+.video-layout-toggle .material-symbols-rounded {
+  font-size: 20px;
 }
 
 .video-tile {

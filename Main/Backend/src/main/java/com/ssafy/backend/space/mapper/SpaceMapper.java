@@ -7,9 +7,11 @@ import com.ssafy.backend.space.dto.ResponseSpaceMemberDto;
 import com.ssafy.backend.space.dto.ResponseUpdateSpaceDto;
 import com.ssafy.backend.member.entity.Member;
 import com.ssafy.backend.space.entity.Team;
+import com.ssafy.backend.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * space 도메인 Entity ↔ Dto 변환 전담.
@@ -53,19 +55,20 @@ public class SpaceMapper {
         );
     }
 
-    public ResponseSpaceMemberDto toMemberDto(Member member) {
+    public ResponseSpaceMemberDto toMemberDto(Member member, User user) {
         return new ResponseSpaceMemberDto(
                 member.getId(),
                 member.getUserId(),
                 member.getNickname(),
+                user != null ? user.getProfileImageUrl() : null,
                 member.getAuthority().name(),
                 member.getTeamRoleId()
         );
     }
 
-    public ResponseSpaceDetailDto toDetailResponse(Team team, List<Member> members) {
+    public ResponseSpaceDetailDto toDetailResponse(Team team, List<Member> members, Map<Long, User> usersById) {
         List<ResponseSpaceMemberDto> memberDtos = members.stream()
-                .map(this::toMemberDto)
+                .map(member -> toMemberDto(member, usersById.get(member.getUserId())))
                 .toList();
         return new ResponseSpaceDetailDto(
                 team.getId(),

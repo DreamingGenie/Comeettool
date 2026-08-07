@@ -63,7 +63,11 @@
         :class="`${activeTab}-row`"
       >
         <div class="person">
-          <i class="avatar">{{ member.avatarText }}</i>
+          <UserAvatar
+            class="avatar"
+            :image-url="member.profileImage"
+            :fallback-text="member.avatarText"
+          />
           <span>{{ member.name }}</span>
         </div>
 
@@ -203,6 +207,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import AppSelect from '../../../shared/components/AppSelect.vue'
+import UserAvatar from '../../../shared/components/UserAvatar.vue'
 import { useToast } from '../../../shared/composables/useToast'
 import InviteModal from '../components/InviteModal.vue'
 import TeamRoleManager from '../components/TeamRoleManager.vue'

@@ -42,7 +42,7 @@
         <div v-else-if="isFeedback" class="report-content feedback-content">
           <div class="report-toolbar">
             <div>
-              <strong>{{ displayMeetingType(report.meetingType) }}</strong>
+              <strong v-if="feedbackMeetingType">{{ feedbackMeetingType }}</strong>
               <p>{{ report.overallReview || '종합 평가 내용이 없습니다.' }}</p>
             </div>
             <div>
@@ -55,12 +55,60 @@
             <p>{{ report.participationComment }}</p>
           </article>
           <section class="feedback-grid">
-            <article v-for="section in feedbackSections" :key="section.key" class="feedback-card">
+            <article
+              v-for="section in feedbackSections"
+              :key="section.key"
+              class="feedback-card"
+              :class="`feedback-card-${section.key}`"
+            >
               <h3>{{ section.label }}</h3>
-              <template v-if="Array.isArray(section.value)">
+              <div
+                v-if="section.key === 'participationStats' && Array.isArray(section.value)"
+                class="participant-stat-list"
+              >
+                <article v-for="(participant, index) in section.value" :key="index">
+                  <dl>
+                    <div>
+                      <dt>참여자</dt>
+                      <dd>{{ participantValue(participant, 'speaker') }}</dd>
+                    </div>
+                    <div>
+                      <dt>발화 비중</dt>
+                      <dd>{{ formatSpeakingRatio(participantValue(participant, 'ratio')) }}</dd>
+                    </div>
+                    <div>
+                      <dt>발화 횟수</dt>
+                      <dd>{{ participantValue(participant, 'utteranceCount') }}회</dd>
+                    </div>
+                    <div>
+                      <dt>발화 시간</dt>
+                      <dd>{{ formatSpeakingSeconds(participantValue(participant, 'speakingSeconds')) }}</dd>
+                    </div>
+                  </dl>
+                </article>
+              </div>
+              <dl
+                v-else-if="section.key === 'qualityEvaluation' && isPlainObject(section.value)"
+                class="quality-evaluation-list"
+              >
+                <div v-for="entry in qualityEntries(section.value)" :key="entry.key">
+                  <dt>{{ entry.label }}</dt>
+                  <dd>{{ entry.grade }}</dd>
+                </div>
+              </dl>
+              <template v-else-if="Array.isArray(section.value)">
                 <ul v-if="section.value.length">
                   <li v-for="(item, index) in section.value" :key="index">
-                    {{ displayValue(item) }}
+                    <dl
+                      v-if="isPlainObject(item) && labeledFields(section.key, item).length"
+                      class="feedback-item-fields"
+                    >
+                      <div v-for="field in labeledFields(section.key, item)" :key="field.key">
+                        <dt>{{ field.label }}</dt>
+                        <dd>{{ displayValue(field.value) }}</dd>
+                      </div>
+                    </dl>
+                    <template v-else>{{ displayValue(item) }}</template>
                   </li>
                 </ul>
                 <p v-else class="report-empty">분석 내용이 없습니다.</p>
@@ -241,6 +289,7 @@ const reportTypeLabel = computed(() =>
       ? 'AI 퍼실리테이터 회의 피드백'
       : 'AI MEETING SUMMARY'
 )
+const feedbackMeetingType = computed(() => displayMeetingType(props.report?.meetingType))
 const feedbackSections = computed(() => {
   const standardSections = [
     { key: 'participationStats', label: '참여 통계', value: props.report?.participationStats },
@@ -319,12 +368,36 @@ function isPlainObject(value) {
 }
 function displayKey(key) {
   const labels = {
+    participantId: '참가자 번호',
+    speakingRatio: '발화 비중',
+    participantName: '참가자 이름',
+    speakingSeconds: '발화 시간',
     participantCount: '전체 참여자 수',
     activeParticipants: '적극 참여자 수',
     balanceScore: '발언 균형 점수',
     score: '종합 점수',
     clarity: '논의 명확성',
     efficiency: '진행 효율성',
+    participation: '참여도',
+    item: '아이템',
+    comment: '코멘트',
+    issue: '이슈',
+    evaluation: '평가',
+    ratio: '발화 비중',
+    speaker: '참여자',
+    utterance_count: '발화 횟수',
+    speaking_seconds: '발화 시간',
+    agenda_clarity: '안건 명확성',
+    time_management: '시간 관리',
+    decision_process: '의사결정 과정',
+    discussion_focus: '논의 집중도',
+    speaking_opportunity_balance: '발언 기회 균형',
+    grade: '평가',
+    content: '내용',
+    timestamp: '시각',
+    suggestion: '개선 제안',
+    decision: '결정 내용',
+    consensus_type: '합의 방식',
     label: '평가 항목',
     passed: '평가 결과'
   }
@@ -334,6 +407,52 @@ function displayKey(key) {
       .replace(/([a-z])([A-Z])/g, '$1 $2')
       .replaceAll('_', ' ')
   )
+}
+function participantValue(participant, field) {
+  const aliases = {
+    speaker: ['speaker', 'participantName', 'participant_name', 'participantId', 'participant_id'],
+    ratio: ['ratio', 'speakingRatio', 'speaking_ratio'],
+    utteranceCount: ['utterance_count', 'utteranceCount'],
+    speakingSeconds: ['speaking_seconds', 'speakingSeconds']
+  }
+  const key = aliases[field]?.find((candidate) => participant?.[candidate] !== undefined)
+  return key ? participant[key] : '-'
+}
+function formatSpeakingRatio(value) {
+  const ratio = Number(value)
+  if (!Number.isFinite(ratio)) return '-'
+  const percentage = ratio <= 1 ? ratio * 100 : ratio
+  return `${Number.isInteger(percentage) ? percentage : percentage.toFixed(1)}%`
+}
+function formatSpeakingSeconds(value) {
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds)) return '-'
+  return `${seconds.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}초`
+}
+function labeledFields(sectionKey, item) {
+  const fieldOrders = {
+    strengths: ['content', 'timestamp'],
+    improvements: ['issue', 'suggestion', 'timestamp'],
+    decisionProcessChecks: [
+      'item',
+      'decision',
+      'evaluation',
+      'consensus_type',
+      'comment',
+      'timestamp'
+    ],
+    unresolvedIssuesEvaluation: ['issue', 'evaluation']
+  }
+  return (fieldOrders[sectionKey] || [])
+    .filter((key) => item[key] !== undefined && item[key] !== null && item[key] !== '')
+    .map((key) => ({ key, label: displayKey(key), value: item[key] }))
+}
+function qualityEntries(value) {
+  return Object.entries(value || {}).map(([key, evaluation]) => ({
+    key,
+    label: displayKey(key),
+    grade: isPlainObject(evaluation) ? displayValue(evaluation.grade) : displayValue(evaluation)
+  }))
 }
 function displayValue(value) {
   if (value === null || value === undefined || value === '') return '-'
@@ -357,7 +476,13 @@ function displayValue(value) {
   return labels[value] || String(value)
 }
 function displayMeetingType(value) {
-  if (!value) return 'AI 퍼실리테이터 회의 진행 분석'
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  )
+    return ''
   const translated = displayValue(value)
   return translated === String(value) ? value : translated
 }
@@ -675,7 +800,17 @@ function displayMeetingType(value) {
   align-items: flex-start;
 }
 .feedback-content > .report-toolbar > div:first-child {
+  display: flex;
+  min-width: 0;
   max-width: 680px;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.feedback-content > .report-toolbar strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 .feedback-content > .report-toolbar p {
   margin: 8px 0 0;
@@ -740,6 +875,81 @@ function displayMeetingType(value) {
   font-weight: 700;
   text-align: right;
 }
+.participant-stat-list {
+  display: grid;
+  gap: 10px;
+}
+.participant-stat-list > article {
+  padding: 14px;
+  border: 1px solid #edf0f5;
+  border-radius: 13px;
+  background: #f8f9fc;
+}
+.participant-stat-list dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+.participant-stat-list dl > div {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+.participant-stat-list dt {
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+.participant-stat-list dd {
+  text-align: left;
+}
+.feedback-item-fields {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.feedback-item-fields > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px;
+}
+.feedback-item-fields dt {
+  color: #7d8598;
+  font-weight: 700;
+}
+.feedback-item-fields dd {
+  margin: 0;
+  color: #4d566b;
+}
+.feedback-card-decisionProcessChecks li,
+.feedback-card-unresolvedIssuesEvaluation li,
+.feedback-card-strengths li,
+.feedback-card-improvements li {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f9fc;
+}
+.quality-evaluation-list {
+  display: grid;
+  gap: 0;
+}
+.quality-evaluation-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf0f5;
+}
+.quality-evaluation-list > div:last-child {
+  border-bottom: 0;
+}
+.quality-evaluation-list dt {
+  color: #596174;
+  font-weight: 700;
+}
+.quality-evaluation-list dd {
+  margin: 0;
+  color: #20283b;
+  font-weight: 800;
+}
 @media (max-width: 700px) {
   .report-modal-backdrop {
     padding: 0;
@@ -774,6 +984,9 @@ function displayMeetingType(value) {
   .feedback-content > .report-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+  .participant-stat-list dl {
+    grid-template-columns: 1fr;
   }
 }
 </style>
