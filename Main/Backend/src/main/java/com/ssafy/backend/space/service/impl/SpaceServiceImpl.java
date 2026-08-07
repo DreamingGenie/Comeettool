@@ -37,6 +37,8 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.Set;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -197,7 +199,11 @@ public class SpaceServiceImpl implements SpaceService {
         }
 
         List<Member> members = memberRepository.findByTeamId(spaceId);
-        return spaceMapper.toDetailResponse(team, members);
+        Map<Long, User> usersById = userRepository.findAllById(
+                        members.stream().map(Member::getUserId).toList())
+                .stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        return spaceMapper.toDetailResponse(team, members, usersById);
     }
 
     @Override

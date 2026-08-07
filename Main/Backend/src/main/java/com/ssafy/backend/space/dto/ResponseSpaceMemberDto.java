@@ -8,6 +8,7 @@ public record ResponseSpaceMemberDto(
         Long memberId,
         Long userId,
         String nickname,
+        String profileImage,
         String authority,
         Long teamRoleId
 ) {
