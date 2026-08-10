@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +15,7 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.storage.ObjectStorageService;
+import com.ssafy.backend.global.storage.StorageDownloadUrlProvider;
 import com.ssafy.backend.global.storage.StorageObjectKey;
 import com.ssafy.backend.global.storage.StorageUploadRequest;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
@@ -60,9 +60,7 @@ public class ReportServiceImpl implements ReportService {
     private final TranscriptMarkdownRenderer transcriptMarkdownRenderer;
     private final MarkdownToPdfConverter markdownToPdfConverter;
     private final ObjectStorageService objectStorageService;
-
-    @Value("${file.base-url}")
-    private String publicBaseUrl;
+    private final StorageDownloadUrlProvider storageDownloadUrlProvider;
 
     @Override
     @Transactional(readOnly = true)
@@ -121,37 +119,36 @@ public class ReportServiceImpl implements ReportService {
                 .orElseThrow(() -> new CustomException(ErrorCode.TRANSCRIPT_NOT_FOUND));
 
         boolean isMd = "md".equals(format);
-        String cachedUrl = isMd ? transcription.getMdUrl() : transcription.getPdfUrl();
-        if (cachedUrl != null) {
-            return new ResponseExportDto(meetingId, format, cachedUrl);
+        String contentType = isMd ? "text/markdown" : "application/pdf";
+        StorageObjectKey objectKey = AiResultKeys.of(
+                meetingId,
+                "transcript",
+                format
+        );
+        String cachedObjectReference = isMd ? transcription.getMdUrl() : transcription.getPdfUrl();
+        if (cachedObjectReference != null) {
+            return downloadResponse(meetingId, format, objectKey, contentType);
         }
 
         String markdown = transcriptMarkdownRenderer.render(meetingId, transcription.getTranscript());
 
         byte[] content;
-        String contentType;
-        StorageObjectKey objectKey;
         if (isMd) {
             content = markdown.getBytes(StandardCharsets.UTF_8);
-            contentType = "text/markdown";
-            objectKey = AiResultKeys.of(meetingId, "transcript", "md");
         } else {
             content = markdownToPdfConverter.convert(markdown);
-            contentType = "application/pdf";
-            objectKey = AiResultKeys.of(meetingId, "transcript", "pdf");
         }
 
         StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
         objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
-        String url = publicBaseUrl + "/files/" + objectKey.value();
 
         if (isMd) {
-            audioTranscriptionRepository.updateMdUrl(meetingId, url);
+            audioTranscriptionRepository.updateMdUrl(meetingId, objectKey.value());
         } else {
-            audioTranscriptionRepository.updatePdfUrl(meetingId, url);
+            audioTranscriptionRepository.updatePdfUrl(meetingId, objectKey.value());
         }
 
-        return new ResponseExportDto(meetingId, format, url);
+        return downloadResponse(meetingId, format, objectKey, contentType);
     }
 
     @Override
@@ -330,9 +327,15 @@ public class ReportServiceImpl implements ReportService {
         }
 
         boolean isMd = "md".equals(format);
-        String cachedUrl = isMd ? minutes.getMdUrl() : minutes.getPdfUrl();
-        if (cachedUrl != null) {
-            return new ResponseExportDto(meetingId, format, cachedUrl);
+        String contentType = isMd ? "text/markdown" : "application/pdf";
+        StorageObjectKey objectKey = AiResultKeys.of(
+                meetingId,
+                "minutes",
+                format
+        );
+        String cachedObjectReference = isMd ? minutes.getMdUrl() : minutes.getPdfUrl();
+        if (cachedObjectReference != null) {
+            return downloadResponse(meetingId, format, objectKey, contentType);
         }
 
         String markdown = transcriptMarkdownRenderer.renderMinutes(
@@ -340,29 +343,22 @@ public class ReportServiceImpl implements ReportService {
                 minutes.getDecisions(), minutes.getActionItems(), minutes.getOpenIssues());
 
         byte[] content;
-        String contentType;
-        StorageObjectKey objectKey;
         if (isMd) {
             content = markdown.getBytes(StandardCharsets.UTF_8);
-            contentType = "text/markdown";
-            objectKey = AiResultKeys.of(meetingId, "minutes", "md");
         } else {
             content = markdownToPdfConverter.convert(markdown);
-            contentType = "application/pdf";
-            objectKey = AiResultKeys.of(meetingId, "minutes", "pdf");
         }
 
         StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
         objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
-        String url = publicBaseUrl + "/files/" + objectKey.value();
 
         if (isMd) {
-            meetingMinutesRepository.updateMdUrl(meetingId, url);
+            meetingMinutesRepository.updateMdUrl(meetingId, objectKey.value());
         } else {
-            meetingMinutesRepository.updatePdfUrl(meetingId, url);
+            meetingMinutesRepository.updatePdfUrl(meetingId, objectKey.value());
         }
 
-        return new ResponseExportDto(meetingId, format, url);
+        return downloadResponse(meetingId, format, objectKey, contentType);
     }
 
     @Override
@@ -436,9 +432,15 @@ public class ReportServiceImpl implements ReportService {
         }
 
         boolean isMd = "md".equals(format);
-        String cachedUrl = isMd ? report.getMdUrl() : report.getPdfUrl();
-        if (cachedUrl != null) {
-            return new ResponseExportDto(meetingId, format, cachedUrl);
+        String contentType = isMd ? "text/markdown" : "application/pdf";
+        StorageObjectKey objectKey = AiResultKeys.of(
+                meetingId,
+                "facilitator",
+                format
+        );
+        String cachedObjectReference = isMd ? report.getMdUrl() : report.getPdfUrl();
+        if (cachedObjectReference != null) {
+            return downloadResponse(meetingId, format, objectKey, contentType);
         }
 
         String markdown = transcriptMarkdownRenderer.renderFacilitatorReport(
@@ -448,28 +450,31 @@ public class ReportServiceImpl implements ReportService {
                 report.getUnresolvedIssuesEvaluation(), report.getNextMeetingSuggestions());
 
         byte[] content;
-        String contentType;
-        StorageObjectKey objectKey;
         if (isMd) {
             content = markdown.getBytes(StandardCharsets.UTF_8);
-            contentType = "text/markdown";
-            objectKey = AiResultKeys.of(meetingId, "facilitator", "md");
         } else {
             content = markdownToPdfConverter.convert(markdown);
-            contentType = "application/pdf";
-            objectKey = AiResultKeys.of(meetingId, "facilitator", "pdf");
         }
 
         StorageUploadRequest uploadRequest = new StorageUploadRequest(objectKey, content.length, contentType, null);
         objectStorageService.upload(uploadRequest, new ByteArrayInputStream(content));
-        String url = publicBaseUrl + "/files/" + objectKey.value();
 
         if (isMd) {
-            facilitatorReportRepository.updateMdUrl(meetingId, url);
+            facilitatorReportRepository.updateMdUrl(meetingId, objectKey.value());
         } else {
-            facilitatorReportRepository.updatePdfUrl(meetingId, url);
+            facilitatorReportRepository.updatePdfUrl(meetingId, objectKey.value());
         }
 
-        return new ResponseExportDto(meetingId, format, url);
+        return downloadResponse(meetingId, format, objectKey, contentType);
+    }
+
+    private ResponseExportDto downloadResponse(
+            Long meetingId,
+            String format,
+            StorageObjectKey objectKey,
+            String contentType
+    ) {
+        String downloadUrl = storageDownloadUrlProvider.createDownloadUrl(objectKey, contentType);
+        return new ResponseExportDto(meetingId, format, downloadUrl);
     }
 }

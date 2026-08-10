@@ -29,6 +29,8 @@ import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.storage.ObjectStorageService;
+import com.ssafy.backend.global.storage.StorageDownloadUrlProvider;
+import com.ssafy.backend.global.storage.StorageObjectKey;
 import com.ssafy.backend.global.storage.StorageUploadRequest;
 import com.ssafy.backend.meeting.entity.MeetingRoom;
 import com.ssafy.backend.meeting.repository.MeetingRoomRepository;
@@ -62,6 +64,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -108,12 +111,17 @@ class ReportServiceImplTest {
     @Mock
     private ObjectStorageService objectStorageService;
 
+    @Mock
+    private StorageDownloadUrlProvider storageDownloadUrlProvider;
+
     @InjectMocks
     private ReportServiceImpl reportService;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(reportService, "publicBaseUrl", BASE_URL);
+        lenient().when(storageDownloadUrlProvider.createDownloadUrl(any(StorageObjectKey.class), any(String.class)))
+                .thenAnswer(invocation -> BASE_URL + "/signed/"
+                        + invocation.getArgument(0, StorageObjectKey.class).value());
     }
 
     private Team activeTeam(Long spaceId, Long ownerId) {
@@ -435,7 +443,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            String expectedUrl = BASE_URL + "/files/ai-results/34/transcript.md";
+            String expectedUrl = BASE_URL + "/signed/ai-results/34/transcript.md";
             assertThat(result.meetingId()).isEqualTo(MEETING_ID);
             assertThat(result.format()).isEqualTo("md");
             assertThat(result.url()).isEqualTo(expectedUrl);
@@ -444,7 +452,7 @@ class ReportServiceImplTest {
             verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
             assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/transcript.md");
             assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
-            verify(audioTranscriptionRepository).updateMdUrl(MEETING_ID, expectedUrl);
+            verify(audioTranscriptionRepository).updateMdUrl(MEETING_ID, "ai-results/34/transcript.md");
             verify(markdownToPdfConverter, never()).convert(any());
             verify(audioTranscriptionRepository, never()).updatePdfUrl(any(), any());
         }
@@ -464,7 +472,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
-            String expectedUrl = BASE_URL + "/files/ai-results/34/transcript.pdf";
+            String expectedUrl = BASE_URL + "/signed/ai-results/34/transcript.pdf";
             assertThat(result.format()).isEqualTo("pdf");
             assertThat(result.url()).isEqualTo(expectedUrl);
 
@@ -473,12 +481,12 @@ class ReportServiceImplTest {
             assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/transcript.pdf");
             assertThat(requestCaptor.getValue().contentType()).isEqualTo("application/pdf");
             assertThat(requestCaptor.getValue().contentLength()).isEqualTo(pdfBytes.length);
-            verify(audioTranscriptionRepository).updatePdfUrl(MEETING_ID, expectedUrl);
+            verify(audioTranscriptionRepository).updatePdfUrl(MEETING_ID, "ai-results/34/transcript.pdf");
             verify(audioTranscriptionRepository, never()).updateMdUrl(any(), any());
         }
 
         @Test
-        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 새 다운로드 URL을 반환한다")
         void exportTranscript_returnsCachedMdUrlWithoutUploading() {
             MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
             AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
@@ -490,7 +498,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.md");
+            assertThat(result.url()).isEqualTo(BASE_URL + "/signed/ai-results/34/transcript.md");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
             verifyNoInteractions(objectStorageService);
@@ -498,7 +506,7 @@ class ReportServiceImplTest {
         }
 
         @Test
-        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 새 다운로드 URL을 반환한다")
         void exportTranscript_returnsCachedPdfUrlWithoutUploading() {
             MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
             AudioTranscription transcription = transcriptionOf(MEETING_ID, TRANSCRIPT_JSON, OffsetDateTime.now());
@@ -511,7 +519,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportTranscript(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
-            assertThat(result.url()).isEqualTo("https://bucket.s3.region.amazonaws.com/cached.pdf");
+            assertThat(result.url()).isEqualTo(BASE_URL + "/signed/ai-results/34/transcript.pdf");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
             verifyNoInteractions(objectStorageService);
@@ -1565,7 +1573,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            String expectedUrl = BASE_URL + "/files/ai-results/34/minutes.md";
+            String expectedUrl = BASE_URL + "/signed/ai-results/34/minutes.md";
             assertThat(result.meetingId()).isEqualTo(MEETING_ID);
             assertThat(result.format()).isEqualTo("md");
             assertThat(result.url()).isEqualTo(expectedUrl);
@@ -1574,7 +1582,7 @@ class ReportServiceImplTest {
             verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
             assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/minutes.md");
             assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
-            verify(meetingMinutesRepository).updateMdUrl(MEETING_ID, expectedUrl);
+            verify(meetingMinutesRepository).updateMdUrl(MEETING_ID, "ai-results/34/minutes.md");
             verify(markdownToPdfConverter, never()).convert(any());
             verify(meetingMinutesRepository, never()).updatePdfUrl(any(), any());
         }
@@ -1594,7 +1602,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
-            String expectedUrl = BASE_URL + "/files/ai-results/34/minutes.pdf";
+            String expectedUrl = BASE_URL + "/signed/ai-results/34/minutes.pdf";
             assertThat(result.format()).isEqualTo("pdf");
             assertThat(result.url()).isEqualTo(expectedUrl);
 
@@ -1603,12 +1611,12 @@ class ReportServiceImplTest {
             assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/minutes.pdf");
             assertThat(requestCaptor.getValue().contentType()).isEqualTo("application/pdf");
             assertThat(requestCaptor.getValue().contentLength()).isEqualTo(pdfBytes.length);
-            verify(meetingMinutesRepository).updatePdfUrl(MEETING_ID, expectedUrl);
+            verify(meetingMinutesRepository).updatePdfUrl(MEETING_ID, "ai-results/34/minutes.pdf");
             verify(meetingMinutesRepository, never()).updateMdUrl(any(), any());
         }
 
         @Test
-        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 새 다운로드 URL을 반환한다")
         void exportMinutes_returnsCachedMdUrlWithoutUploading() {
             MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
             MeetingMinutes minutes = confirmedMinutes();
@@ -1620,7 +1628,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.md");
+            assertThat(result.url()).isEqualTo(BASE_URL + "/signed/ai-results/34/minutes.md");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
             verifyNoInteractions(objectStorageService);
@@ -1628,7 +1636,7 @@ class ReportServiceImplTest {
         }
 
         @Test
-        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        @DisplayName("pdfUrl 캐시가 있으면 렌더링·업로드를 스킵하고 새 다운로드 URL을 반환한다")
         void exportMinutes_returnsCachedPdfUrlWithoutUploading() {
             MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
             MeetingMinutes minutes = confirmedMinutes();
@@ -1640,7 +1648,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportMinutes(OWNER_ID, MEETING_ID, new RequestExportDto("pdf"));
 
-            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.pdf");
+            assertThat(result.url()).isEqualTo(BASE_URL + "/signed/ai-results/34/minutes.pdf");
             verifyNoInteractions(transcriptMarkdownRenderer);
             verifyNoInteractions(markdownToPdfConverter);
             verifyNoInteractions(objectStorageService);
@@ -1805,7 +1813,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            String expectedUrl = BASE_URL + "/files/ai-results/34/facilitator.md";
+            String expectedUrl = BASE_URL + "/signed/ai-results/34/facilitator.md";
             assertThat(result.meetingId()).isEqualTo(MEETING_ID);
             assertThat(result.format()).isEqualTo("md");
             assertThat(result.url()).isEqualTo(expectedUrl);
@@ -1814,7 +1822,7 @@ class ReportServiceImplTest {
             verify(objectStorageService).upload(requestCaptor.capture(), any(InputStream.class));
             assertThat(requestCaptor.getValue().objectKey().value()).isEqualTo("ai-results/34/facilitator.md");
             assertThat(requestCaptor.getValue().contentType()).isEqualTo("text/markdown");
-            verify(facilitatorReportRepository).updateMdUrl(MEETING_ID, expectedUrl);
+            verify(facilitatorReportRepository).updateMdUrl(MEETING_ID, "ai-results/34/facilitator.md");
             verify(markdownToPdfConverter, never()).convert(any());
             verify(facilitatorReportRepository, never()).updatePdfUrl(any(), any());
         }
@@ -1860,7 +1868,7 @@ class ReportServiceImplTest {
         }
 
         @Test
-        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 기존 URL을 그대로 반환한다")
+        @DisplayName("mdUrl 캐시가 있으면 렌더링·업로드를 스킵하고 새 다운로드 URL을 반환한다")
         void exportFacilitatorReport_returnsCachedMdUrlWithoutUploading() {
             MeetingRoom meetingRoom = meetingRoomOf(MEETING_ID, SPACE_ID);
             FacilitatorReport report = standardReport();
@@ -1872,7 +1880,7 @@ class ReportServiceImplTest {
             ResponseExportDto result =
                     reportService.exportFacilitatorReport(OWNER_ID, MEETING_ID, new RequestExportDto("md"));
 
-            assertThat(result.url()).isEqualTo("http://localhost:8080/files/cached.md");
+            assertThat(result.url()).isEqualTo(BASE_URL + "/signed/ai-results/34/facilitator.md");
             verify(objectStorageService, never()).upload(any(), any());
             verify(markdownToPdfConverter, never()).convert(any());
             verify(facilitatorReportRepository, never()).updateMdUrl(any(), any());
