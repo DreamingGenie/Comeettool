@@ -38,6 +38,26 @@ from app.pipeline.facilitator.participation import (
 from app.schemas.meeting import SegmentMeta
 
 
+# --- Settings: 로컬 DATABASE_URL의 DB 드라이버 ---
+
+# SQLAlchemy 2.1부터 postgresql:// 의 기본 드라이버가 psycopg(3)로 바뀌어, 설치되지 않은 모듈을
+# 찾다가 기동이 실패했다. SQLAlchemy에는 psycopg2를 명시하고, psycopg2 dsn은 원래 URL을 그대로 쓴다.
+def test_local_database_url_uses_psycopg2_for_sqlalchemy():
+    from app.core.config import Settings
+
+    url = "postgresql://user:pass@localhost:5432/dummy"
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL=url,
+        OPENAI_API_KEY="sk-dummy-for-tests",
+        S3_BUCKET_NAME="dummy-bucket",
+        AI_INTERNAL_TOKEN="dummy-token",
+    )
+
+    assert settings.sqlalchemy_database_url.drivername == "postgresql+psycopg2"
+    assert settings.psycopg2_connect_kwargs == {"dsn": url}
+
+
 # --- SegmentMeta: BE ↔ AI 세그먼트 메타데이터 계약 ---
 
 # VadSegmentMetadataDto가 직렬화하는 실제 필드 형태(camelCase). BE에만 있는 username은

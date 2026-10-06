@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 
 # app/core/config.py -> 프로젝트 루트(.env 위치)
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -67,7 +67,13 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_database_url(self) -> str | URL:
         if self.DATABASE_URL:
-            return self.DATABASE_URL
+            # SQLAlchemy 2.1부터 드라이버를 생략한 postgresql:// 의 기본 드라이버가 psycopg(3)다.
+            # 설치된 드라이버는 psycopg2뿐이고 RAG 코드는 같은 URL을 psycopg2 dsn으로 그대로 쓰므로,
+            # URL 문자열은 두고 SQLAlchemy에 넘길 때만 드라이버를 명시한다.
+            url = make_url(self.DATABASE_URL)
+            if url.drivername == "postgresql":
+                url = url.set(drivername="postgresql+psycopg2")
+            return url
 
         query = {"sslmode": self.DB_SSL_MODE}
         if self.DB_SSL_ROOT_CERT:
