@@ -105,7 +105,7 @@ PR과 `develop`·`main` push마다 GitHub Actions([.github/workflows/ci.yml](.gi
 
 팀 합의로 PM 겸 통합 담당을 맡아 MR 리뷰와 develop 통합을 담당했습니다.
 
-- develop에 합친 머지 109건 중 86건을 처리했습니다. 그중 66건이 팀원 브랜치입니다. 제 브랜치 9건은 팀원이 머지했습니다.
+- develop에 합친 머지 95건 중 83건을 처리했습니다. 제 브랜치 9건은 팀원이 머지했습니다.
 - main 머지 10건은 모두 제가 했고, 그중 배포가 9건입니다.
 - 기본 브랜치를 main에서 develop으로 바꾸고, 팀이 합의한 규칙을 컨벤션 문서로 정리했습니다([Main/Docs/00_Convention](Main/Docs/00_Convention)).
 - 공통 응답·예외 처리 틀(`f66a04f`)을 만들었고, 팀원 4명이 각자 기능의 에러 코드를 여기에 더해 썼습니다.
@@ -113,7 +113,7 @@ PR과 `develop`·`main` push마다 GitHub Actions([.github/workflows/ci.yml](.gi
 
 화상회의, 실시간 문서 편집, VAD, AI 분석, CI/CD는 팀원들이 만들었습니다. 저는 그 코드를 리뷰하고 통합했고, 구현에 깊이 관여하지는 않았습니다.
 
-> 머지 건수는 프로젝트 마지막 배포 커밋 `f17f3f4`(2026-08-10) 기준입니다.
+> 머지 건수는 프로젝트 마지막 배포 커밋 `f17f3f4`(2026-08-10)까지 `main`에 반영된 `into 'develop'` 머지 커밋 기준입니다.
 
 ## 프로젝트 종료 뒤 고친 것
 
