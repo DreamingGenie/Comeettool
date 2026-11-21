@@ -76,6 +76,23 @@ _BE_SEGMENT_JSON = {
 }
 
 
+def test_openai_base_url_defaults_to_gms_and_can_be_overridden(monkeypatch):
+    """LLM 엔드포인트는 기본이 GMS이고, OPENAI_BASE_URL로만 바뀐다.
+
+    기본값이 바뀌면 운영 설정(변수 미지정)이 조용히 다른 곳을 부르게 된다.
+    """
+    from app.pipeline.common.openai_endpoint import openai_base_url
+
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    assert openai_base_url() == "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "  ")
+    assert openai_base_url() == "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    assert openai_base_url() == "https://api.openai.com/v1"
+
+
 def test_segment_meta_parses_be_json():
     meta = SegmentMeta.model_validate(_BE_SEGMENT_JSON)
     assert meta.meeting_room_id == 42

@@ -47,6 +47,40 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// 테스트용 JWT 키.
+// 키 파일(*.pem)은 저장소에 올리지 않는다. 로컬에 키가 없으면(새로 clone한 상태) 테스트 실행 전에
+// 일회용 RSA 키 쌍을 build/ 아래에 만들어 테스트 클래스패스(keys/)에만 올린다.
+// 로컬 키가 있으면(src/main/resources/keys 또는 src/test/resources/keys) 그 키를 그대로 쓴다.
+def hasLocalJwtKeys = [
+        'src/main/resources/keys/jwt_private.pem',
+        'src/test/resources/keys/jwt_private.pem'
+].any { file(it).exists() }
+def generatedTestJwtKeysDir = layout.buildDirectory.dir('generated/test-jwt-keys')
+
+def generateTestJwtKeys = tasks.register('generateTestJwtKeys') {
+    description = '로컬에 JWT 키가 없을 때 테스트 전용 RSA 키 쌍(PKCS#8 개인키·X.509 공개키 PEM)을 만든다.'
+    group = 'verification'
+    outputs.dir(generatedTestJwtKeysDir)
+    doLast {
+        def keysDir = new File(generatedTestJwtKeysDir.get().asFile, 'keys')
+        keysDir.mkdirs()
+        def generator = java.security.KeyPairGenerator.getInstance('RSA')
+        generator.initialize(2048)
+        def pair = generator.generateKeyPair()
+        def lineBreak = System.lineSeparator()
+        def encoder = Base64.getMimeEncoder(64, lineBreak.getBytes('US-ASCII'))
+        def pem = { String label, byte[] der ->
+            ["-----BEGIN ${label}-----", encoder.encodeToString(der), "-----END ${label}-----", ''].join(lineBreak)
+        }
+        new File(keysDir, 'jwt_private.pem').setText(pem('PRIVATE KEY', pair.private.encoded), 'US-ASCII')
+        new File(keysDir, 'jwt_public.pem').setText(pem('PUBLIC KEY', pair.public.encoded), 'US-ASCII')
+    }
+}
+
+if (!hasLocalJwtKeys) {
+    sourceSets.test.resources.srcDir(generateTestJwtKeys)
+}
+
 // 테스트는 두 층으로 나눈다.
 // - test: DB·Redis 없이 도는 단위 테스트(Mockito·standalone MockMvc). 수 초 안에 끝난다.
 // - integrationTest: @Tag("integration") — 스프링 컨텍스트를 띄우고 실제 PostgreSQL·Redis에 붙는다.

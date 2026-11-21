@@ -11,13 +11,14 @@ from pathlib import Path
 
 from openai import OpenAI
 
+from ..common.openai_endpoint import openai_base_url
 from ..common.schema import TranscriptSegment
 from ..common.text import format_transcript
 from .schema import MeetingMinutes
 
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
-    base_url="https://gms.ssafy.io/gmsapi/api.openai.com/v1",
+    base_url=openai_base_url(),
 )
 
 MODEL = os.environ.get("LLM_MODEL", "gpt-5")
