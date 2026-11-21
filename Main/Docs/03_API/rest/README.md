@@ -137,7 +137,8 @@
       "tokenType": "Bearer",
       "accessToken": "ACCESS...",
       "refreshToken": "REFRESH...",
-      "expiresIn": 1800
+      "userId": 1,
+      "onboarded": false
     }
   }
   ```
