@@ -99,7 +99,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate   # 스키마는 database-schema.md DDL로 생성, JPA는 검증만 (Flyway 미사용)
+      ddl-auto: validate   # 스키마는 Flyway 마이그레이션(db/migration V1~)으로 생성, JPA는 검증만
     show-sql: true
     properties:
       hibernate:
