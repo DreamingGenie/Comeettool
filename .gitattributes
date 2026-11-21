@@ -13,3 +13,8 @@ Main/Frontend/**/*.svg text eol=lf
 Main/Frontend/**/*.vue text eol=lf
 Main/Frontend/.env* text eol=lf
 Main/Frontend/.prettier* text eol=lf
+
+# 스키마 덤프는 체크섬 대상이고 컨테이너 안의 psql이 직접 읽는다. Windows에서도 LF로 체크아웃한다.
+exec/database/*.sql text eol=lf
+exec/database/*.sha256 text eol=lf
+compose.yaml text eol=lf

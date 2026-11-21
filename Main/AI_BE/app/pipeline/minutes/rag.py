@@ -27,6 +27,8 @@ from pgvector.psycopg2 import register_vector
 
 from app.core.config import get_settings
 
+from ..common.openai_endpoint import openai_base_url
+
 OUTPUT_DIR = Path("output")
 TABLE_NAME = "meeting_history"
 
@@ -49,7 +51,7 @@ def get_connection():
 def _embed(text: str) -> list[float]:
     client = OpenAI(
         api_key=os.environ.get("OPENAI_API_KEY"),
-        base_url="https://gms.ssafy.io/gmsapi/api.openai.com/v1",
+        base_url=openai_base_url(),
     )
     response = client.embeddings.create(model=EMBEDDING_MODEL, input=text[:MAX_DOC_CHARS])
     return response.data[0].embedding

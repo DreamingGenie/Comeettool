@@ -75,7 +75,17 @@ AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 �
 
 ## 실행 방법
 
-서버 네 개(Backend · Yjs · AI · Frontend)와 PostgreSQL(pgvector)·Valkey가 필요합니다. 저장소에 Docker Compose 파일은 없습니다.
+서버 네 개(Backend · Yjs · AI · Frontend)와 PostgreSQL(pgvector)·Valkey가 필요합니다. PostgreSQL과 Redis는 저장소 루트의 [compose.yaml](compose.yaml)로 띄울 수 있습니다(애플리케이션 서버는 포함하지 않습니다).
+
+백엔드를 로컬에서 띄우는 최소 순서입니다.
+
+```bash
+docker compose up -d                          # PostgreSQL 17(pgvector) + Redis, 첫 실행 때 스키마 자동 적용
+cp Main/Backend/.env.example Main/Backend/.env
+cd Main/Backend && ./gradlew check            # 단위 + 통합 테스트 (JWT 키는 테스트용으로 자동 생성)
+```
+
+서버를 실제로 띄우려면(`./gradlew bootRun`) JWT 키 쌍을 직접 만들어야 합니다([exec/PORTING_MANUAL.md](exec/PORTING_MANUAL.md) §7).
 
 | 문서 | 내용 |
 | --- | --- |
@@ -88,7 +98,7 @@ AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 �
 매뉴얼은 GitLab에서 쓰던 그대로라 몇 가지를 바꿔 읽어야 합니다.
 
 - 클론 주소와 폴더 이름은 `https://github.com/DreamingGenie/Comeettool.git` · `Comeettool`로 바꿉니다.
-- AI 분석은 SSAFY GMS 키를 전제로 합니다. GMS 주소가 `Main/AI_BE/app/pipeline/` 아래 네 곳에 `base_url`로 고정돼 있어, 교육 과정 밖에서 AI 산출물까지 재현하려면 이 값을 다른 OpenAI 호환 엔드포인트로 바꿔야 합니다.
+- AI 분석의 기본 엔드포인트는 SSAFY GMS입니다. 교육 과정 밖에서 AI 산출물까지 재현하려면 `Main/AI_BE/.env`의 `OPENAI_BASE_URL`에 다른 OpenAI 호환 엔드포인트를 지정합니다.
 - 배포 파이프라인(`.gitlab-ci.yml`)은 GitLab Runner와 AWS 계정을 전제로 하며 GitHub에서는 동작하지 않습니다. GitHub에서는 테스트만 돌립니다(아래 [테스트](#테스트)).
 
 ## 테스트
@@ -126,6 +136,7 @@ PR과 `develop`·`main` push마다 GitHub Actions([.github/workflows/ci.yml](.gi
 - Jackson 2·3 혼용을 Jackson 3 하나로 정리. 응답 날짜가 규약대로 UTC로 나가게 함 (#6)
 - AI 피드백의 빈 값이 화면에 잘못 표시되던 문제 (#7)
 - GitHub Actions로 테스트 실행 (#8)
+- 저장소를 받아 바로 테스트할 수 있게 정리: Docker Compose, 테스트용 JWT 키 자동 생성, AI 엔드포인트 환경변수 (#14)
 
 ## 저장소 이력
 
