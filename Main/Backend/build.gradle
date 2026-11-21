@@ -49,10 +49,35 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// 테스트는 두 층으로 나눈다.
+// - test: DB·Redis 없이 도는 단위 테스트(Mockito·standalone MockMvc). 수 초 안에 끝난다.
+// - integrationTest: @Tag("integration") — 스프링 컨텍스트를 띄우고 실제 PostgreSQL·Redis에 붙는다.
+// check(build)는 둘 다 돌린다.
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'integration'
+    }
     testLogging {
         events 'passed', 'skipped', 'failed'
         showStandardStreams = false
     }
+}
+
+tasks.register('integrationTest', Test) {
+    description = '실제 PostgreSQL·Redis에 붙는 통합 테스트(@Tag("integration"))를 실행한다.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'integration'
+    }
+    shouldRunAfter tasks.named('test')
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = false
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('integrationTest')
 }

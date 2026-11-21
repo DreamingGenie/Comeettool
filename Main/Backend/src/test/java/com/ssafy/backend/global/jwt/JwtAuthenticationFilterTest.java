@@ -4,6 +4,7 @@ import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.document.authorization.DocumentPermissionReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 인증 필터 + SecurityConfig 통합 테스트 (실제 시큐리티 체인). 로컬 PostgreSQL·keys/ 필요 (@SpringBootTest 컨텍스트). (@AutoConfigureMockMvc 대신
  * MockMvcBuilders로 직접 구성 — Boot 4 패키지 이동 회피)
  */
+@Tag("integration")
 @SpringBootTest
 @DisplayName("인증 필터 통합 (JwtAuthenticationFilter)")
 class JwtAuthenticationFilterTest {
