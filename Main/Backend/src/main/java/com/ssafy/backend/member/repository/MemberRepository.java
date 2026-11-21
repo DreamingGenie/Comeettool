@@ -49,9 +49,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
      * SPACE-03 검색: search가 null이면 전체, 값이 있으면 스페이스 이름 부분 일치(대소문자 무시)로 필터한다.
      * ※ :search를 cast(... as string)으로 명시 캐스팅한다 — 미지정 시 null 파라미터를 PostgreSQL이
      *   bytea로 추론해 lower(bytea) 오류(42883)로 목록 조회 전체가 500이 된다.
-     *   이 오류는 호출 순서를 탄다(2026-11-21 실측) — 이 쿼리의 첫 호출이 search=null이면 이후 호출까지 실패하고,
-     *   첫 호출에 문자열을 넘기면 이후의 null 호출도 통과한다. 그래서 회귀 테스트는 전용 컨텍스트에서
-     *   null을 첫 호출로 부른다(MemberRepositoryNullSearchFirstCallTest).
+     *   이 오류는 호출 순서를 탄다(2026-11-21 실측, 호출마다 별도 트랜잭션) — 이 쿼리의 첫 호출이 search=null이면
+     *   null 호출은 그 뒤로도 계속 실패하고(문자열 검색은 통과), 첫 호출에 문자열을 넘기면 이후의 null 호출도 통과한다.
+     *   그래서 회귀 테스트는 전용 컨텍스트에서 null을 첫 호출로 부른다(MemberRepositoryNullSearchFirstCallTest).
      */
     @Query("""
             select t, m.authority
