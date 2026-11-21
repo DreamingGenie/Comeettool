@@ -289,14 +289,14 @@ Copy-Item Main/Backend/.env.example Main/Backend/.env
 
 ```powershell
 Set-Location Main/Backend
-.\gradlew.bat clean test bootJar
+.\gradlew.bat clean test integrationTest bootJar
 ```
 
 Linux/macOS:
 
 ```bash
 cd Main/Backend
-./gradlew clean test bootJar
+./gradlew clean test integrationTest bootJar
 ```
 
 JAR 결과물:

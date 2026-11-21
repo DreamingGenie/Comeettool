@@ -13,6 +13,7 @@ import com.ssafy.backend.user.entity.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 제약이 있다(반면 invitations는 FK가 없어 team_id/inviter_id는 임의 값으로 충분하다).
  * 실행 전 SSH 터널이 연결돼 있어야 하며, 각 테스트가 만든 데이터는 자동 롤백되지 않으므로 직접 정리한다.</p>
  */
+@Tag("integration")
 @SpringBootTest
 @DisplayName("InvitationServiceImpl 트랜잭션 통합 테스트")
 class InvitationServiceImplTransactionTest {

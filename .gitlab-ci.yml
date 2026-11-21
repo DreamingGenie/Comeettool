@@ -99,7 +99,7 @@ backend:verify:
   script:
     - cd Main/Backend
     - chmod +x gradlew
-    - ./gradlew --no-daemon clean test bootJar
+    - ./gradlew --no-daemon clean test integrationTest bootJar
   after_script:
     - rm -rf Main/Backend/src/test/resources/keys .ci-uploads
   artifacts:
