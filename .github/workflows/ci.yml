@@ -67,14 +67,7 @@ jobs:
           docker exec -i "${{ job.services.postgres.id }}" \
             psql -q -U postgres -d comeettool_ci -v ON_ERROR_STOP=1 < comeettool_dump.sql > /dev/null
 
-      - name: 테스트용 JWT 키 생성
-        run: |
-          mkdir -p Main/Backend/src/test/resources/keys
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-            -out Main/Backend/src/test/resources/keys/jwt_private.pem 2>/dev/null
-          openssl pkey -in Main/Backend/src/test/resources/keys/jwt_private.pem -pubout \
-            -out Main/Backend/src/test/resources/keys/jwt_public.pem 2>/dev/null
-
+      # JWT 키는 저장소에 없다. Gradle이 테스트 전용 키를 만든다(build.gradle generateTestJwtKeys).
       - name: 테스트 (check = 단위 + 통합)
         working-directory: Main/Backend
         run: |
