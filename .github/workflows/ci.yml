@@ -1,0 +1,125 @@
+# GitHub에서 PR과 develop·main push마다 세 모듈의 테스트를 돌린다.
+# 배포는 하지 않는다 — 빌드·배포 파이프라인은 .gitlab-ci.yml(프로젝트 기간의 GitLab CI)에 있다.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (단위 + 실 DB 통합 테스트)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        # V4 마이그레이션이 pgvector 확장을 쓴다.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: comeettool_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d comeettool_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://localhost:5432/comeettool_ci
+      DB_USERNAME: postgres
+      DB_PASSWORD: ci-only
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      STORAGE_PROVIDER: FILE
+      PROFILE_IMG: FILE
+      FILE_UPLOAD_DIR: ${{ github.workspace }}/.ci-uploads
+      CORS_ALLOWED_ORIGIN_PATTERNS: "http://localhost:[*]"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: 스키마 복원 (Flyway V1~V4 덤프)
+        run: |
+          cd exec/database
+          sha256sum -c comeettool_dump.sha256
+          # 덤프의 psql 메타명령이 서버 버전과 맞도록 서비스 컨테이너 안의 psql로 넣는다.
+          docker exec -i "${{ job.services.postgres.id }}" \
+            psql -q -U postgres -d comeettool_ci -v ON_ERROR_STOP=1 < comeettool_dump.sql > /dev/null
+
+      - name: 테스트용 JWT 키 생성
+        run: |
+          mkdir -p Main/Backend/src/test/resources/keys
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+            -out Main/Backend/src/test/resources/keys/jwt_private.pem 2>/dev/null
+          openssl pkey -in Main/Backend/src/test/resources/keys/jwt_private.pem -pubout \
+            -out Main/Backend/src/test/resources/keys/jwt_public.pem 2>/dev/null
+
+      - name: 테스트 (check = 단위 + 통합)
+        working-directory: Main/Backend
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon check
+
+      - name: 실패 시 테스트 리포트 보관
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: Main/Backend/build/reports/tests/
+          retention-days: 7
+
+  frontend:
+    name: Frontend (vitest + 빌드)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Main/Frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Main/Frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+
+  ai:
+    name: AI 서버 (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Main/AI_BE
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: Main/AI_BE/requirements.txt
+      - run: python -m pip install --requirement requirements.txt 'pytest>=8.3,<9'
+      - run: python -m pytest -q pytest2.py
