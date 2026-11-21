@@ -1,62 +1,123 @@
 # CoMeetTool
 
-음성 회의를 기록·요약하고, 팀별 공간(스페이스)과 일정·문서를 함께 관리하는 협업 도구입니다.
+팀 스페이스 안에서 화상회의를 하고, 회의 중에 문서를 함께 고치고, 회의가 끝나면 AI가 전사·요약·진행 피드백을 만들어 주는 회의 협업 도구입니다.
 
-- 기간: 2026-07-14 ~ 08-10 (27일), 7명 팀 프로젝트
-- 교육기관 GitLab에서 개발한 뒤 이 저장소로 옮겼습니다. 옮기면서 개인 실습 폴더를 이력에서 빼, 커밋 해시는 원본 저장소와 다릅니다.
-- 프로젝트가 끝난 뒤 고친 것은 [아래](#프로젝트-종료-뒤-고친-것)에 따로 적었습니다.
+- **기간**: 2026.07.14 – 08.10 (27일)
+- **팀**: 7명 · SSAFY 교육 과정 공통 프로젝트
+- **상태**: 개발 종료, 운영하지 않음 (아래 [운영 상태](#운영-상태))
+
+## 주요 기능
+
+| 영역 | 내용 |
+| --- | --- |
+| 계정 | 회원가입·로그인(RS256 JWT, Access/Refresh Token), 최초 온보딩 |
+| 팀 스페이스 | 생성·멤버 초대와 수락, OWNER·MEMBER·GUEST 권한, 팀 일정 캘린더 |
+| 화상회의 | LiveKit 기반 영상·음성·채팅·화면 공유. 회의를 유지한 채 PiP로 문서 화면으로 이동 |
+| 공유 문서 | Tiptap + Yjs(CRDT) + Hocuspocus 실시간 공동 편집, 사용자별 커서 표시 |
+| 발화 녹음 | 브라우저에서 VAD로 발화 구간만 잘라 업로드 → S3 저장 |
+| AI 산출물 | 회의 종료 후 비동기 처리. 회의 전문(STT) · AI 요약(검토·수정·최종 확정) · AI 피드백(참여도·의사결정·다음 회의 제안) |
+| 내보내기 | 요약·피드백을 MD/PDF로 내보내기(Presigned URL) |
+
+시연 흐름은 [exec/DEMONSTRATION_SCENARIO.md](exec/DEMONSTRATION_SCENARIO.md)에 화면 단위로 적혀 있습니다.
 
 ## 구성
 
-```text
-Main/
-├── Backend/       Spring Boot 4.1 · Java 21 API 서버 (Flyway SQL 포함)
-├── Backend-Yjs/   Hocuspocus · Yjs 문서 협업 서버 (Node 22)
-├── AI_BE/         FastAPI STT·회의 분석 서버 (Python 3.11)
-├── Frontend/      Vue 3 · Vite SPA
-└── Docs/          컨벤션 · 설계 문서 · API 명세
-exec/              포팅 매뉴얼 · 시연 시나리오 · 스키마 덤프
+```mermaid
+flowchart LR
+    FE["Frontend<br/>Vue 3 SPA"] -->|REST| BE["Backend<br/>Spring Boot"]
+    FE -->|WebSocket| YJS["Yjs 협업 서버<br/>Hocuspocus"]
+    FE -->|영상·음성| LK["LiveKit Cloud"]
+    YJS -->|JWKS 검증| BE
+    LK -->|Webhook| BE
+    BE -->|VAD 녹음| S3[("S3")]
+    BE -->|처리 요청| AI["AI 서버<br/>FastAPI"]
+    AI -->|녹음 조회| S3
+    BE --> DB[("PostgreSQL<br/>+ pgvector")]
+    YJS --> DB
+    AI --> DB
+    BE --> VK[("Valkey<br/>Refresh Token")]
 ```
 
-| 서비스 | 하는 일 | 기본 포트 |
-| --- | --- | ---: |
-| Backend | 인증(JWT RS256), 팀 스페이스·멤버·일정·문서·회의·리포트 API | 8080 |
-| Backend-Yjs | 문서 실시간 공동 편집. Backend가 발급한 문서 전용 토큰을 JWKS로 검증 | 3000 |
-| AI_BE | 회의 음성 전사, 회의록·피드백 생성 | 8000 |
-| Frontend | 화면 | 5173 |
+AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 찾아 맥락에 넣고 LLM으로 회의록과 퍼실리테이터 보고서를 구조화해 저장합니다.
 
-저장소는 PostgreSQL 17(pgvector)과 Redis(리프레시 토큰)를 씁니다. 화상 회의는 LiveKit, 파일은 S3를 씁니다.
-운영 배포는 AWS ECS Fargate였고 파이프라인은 [`.gitlab-ci.yml`](.gitlab-ci.yml)에 남아 있습니다.
+## 기술 스택
 
-## 실행
+| 영역 | 기술 |
+| --- | --- |
+| Backend | Java 21 · Spring Boot 4.1 · Spring Data JPA · Spring Security · PostgreSQL 17 · Valkey(Redis) |
+| 실시간 협업 | Node.js 22 · Hocuspocus 4 · Yjs |
+| AI | Python 3.11 · FastAPI · faster-whisper · OpenAI 호환 API(SSAFY GMS) · pgvector |
+| Frontend | Vue 3 · Vite · Tiptap · livekit-client · Vitest |
+| 미디어 | LiveKit Cloud |
+| 인프라 | AWS ECS Fargate · RDS · ElastiCache · S3 · CloudFront · GitLab CI/CD(OIDC) |
 
-전체 절차는 [`exec/PORTING_MANUAL.md`](exec/PORTING_MANUAL.md)에 있습니다. 로컬에서 백엔드만 띄우는 최소 순서는 다음과 같습니다.
+버전 상세는 [exec/PORTING_MANUAL.md §4](exec/PORTING_MANUAL.md#4-사용-기술과-버전)에 있습니다.
 
-1. PostgreSQL 17(pgvector)과 Redis를 띄웁니다.
-2. 스키마를 넣습니다. [`exec/database/comeettool_dump.sql`](exec/database/comeettool_dump.sql)은 Flyway V1~V4를 적용한 빈 스키마입니다.
-3. `Main/Backend/.env.example`을 `.env`로 복사해 DB 접속 정보를 채우고, JWT 키 쌍을 `Main/Backend/src/main/resources/keys/`에 만듭니다(매뉴얼 7절).
-4. `Main/Backend`에서 `./gradlew bootRun`을 실행합니다.
+## 폴더 구조
+
+```text
+.
+├── Main/
+│   ├── Backend/        Spring Boot API 서버 (auth·space·schedule·meeting·document·report…) + Flyway SQL
+│   ├── Backend-Yjs/    Hocuspocus/Yjs 협업 서버
+│   ├── AI_BE/          FastAPI 전사·회의 분석 서버
+│   ├── Frontend/       Vue/Vite SPA
+│   └── Docs/
+│       ├── 00_Convention/  Git·코드·API 컨벤션
+│       ├── 01_Plan/        기능 명세·아키텍처·DB 스키마·구현 계획
+│       ├── 02_Dailylog/
+│       └── 03_API/         인증 계약·REST 명세
+├── exec/               포팅 매뉴얼·외부 서비스 설정·시연 시나리오·DB 스키마 덤프
+├── .github/workflows/  GitHub Actions(테스트 실행)
+├── .gitlab/            CI 스크립트·이슈/MR 템플릿
+└── .gitlab-ci.yml
+```
+
+## 실행 방법
+
+서버 네 개(Backend · Yjs · AI · Frontend)와 PostgreSQL(pgvector)·Valkey가 필요합니다. 저장소에 Docker Compose 파일은 없습니다.
+
+| 문서 | 내용 |
+| --- | --- |
+| [exec/PORTING_MANUAL.md](exec/PORTING_MANUAL.md) | 로컬 통합 실행 순서(§12), 서비스별 환경변수, Docker 이미지 빌드, 배포 절차 |
+| [exec/EXTERNAL_SERVICES.md](exec/EXTERNAL_SERVICES.md) | AWS·LiveKit·SSAFY GMS 등 외부 서비스 계정과 키 준비 |
+| [exec/database/README.md](exec/database/README.md) | 스키마 덤프로 로컬 DB 만들기 |
+
+각 서버의 `.env.example`을 `.env`로 복사해 값을 채웁니다. 기본 포트는 Frontend 5173 · Backend 8080 · Yjs 3000 · AI 8000입니다.
+
+매뉴얼은 GitLab에서 쓰던 그대로라 몇 가지를 바꿔 읽어야 합니다.
+
+- 클론 주소와 폴더 이름은 `https://github.com/DreamingGenie/Comeettool.git` · `Comeettool`로 바꿉니다.
+- AI 분석은 SSAFY GMS 키를 전제로 합니다. GMS 주소가 `Main/AI_BE/app/pipeline/` 아래 네 곳에 `base_url`로 고정돼 있어, 교육 과정 밖에서 AI 산출물까지 재현하려면 이 값을 다른 OpenAI 호환 엔드포인트로 바꿔야 합니다.
+- 배포 파이프라인(`.gitlab-ci.yml`)은 GitLab Runner와 AWS 계정을 전제로 하며 GitHub에서는 동작하지 않습니다. GitHub에서는 테스트만 돌립니다(아래 [테스트](#테스트)).
 
 ## 테스트
 
 | 모듈 | 명령 | 필요한 것 |
 | --- | --- | --- |
-| Backend | `./gradlew check` | PostgreSQL · Redis (실제 DB에 붙는 테스트가 있습니다) |
+| Backend | `./gradlew check` | PostgreSQL(pgvector) · Redis — 실제 DB에 붙는 통합 테스트가 있습니다. DB 없이 도는 단위 테스트만은 `./gradlew test` |
 | Frontend | `npm test` | 없음 |
-| AI_BE | `python -m pytest -q pytest2.py` | 없음 |
+| AI 서버 | `python -m pytest -q pytest2.py` | 없음 |
 
-PR과 `develop`·`main` push마다 GitHub Actions([`.github/workflows/ci.yml`](.github/workflows/ci.yml))가 세 모듈의 테스트를 돌립니다.
+PR과 `develop`·`main` push마다 GitHub Actions([.github/workflows/ci.yml](.github/workflows/ci.yml))가 세 모듈의 테스트를 돌립니다.
 
-## 문서
+## 내 역할 — 전진 (DreamingGenie)
 
-- [`Main/Docs/00_Convention/`](Main/Docs/00_Convention/) — 브랜치·커밋·코드·API 컨벤션
-- [`Main/Docs/01_Plan/`](Main/Docs/01_Plan/) — 기능 명세, 아키텍처, DB 스키마, 구현 계획
-- [`Main/Docs/03_API/`](Main/Docs/03_API/) — REST 명세, JWT 인증 규약
-- [`exec/`](exec/) — 포팅 매뉴얼, 외부 서비스, 시연 시나리오
+팀 합의로 PM 겸 통합 담당을 맡아 MR 리뷰와 develop 통합을 담당했습니다.
+
+- develop에 합친 머지 109건 중 86건을 처리했습니다. 그중 66건이 팀원 브랜치입니다. 제 브랜치 9건은 팀원이 머지했습니다.
+- main 머지 10건은 모두 제가 했고, 그중 배포가 9건입니다.
+- 기본 브랜치를 main에서 develop으로 바꾸고, 팀이 합의한 규칙을 컨벤션 문서로 정리했습니다([Main/Docs/00_Convention](Main/Docs/00_Convention)).
+- 공통 응답·예외 처리 틀(`f66a04f`)을 만들었고, 팀원 4명이 각자 기능의 에러 코드를 여기에 더해 썼습니다.
+- 팀 스페이스·일정 백엔드 API 13개와 그 테스트를 만들었습니다. 두 기능의 API 중 대표 이미지 변경 1개는 팀원이 만들었고, 저는 거기에 검증과 테스트를 보탰습니다.
+
+화상회의, 실시간 문서 편집, VAD, AI 분석, CI/CD는 팀원들이 만들었습니다. 저는 그 코드를 리뷰하고 통합했고, 구현에 깊이 관여하지는 않았습니다.
+
+> 머지 건수는 프로젝트 마지막 배포 커밋 `f17f3f4`(2026-08-10) 기준입니다.
 
 ## 프로젝트 종료 뒤 고친 것
 
-2026-08-10에 프로젝트가 끝난 뒤, 저장소를 옮긴 사람(DreamingGenie)이 혼자 점검하며 고친 내용입니다. 팀 프로젝트 기간의 작업과 구분하려고 따로 적습니다.
+2026-08-10에 프로젝트가 끝난 뒤, 저장소를 옮긴 제가 혼자 점검하며 고친 내용입니다. 팀 프로젝트 기간의 작업과 구분하려고 따로 적습니다.
 
 - 로컬 `DATABASE_URL`로 AI 서버가 뜨지 않던 문제 (#1)
 - 컨벤션·JWT 규약 문서를 실제 구현에 맞춤 (#3)
@@ -65,3 +126,14 @@ PR과 `develop`·`main` push마다 GitHub Actions([`.github/workflows/ci.yml`](.
 - Jackson 2·3 혼용을 Jackson 3 하나로 정리. 응답 날짜가 규약대로 UTC로 나가게 함 (#6)
 - AI 피드백의 빈 값이 화면에 잘못 표시되던 문제 (#7)
 - GitHub Actions로 테스트 실행 (#8)
+
+## 저장소 이력
+
+- SSAFY GitLab에서 개발했고, 2026-10-06 GitHub로 옮겨 공개했습니다.
+- 공개하면서 서비스와 관계없는 교육 과정 개인 실습 폴더를 이력에서 지웠습니다. 그래서 커밋 해시가 GitLab 원본과 다릅니다.
+- 커밋 메시지와 문서의 `S15P11A707-123` 같은 키는 Jira 이슈, `!83` 같은 번호는 GitLab MR입니다. 둘 다 교육 과정 계정으로만 열리는 곳이라 링크가 열리지 않습니다.
+- GitHub에는 `main`(배포)과 `develop`(통합) 두 브랜치만 있습니다.
+
+## 운영 상태
+
+교육 과정이 끝나 서비스를 운영하지 않습니다. 2026-10-18 확인 기준 API 도메인이 응답하지 않아, 배포 주소로는 기능을 쓸 수 없습니다.
