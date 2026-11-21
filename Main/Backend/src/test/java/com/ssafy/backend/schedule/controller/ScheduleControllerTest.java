@@ -1,6 +1,7 @@
 package com.ssafy.backend.schedule.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
@@ -52,7 +53,7 @@ class ScheduleControllerTest {
     @InjectMocks
     private ScheduleController scheduleController;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     private MockMvc mockMvc;
 

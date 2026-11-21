@@ -30,7 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.mock.web.MockMultipartFile;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.exception.GlobalExceptionHandler;
@@ -73,7 +74,7 @@ class MeetingControllerTest {
     @InjectMocks
     private MeetingController meetingController;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private MockMvc mockMvc;
 
     @BeforeEach

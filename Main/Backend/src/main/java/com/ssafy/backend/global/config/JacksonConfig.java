@@ -1,27 +1,27 @@
 package com.ssafy.backend.global.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.TimeZone;
 
 /**
- * ObjectMapper 빈 등록.
- * Boot 4 webmvc 스타터는 Jackson 자동설정 빈을 제공하지 않으므로 직접 정의한다.
+ * Boot가 자동 구성하는 Jackson 3 {@code JsonMapper}(HTTP 응답 변환기와 직접 주입 양쪽이 쓰는 단일 매퍼)에
+ * API 규약(README §0)을 적용한다.
+ *
+ * <p>Jackson 3는 날짜/시간을 기본으로 ISO 8601 문자열로 쓰지만 오프셋은 값 그대로 둔다
+ * (예: {@code 2026-07-27T09:30:00+09:00}). 매퍼의 시간대를 UTC로 지정해 규약대로
+ * {@code 2026-07-27T00:30:00Z}로 정규화한다.</p>
+ *
+ * <p>예전에는 여기서 Jackson 2 {@code ObjectMapper} 빈을 따로 만들었다. 그 빈은 Jackson 2 타입을 직접
+ * 주입받는 코드만 썼고, HTTP 응답은 Jackson 3 매퍼가 직렬화해 이 설정이 닿지 않았다. 매퍼를 하나로 합쳤다.</p>
  */
 @Configuration
 public class JacksonConfig {
 
     @Bean
-    public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.findAndRegisterModules();
-        // 날짜/시간은 API 규약(README §0)대로 ISO 8601 UTC 문자열로 직렬화한다.
-        // 기본값(WRITE_DATES_AS_TIMESTAMPS=true)이면 epoch 숫자로 나가 규약을 위반한다.
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.setTimeZone(TimeZone.getTimeZone("UTC"));
-        return mapper;
+    public JsonMapperBuilderCustomizer utcDateTimeCustomizer() {
+        return builder -> builder.defaultTimeZone(TimeZone.getTimeZone("UTC"));
     }
 }
