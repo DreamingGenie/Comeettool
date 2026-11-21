@@ -8,10 +8,10 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 
@@ -150,8 +150,8 @@ public class TranscriptMarkdownRenderer {
     }
 
     private static String itemLine(JsonNode item) {
-        if (item.isTextual()) {
-            return item.asText();
+        if (item.isString()) {
+            return item.asString();
         }
         if (!item.isObject()) {
             return item.toString();
@@ -185,16 +185,16 @@ public class TranscriptMarkdownRenderer {
 
     /** node가 문자열/숫자/불린 같은 스칼라 값이면 텍스트로, null/누락/컨테이너(배열·객체)면 null을 반환한다. */
     private static String scalarText(JsonNode node) {
-        if (node == null || node.isNull() || node.isMissingNode() || node.isContainerNode()) {
+        if (node == null || node.isNull() || node.isMissingNode() || node.isContainer()) {
             return null;
         }
-        String text = node.asText();
+        String text = node.asString();
         return text.isBlank() ? null : text;
     }
 
     private static String fallbackJoin(JsonNode item) {
         List<String> values = new ArrayList<>();
-        Iterator<JsonNode> elements = item.elements();
+        Iterator<JsonNode> elements = item.values().iterator();
         while (elements.hasNext()) {
             String value = scalarText(elements.next());
             if (value != null) {
@@ -207,7 +207,7 @@ public class TranscriptMarkdownRenderer {
     private JsonNode readTree(String json) {
         try {
             return objectMapper.readTree(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new CustomException(ErrorCode.INTERNAL_ERROR);
         }
     }
@@ -215,7 +215,7 @@ public class TranscriptMarkdownRenderer {
     private <T> List<T> parseList(String json, TypeReference<List<T>> typeReference) {
         try {
             return objectMapper.readValue(json, typeReference);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new CustomException(ErrorCode.INTERNAL_ERROR);
         }
     }

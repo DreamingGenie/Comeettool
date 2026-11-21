@@ -11,8 +11,9 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.ssafy.backend.meeting.livekit.config.LiveKitConfiguration;
 import com.ssafy.backend.meeting.livekit.config.LiveKitProperties;
 
@@ -52,7 +53,7 @@ class LiveKitTokenProviderImplTest {
                 Base64.getUrlDecoder().decode(encodedPayload),
                 StandardCharsets.UTF_8
         );
-        Map<String, Object> claims = new ObjectMapper().readValue(
+        Map<String, Object> claims = JsonMapper.builder().build().readValue(
                 payload,
                 new TypeReference<>() {
                 }

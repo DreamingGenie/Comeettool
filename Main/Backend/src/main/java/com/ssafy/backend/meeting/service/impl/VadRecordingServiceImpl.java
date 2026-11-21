@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.storage.ObjectStorageService;

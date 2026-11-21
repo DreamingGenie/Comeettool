@@ -21,7 +21,8 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.ssafy.backend.global.common.PageResponse;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
@@ -69,7 +70,7 @@ class ReportControllerTest {
     @InjectMocks
     private ReportController reportController;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private MockMvc mockMvc;
 
     @BeforeEach
