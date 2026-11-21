@@ -129,7 +129,7 @@ S15P11A707/
 | TLS | 운영에서 `verify-full` |
 | 운영 CA 경로 | `/app/certs/rds-ca-bundle.pem` |
 
-`Main/Backend/.env.example`과 `application.yml`의 일부 로컬 기본값에는 과거 이름인 `commonpjt`가 남아 있다. 통합 실행과 운영에서는 반드시 `comeettool`을 사용한다.
+`Main/Backend/.env.example`과 `application.yml`의 로컬 기본값은 `comeettool`이다(과거 이름 `commonpjt`는 프로젝트 종료 뒤 정리했다). 통합 실행과 운영에서도 `comeettool`을 사용한다.
 
 ### 6.2 주요 DB 계정
 
@@ -705,7 +705,7 @@ CI 스크립트는 다음 물리 리소스 이름을 고정적으로 사용한�
 
 ## 19. 알려진 주의사항
 
-- Backend 로컬 DB 기본값 `commonpjt`를 그대로 사용하지 말고 `comeettool`로 변경한다.
+- Backend 로컬 DB 기본값은 `comeettool`이다. 로컬 PostgreSQL·Redis는 저장소 루트의 `compose.yaml`로 띄울 수 있다(`docker compose up -d`, 첫 실행 때 스키마 덤프 자동 적용).
 - Frontend 환경변수는 빌드 시점에 번들에 삽입된다. 배포 후 ECS 변수만 바꿔서는 Frontend 설정이 바뀌지 않으므로 다시 빌드하고 S3에 게시해야 한다.
 - `VITE_USE_MOCK_API`를 누락하면 Mock 모드가 활성화될 수 있다.
 - Yjs WebSocket 공개 URL은 반드시 `/collaboration`으로 끝나야 한다.

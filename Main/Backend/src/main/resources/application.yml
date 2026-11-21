@@ -83,17 +83,21 @@ aws:
 
 app:
   cors:
-    # 로컬/LAN 개발 기본값. 배포 환경에서는 실제 프론트 Origin만 환경변수로 지정한다.
+    # 배포 환경에서는 실제 프론트 Origin만 환경변수로 지정한다(필수). 로컬 기본값은 아래 local 프로필에 있다.
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
 
 ---
 # ===== local (개인 로컬 개발) =====
+# 로컬 프로필에서만 CORS 기본값을 둔다. prod는 위의 공통 설정대로 환경변수가 없으면 기동하지 않는다.
+app:
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
 spring:
   config:
     activate:
       on-profile: local
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/commonpjt}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/comeettool}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
