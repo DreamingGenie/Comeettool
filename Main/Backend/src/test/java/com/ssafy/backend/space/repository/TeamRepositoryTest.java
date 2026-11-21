@@ -2,6 +2,7 @@ package com.ssafy.backend.space.repository;
 
 import com.ssafy.backend.space.entity.Team;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>관례는 UserRepositoryTest와 동일 — @AutoConfigureTestDatabase(replace = NONE)로 실제 개발 DB
  * (SSH 터널)에 붙고 @DataJpaTest 롤백으로 종료된다. 실행 전 SSH 터널이 연결돼 있어야 한다.</p>
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @DisplayName("TeamRepository 통합 테스트")

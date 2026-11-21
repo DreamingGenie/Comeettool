@@ -7,6 +7,7 @@ import com.ssafy.backend.space.entity.Team;
 import com.ssafy.backend.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 개발 DB에 데이터가 남지 않는다. 실행 전 SSH 터널이 연결돼 있어야 한다.
  * members는 users·teams로의 FK 제약이 있어, 멤버를 심기 전에 User·Team을 먼저 영속화한다.</p>
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @DisplayName("MemberRepository 통합 테스트")

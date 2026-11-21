@@ -283,20 +283,20 @@ Copy-Item Main/Backend/.env.example Main/Backend/.env
 | `MEETING_VAD_MAX_AUDIO_BYTES` | 선택 | VAD 단일 업로드 제한 | `5242880` |
 | `CORS_ALLOWED_ORIGIN_PATTERNS` | 필수 | 허용 Frontend Origin 목록 | 운영에서는 실제 HTTPS Origin만 허용 |
 
-`STORAGE_PROVIDER=FILE`에서는 일반 Object Storage 기능이 비활성화되므로 회의 VAD 녹음, AI 입력 파일 및 S3 Presigned URL 기능을 완전하게 검증할 수 없다. 통합 시연과 운영은 `S3`를 사용한다.
+`STORAGE_PROVIDER=FILE`에서는 회의 VAD 녹음·회의록 내보내기 같은 Object Storage 객체를 `FILE_UPLOAD_DIR` 아래에 S3 key와 같은 경로로 저장한다(로컬 개발용). 다만 다운로드 URL이 Presigned URL이 아니라 `/files/{key}`이고 프로필 이미지 외 경로는 로그인 토큰이 있어야 열리며, AI 서버는 S3에서 입력을 읽으므로 녹음 → AI 처리 전체 흐름은 검증할 수 없다. 통합 시연과 운영은 `S3`를 사용한다.
 
 ### 8.3 Backend 빌드와 테스트
 
 ```powershell
 Set-Location Main/Backend
-.\gradlew.bat clean test bootJar
+.\gradlew.bat clean test integrationTest bootJar
 ```
 
 Linux/macOS:
 
 ```bash
 cd Main/Backend
-./gradlew clean test bootJar
+./gradlew clean test integrationTest bootJar
 ```
 
 JAR 결과물:

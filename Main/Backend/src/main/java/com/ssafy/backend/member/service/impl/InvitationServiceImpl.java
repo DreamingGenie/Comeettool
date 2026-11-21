@@ -168,6 +168,12 @@ public class InvitationServiceImpl implements InvitationService {
         }
 
         Long teamId = invitation.getTeamId();
+        // 같은 스페이스의 수락을 teams 행 잠금으로 직렬화한다. 아래 정원 검사는 "세고 → 등록"이라
+        // 잠금이 없으면 동시 수락 두 건이 같은 인원 수를 보고 둘 다 등록해 정원을 넘긴다.
+        // 스페이스가 그사이 삭제됐다면 초대도 함께 지워진 상태이므로 없는 초대와 같게 응답한다.
+        teamRepository.findActiveByIdForUpdate(teamId)
+                .orElseThrow(() -> new CustomException(ErrorCode.INVITATION_NOT_FOUND));
+
         if (memberRepository.existsByTeamIdAndUserId(teamId, userId)) {
             // 이미 멤버가 됐다는 것은 이 초대가 더 이상 의미 없다는 뜻 — 초대도 함께 정리한다.
             // (주로 같은 초대를 중복/동시 수락했을 때 도달 — 먼저 처리된 요청이 이미 멤버로 등록을 마친 경우.)

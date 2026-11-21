@@ -103,7 +103,7 @@ class ReportServiceImplTest {
     // 다른 테스트들은 전부 명시적으로 given(...)을 stub해서 호출하므로 이 변경의 영향을 받지 않는다.
     @Spy
     private TranscriptMarkdownRenderer transcriptMarkdownRenderer =
-            new TranscriptMarkdownRenderer(new com.fasterxml.jackson.databind.ObjectMapper());
+            new TranscriptMarkdownRenderer(tools.jackson.databind.json.JsonMapper.builder().build());
 
     @Mock
     private MarkdownToPdfConverter markdownToPdfConverter;

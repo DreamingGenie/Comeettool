@@ -28,7 +28,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.ssafy.backend.global.exception.CustomException;
 import com.ssafy.backend.global.exception.ErrorCode;
 import com.ssafy.backend.global.storage.ObjectStorageService;
@@ -88,7 +89,7 @@ class VadRecordingServiceImplTest {
                 Duration.ofMillis(50)
         );
         vadParticipantUploadLock = new VadParticipantUploadLock();
-        objectMapper = new ObjectMapper().findAndRegisterModules();
+        objectMapper = JsonMapper.builder().build();
         service = new VadRecordingServiceImpl(
                 meetingRoomRepository,
                 memberRepository,

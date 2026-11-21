@@ -68,6 +68,7 @@ AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 �
 │       ├── 02_Dailylog/
 │       └── 03_API/         인증 계약·REST 명세
 ├── exec/               포팅 매뉴얼·외부 서비스 설정·시연 시나리오·DB 스키마 덤프
+├── .github/workflows/  GitHub Actions(테스트 실행)
 ├── .gitlab/            CI 스크립트·이슈/MR 템플릿
 └── .gitlab-ci.yml
 ```
@@ -88,7 +89,17 @@ AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 �
 
 - 클론 주소와 폴더 이름은 `https://github.com/DreamingGenie/Comeettool.git` · `Comeettool`로 바꿉니다.
 - AI 분석은 SSAFY GMS 키를 전제로 합니다. GMS 주소가 `Main/AI_BE/app/pipeline/` 아래 네 곳에 `base_url`로 고정돼 있어, 교육 과정 밖에서 AI 산출물까지 재현하려면 이 값을 다른 OpenAI 호환 엔드포인트로 바꿔야 합니다.
-- 배포 파이프라인(`.gitlab-ci.yml`)은 GitLab Runner와 AWS 계정을 전제로 하며 GitHub에서는 동작하지 않습니다.
+- 배포 파이프라인(`.gitlab-ci.yml`)은 GitLab Runner와 AWS 계정을 전제로 하며 GitHub에서는 동작하지 않습니다. GitHub에서는 테스트만 돌립니다(아래 [테스트](#테스트)).
+
+## 테스트
+
+| 모듈 | 명령 | 필요한 것 |
+| --- | --- | --- |
+| Backend | `./gradlew check` | PostgreSQL(pgvector) · Redis — 실제 DB에 붙는 통합 테스트가 있습니다. DB 없이 도는 단위 테스트만은 `./gradlew test` |
+| Frontend | `npm test` | 없음 |
+| AI 서버 | `python -m pytest -q pytest2.py` | 없음 |
+
+PR과 `develop`·`main` push마다 GitHub Actions([.github/workflows/ci.yml](.github/workflows/ci.yml))가 세 모듈의 테스트를 돌립니다.
 
 ## 내 역할 — 전진 (DreamingGenie)
 
@@ -103,6 +114,18 @@ AI 서버는 faster-whisper로 전사한 뒤, 과거 회의록을 pgvector로 �
 화상회의, 실시간 문서 편집, VAD, AI 분석, CI/CD는 팀원들이 만들었습니다. 저는 그 코드를 리뷰하고 통합했고, 구현에 깊이 관여하지는 않았습니다.
 
 > 머지 건수는 프로젝트 마지막 배포 커밋 `f17f3f4`(2026-08-10) 기준입니다.
+
+## 프로젝트 종료 뒤 고친 것
+
+2026-08-10에 프로젝트가 끝난 뒤, 저장소를 옮긴 제가 혼자 점검하며 고친 내용입니다. 팀 프로젝트 기간의 작업과 구분하려고 따로 적습니다.
+
+- 로컬 `DATABASE_URL`로 AI 서버가 뜨지 않던 문제 (#1)
+- 컨벤션·JWT 규약 문서를 실제 구현에 맞춤 (#3)
+- 테스트를 단위·통합 두 층으로 나누고, 팀 스페이스 잠금을 실제 DB로 확인하는 테스트 추가. 초대를 동시에 수락하면 정원 10명을 넘길 수 있던 경합 수정 (#4)
+- 로컬(FILE 모드)에서 Object Storage가 동작하지 않던 것을 디스크 저장으로 구현 (#5)
+- Jackson 2·3 혼용을 Jackson 3 하나로 정리. 응답 날짜가 규약대로 UTC로 나가게 함 (#6)
+- AI 피드백의 빈 값이 화면에 잘못 표시되던 문제 (#7)
+- GitHub Actions로 테스트 실행 (#8)
 
 ## 저장소 이력
 

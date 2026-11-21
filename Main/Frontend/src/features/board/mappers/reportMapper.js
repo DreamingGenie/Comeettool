@@ -96,6 +96,15 @@ const normalizeTranscript = (transcript) =>
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null)
 
+// 글자로 보여 줄 필드용. parseJsonValue는 null을 []로 바꾸는데 []는 truthy라 `a || b` 대체값이 동작하지 않는다.
+// 비어 있지 않은 문자열·숫자만 값으로 인정하고, 없으면 빈 문자열을 돌려준다.
+const firstText = (...values) => {
+  const found = values.find(
+    (value) => (typeof value === 'string' && value.trim() !== '') || typeof value === 'number'
+  )
+  return found === undefined ? '' : found
+}
+
 const normalizeKey = (key) =>
   String(key || '')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
@@ -358,10 +367,10 @@ export const toReportDetailViewModel = (response, section, listRow = {}) => {
       ...listRow,
       id: firstValue(response?.meetingId, response?.meeting_id, listRow.id),
       kind: 'facilitator',
-      title: facilitator.title || listRow.title,
-      meetingType: facilitator.meetingType || listRow.meetingType || '',
-      overallReview: facilitator.overallReview || '',
-      participationComment: facilitator.participationComment || '',
+      title: firstText(facilitator.title, listRow.title),
+      meetingType: firstText(facilitator.meetingType, listRow.meetingType),
+      overallReview: firstText(facilitator.overallReview),
+      participationComment: firstText(facilitator.participationComment),
       participationStats: facilitator.participationStats ?? [],
       qualityEvaluation: facilitator.qualityEvaluation ?? [],
       strengths: facilitator.strengths ?? [],

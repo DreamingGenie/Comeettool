@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -32,6 +33,7 @@ import com.ssafy.backend.user.entity.User;
  * <p>프로젝트의 다른 Repository 테스트와 동일하게 로컬 프로필의 실제 DB를 사용한다.
  * SQL v1.1.7 스키마가 필요하며 각 테스트 데이터는 트랜잭션 종료 시 롤백된다.</p>
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @DisplayName("MEETING Repository 통합 테스트")

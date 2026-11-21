@@ -403,6 +403,8 @@ class InvitationServiceImplTest {
             given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
                     eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
                     .willReturn(Optional.of(invitation));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                    .willReturn(Optional.of(teamWithId(TEAM_ID, INVITER_ID)));
             given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(false);
             given(userRepository.findById(ACCEPTOR_ID))
                     .willReturn(Optional.of(userWithNickname(ACCEPTOR_ID, "수락자", false)));
@@ -474,6 +476,8 @@ class InvitationServiceImplTest {
             given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
                     eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
                     .willReturn(Optional.of(invitation));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                    .willReturn(Optional.of(teamWithId(TEAM_ID, INVITER_ID)));
             given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(true);
 
             assertThatThrownBy(
@@ -492,6 +496,8 @@ class InvitationServiceImplTest {
             given(invitationRepository.findByInvitationIdAndExpiresAtAfter(
                     eq(invitation.getInvitationId()), any(OffsetDateTime.class)))
                     .willReturn(Optional.of(invitation));
+            given(teamRepository.findActiveByIdForUpdate(TEAM_ID))
+                    .willReturn(Optional.of(teamWithId(TEAM_ID, INVITER_ID)));
             given(memberRepository.existsByTeamIdAndUserId(TEAM_ID, ACCEPTOR_ID)).willReturn(false);
             given(memberRepository.countByTeamId(TEAM_ID)).willReturn(10L);
 

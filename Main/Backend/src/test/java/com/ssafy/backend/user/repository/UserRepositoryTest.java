@@ -3,6 +3,7 @@ package com.ssafy.backend.user.repository;
 import com.ssafy.backend.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @AutoConfigureTestDatabase(replace = NONE)으로 application.yml(local 프로필)의 실제 데이터소스, 즉 SSH 터널(localhost:5432)로 연결된 공유
  * 개발 서버 DB를 그대로 사용한다. 각 테스트는 @DataJpaTest 기본 동작인 트랜잭션 롤백으로 종료되어 개발 DB에 데이터가 남지 않는다. 실행 전 SSH 터널이 연결되어 있어야 한다.
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @DisplayName("UserRepository 통합 테스트")

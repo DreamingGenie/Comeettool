@@ -27,7 +27,7 @@
 ### 기본 형식
 
 ```
-{브랜치 타입}/{이슈번호}-{작업내용}
+{브랜치 타입}/{Jira 이슈키}-{작업내용}
 ```
 
 - `feature`: 새로운 기능 개발
@@ -41,24 +41,26 @@
 1. 브랜치명은 영어 소문자로 작성한다.
 2. 단어 구분은 하이픈 `-`을 사용한다.
 3. 브랜치명에는 공백을 사용하지 않는다.
-4. 이슈 번호가 있는 경우 반드시 포함한다.
+4. Jira 이슈키(`S15P11A707-{번호}`)가 있는 경우 반드시 포함한다. 이슈키는 대문자를 유지한다.
 5. 작업 내용은 간결하고 명확하게 작성한다.
 
 ### 예시
 
-- `feature/12-login`
-- `feature/15-smoking-area-search`
-- `fix/23-token-expired-error`
-- `hotfix/31-server-error`
-- `refactor/42-user-service`
-- `docs/1-api-spec`
+- `feature/S15P11A707-2-login`
+- `feature/S15P11A707-28-team-space-api`
+- `fix/S15P11A707-213-space-list-null-search`
+- `hotfix/S15P11A707-252-dockerfile`
+- `refactor/S15P11A707-42-user-service`
+- `docs/S15P11A707-1-api-spec`
+
+> 2026-07-25 이전 브랜치는 GitLab 이슈 번호(`feature/12-login`)를 썼다. Jira 연동 뒤 이슈키 형식으로 바꿨다.
 
 ## 커밋 메시지 규칙
 
 ### 형식
 
 ```
-<type>: <작업 내용> (#이슈 번호)
+<type>: <작업 내용> (Jira 이슈키)
 ```
 
 ### Type 종류
@@ -79,14 +81,14 @@
 4. 커밋 메시지 끝에는 마침표를 찍지 않는다.
 5. 작업 내용은 너무 길지 않게 작성한다.
 6. 단순히 "수정", "작업", "변경"처럼 모호하게 작성하지 않는다.
+7. Jira 이슈키는 있을 때만 붙인다. 붙이면 GitLab-Jira 연동으로 이슈에 커밋이 자동 연결된다. 2026-07-25 이전 커밋은 GitLab 이슈 번호(`(#11)`)를 썼다.
 
 ### 예시
 
-- `feat: 회원가입 기능 구현 (#11)`
-- `feat: 흡연구역 검색 기능 구현 (#11)`
-- `fix: 로그인 토큰 만료 오류 수정 (#31)`
-- `refactor: UserService 책임 분리 (#15)`
-- `docs: API 명세 작성 (#1)`
+- `feat: 회원가입 기능 구현 (S15P11A707-11)`
+- `fix: 로그인 토큰 만료 오류 수정 (S15P11A707-31)`
+- `refactor: UserService 책임 분리 (S15P11A707-15)`
+- `docs: API 명세 작성 (S15P11A707-1)`
 - `chore: GitLab Actions 설정 추가`
 
 ## Merge / Review 규칙

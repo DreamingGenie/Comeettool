@@ -3,6 +3,7 @@ package com.ssafy.backend.member.repository;
 import com.ssafy.backend.member.entity.Invitation;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * invitations는 FK 제약이 없어(members/teams와 동일 컨벤션) User·Team을 미리 영속화할 필요가 없다 —
  * team_id/target_user_id는 유니크 토큰 대신 매 테스트 임의의 Long 값으로 충돌을 피한다.</p>
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @DisplayName("InvitationRepository 통합 테스트")
