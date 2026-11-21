@@ -69,6 +69,27 @@ describe('reportMapper AI 회의 요약', () => {
 })
 
 describe('reportMapper AI 회의 피드백', () => {
+  it('AI가 제목·회의 유형·총평을 null로 주면 빈 배열이 아니라 목록 행의 값이나 빈 문자열로 채운다', () => {
+    // AI 스키마에서 meeting_type 등은 null일 수 있다. null이 []로 바뀌면 `||` 대체값이 동작하지 않아 빈 라벨이 나온다.
+    const response = {
+      meeting_id: 31,
+      result: { report_title: null, meeting_type: null, overall_feedback: null, participation_summary: null }
+    }
+    const listRow = { id: 31, title: '주간 회고', meetingType: 'RETROSPECTIVE' }
+
+    const withListRow = toReportDetailViewModel(response, 'feedback', listRow)
+    const withoutListRow = toReportDetailViewModel(response, 'feedback')
+
+    expect(withListRow).toMatchObject({
+      title: '주간 회고',
+      meetingType: 'RETROSPECTIVE',
+      overallReview: '',
+      participationComment: ''
+    })
+    expect(withoutListRow.meetingType).toBe('')
+    expect(withoutListRow.overallReview).toBe('')
+  })
+
   it('snake_case, 중첩 객체, JSON 문자열과 래퍼 배열을 표준 카드에 배치한다', () => {
     const response = {
       meeting_id: 31,
