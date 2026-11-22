@@ -15,7 +15,9 @@ import java.util.TimeZone;
  * {@code 2026-07-27T00:30:00Z}로 정규화한다.</p>
  *
  * <p>예전에는 여기서 Jackson 2 {@code ObjectMapper} 빈을 따로 만들었다. 그 빈은 Jackson 2 타입을 직접
- * 주입받는 코드만 썼고, HTTP 응답은 Jackson 3 매퍼가 직렬화해 이 설정이 닿지 않았다. 매퍼를 하나로 합쳤다.</p>
+ * 주입받는 코드만 썼다 — 시큐리티 401/403 응답 본문을 직접 쓰던 {@code JwtAuthenticationEntryPoint}·
+ * {@code JwtAccessDeniedHandler} 등. 컨트롤러 응답은 메시지 변환기의 Jackson 3 매퍼가 직렬화해 이 설정이
+ * 닿지 않았다. 매퍼를 하나로 합쳤다.</p>
  */
 @Configuration
 public class JacksonConfig {
