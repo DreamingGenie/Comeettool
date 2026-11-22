@@ -115,8 +115,9 @@ spring:
         query.immutable_entity_update_query_handling_mode: allow
   data:
     redis:
-      host: localhost
-      port: 6379
+      # compose.yaml에서 Redis 포트를 바꿔 띄웠을 때 .env의 REDIS_HOST·REDIS_PORT로 맞출 수 있게 한다.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   # 로컬에서 Redis 미실행 시 /actuator/health 가 DOWN 되지 않도록 헬스체크 제외 (F1 확인용)
 management:
   health:
