@@ -489,7 +489,7 @@ Set-Location Main/Frontend
 npm ci
 npm run format:check
 npm run test
-npm run build
+npm run build -- --outDir dist
 ```
 
 빌드 결과:
@@ -497,6 +497,8 @@ npm run build
 ```text
 Main/Frontend/dist/
 ```
+
+`--outDir dist`는 GitLab CI(`.gitlab-ci.yml`)와 같은 옵션이다. 옵션 없이 `npm run build`만 하면 `vite.config.js`의 `outDir: '../dist'`대로 `Main/dist/`에 생긴다.
 
 ### 11.4 개발 서버 실행
 
